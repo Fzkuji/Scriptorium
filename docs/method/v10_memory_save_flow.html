@@ -1,0 +1,2302 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NativeMem v10 记忆保存流程</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --page: #edf3f6;
+      --surface: #f9fbfc;
+      --ink: #142127;
+      --muted: #52646c;
+      --line: #b8c8cf;
+      --code: #0e7490;
+      --code-soft: #d9eef3;
+      --llm: #7453a6;
+      --llm-soft: #e9e1f4;
+      --uncertain: #b95f12;
+      --uncertain-soft: #f8e6d3;
+      --confirmed: #2c7257;
+      --confirmed-soft: #dceee5;
+      --trace: #b83268;
+      --trace-soft: #f7dce7;
+      --shadow: 0 18px 55px rgba(20, 33, 39, 0.11);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(20, 33, 39, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20, 33, 39, 0.035) 1px, transparent 1px),
+        var(--page);
+      background-size: 24px 24px;
+      font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+      min-height: 100vh;
+    }
+
+    button { font: inherit; }
+
+    .shell {
+      width: min(1480px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 42px 0 54px;
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.8fr);
+      gap: 28px;
+      align-items: end;
+      margin-bottom: 26px;
+    }
+
+    .eyebrow,
+    .utility {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--code);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin: 0;
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: clamp(38px, 5vw, 72px);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+      font-weight: 750;
+    }
+
+    .dek {
+      max-width: 740px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    .defaults {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--line);
+      background: rgba(249, 251, 252, 0.74);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .default-item {
+      min-height: 112px;
+      padding: 18px;
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .default-item:last-child { border-right: 0; }
+    .default-item span { color: var(--muted); font-size: 12px; }
+    .default-item strong {
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: 25px;
+      letter-spacing: -0.04em;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .diagram,
+    .inspector,
+    .finding-strip {
+      border: 1px solid var(--line);
+      background: rgba(249, 251, 252, 0.93);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+    }
+
+    .diagram { overflow: hidden; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .toolbar-title {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .filter {
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: transparent;
+      border-radius: 999px;
+      padding: 7px 11px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+    }
+
+    .filter:hover,
+    .filter[aria-pressed="true"] {
+      color: var(--ink);
+      background: #fff;
+      border-color: var(--ink);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(145px, 1fr));
+      gap: 34px 28px;
+      padding: 32px 28px 38px;
+      position: relative;
+    }
+
+    .step {
+      position: relative;
+      min-height: 174px;
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--code);
+      border-radius: 14px;
+      background: #fff;
+      padding: 17px 16px 15px;
+      text-align: left;
+      color: var(--ink);
+      cursor: pointer;
+      transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+    }
+
+    .step:hover,
+    .step:focus-visible,
+    .step.active {
+      transform: translateY(-3px);
+      box-shadow: 0 13px 30px rgba(20, 33, 39, 0.14);
+      outline: none;
+    }
+
+    .step.active { border-color: var(--ink); }
+    .step.llm { border-top-color: var(--llm); }
+    .step.uncertain { box-shadow: inset 0 0 0 2px var(--uncertain-soft); }
+    .step.dimmed { opacity: 0.2; }
+
+    .step::after {
+      content: "";
+      position: absolute;
+      width: 29px;
+      height: 1px;
+      right: -29px;
+      top: 50%;
+      background: var(--line);
+    }
+
+    .step:nth-child(4)::after,
+    .step:last-child::after { display: none; }
+
+    .step-no {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+    }
+
+    .type-chip {
+      border-radius: 999px;
+      padding: 4px 7px;
+      color: var(--code);
+      background: var(--code-soft);
+      font-weight: 700;
+    }
+
+    .llm .type-chip { color: var(--llm); background: var(--llm-soft); }
+
+    .step h2 {
+      margin: 18px 0 7px;
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: 21px;
+      line-height: 1.15;
+      letter-spacing: -0.035em;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .step-evidence {
+      position: absolute;
+      left: 16px;
+      bottom: 13px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+      color: var(--confirmed);
+    }
+
+    .uncertain .step-evidence { color: var(--uncertain); }
+
+    .storage-split {
+      grid-column: span 2;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      border: 1px dashed var(--code);
+      border-radius: 14px;
+      padding: 10px;
+      min-height: 174px;
+      background: var(--code-soft);
+    }
+
+    .storage-split .step {
+      min-height: 152px;
+    }
+
+    .storage-split .step::after { display: none; }
+
+    .inspector {
+      position: sticky;
+      top: 20px;
+      overflow: hidden;
+    }
+
+    .inspector-head {
+      padding: 18px 20px;
+      color: #fff;
+      background: var(--ink);
+    }
+
+    .inspector-head .utility { font-size: 10px; opacity: 0.66; }
+    .inspector-head h2 {
+      margin: 9px 0 0;
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: 27px;
+      letter-spacing: -0.04em;
+    }
+
+    .inspector-body { padding: 21px 20px 23px; }
+
+    .detail-block + .detail-block {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .detail-label {
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .detail-value {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .status {
+      display: inline-flex;
+      margin-top: 9px;
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: var(--confirmed);
+      background: var(--confirmed-soft);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .status.uncertain {
+      color: var(--uncertain);
+      background: var(--uncertain-soft);
+    }
+
+    .finding-strip {
+      margin-top: 20px;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 1.25fr repeat(3, 1fr);
+      gap: 1px;
+      background: var(--line);
+      overflow: hidden;
+    }
+
+    .finding {
+      min-height: 118px;
+      padding: 17px;
+      background: var(--surface);
+    }
+
+    .finding:first-child { background: var(--ink); color: #fff; }
+    .finding .utility { font-size: 10px; color: var(--muted); }
+    .finding:first-child .utility { color: rgba(255,255,255,.62); }
+    .finding strong {
+      display: block;
+      margin-top: 12px;
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: 22px;
+      line-height: 1.12;
+      letter-spacing: -0.035em;
+    }
+    .finding p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .finding:first-child p { color: rgba(255,255,255,.72); }
+
+    .legend {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      padding: 0 28px 24px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      margin-right: 6px;
+      border-radius: 2px;
+      background: var(--code);
+    }
+    .legend .legend-llm::before { background: var(--llm); }
+    .legend .legend-uncertain::before { background: var(--uncertain); }
+
+    .example-lab {
+      margin-top: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(249, 251, 252, 0.96);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      scroll-margin-top: 18px;
+    }
+
+    .example-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 22px;
+      align-items: end;
+      padding: 25px 27px 22px;
+      color: #fff;
+      background: var(--ink);
+    }
+
+    .example-head .eyebrow { color: #80d2e3; }
+
+    .example-head h2 {
+      margin: 0;
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: clamp(28px, 3.1vw, 44px);
+      line-height: 1.05;
+      letter-spacing: -0.045em;
+    }
+
+    .example-head p:last-child {
+      max-width: 650px;
+      margin: 10px 0 0;
+      color: rgba(255,255,255,.68);
+      line-height: 1.6;
+      font-size: 13px;
+    }
+
+    .trace-key {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 12px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 999px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .trace-key::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #ff78a9;
+      box-shadow: 0 0 0 4px rgba(255,120,169,.16);
+    }
+
+    .scenario-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 1px;
+      padding: 12px;
+      background: #b9c9d0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .scenario-tab {
+      min-height: 64px;
+      padding: 11px 13px;
+      border: 0;
+      border-radius: 8px;
+      color: #51636b;
+      background: #edf3f5;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+    }
+
+    .scenario-tab span,
+    .scenario-tab strong { display: block; }
+    .scenario-tab span {
+      margin-bottom: 5px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .scenario-tab strong { color: inherit; font-size: 12px; }
+    .scenario-tab[aria-selected="true"] {
+      color: #fff;
+      background: var(--code);
+      box-shadow: inset 0 -4px var(--trace);
+    }
+
+    .scenario-panel { display: none; }
+    .scenario-panel.active { display: block; }
+
+    .scenario-body { padding: 25px 27px 28px; }
+
+    .scenario-note {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: center;
+      margin-bottom: 18px;
+      padding: 13px 15px;
+      border-left: 4px solid var(--trace);
+      border-radius: 8px;
+      color: #374c55;
+      background: var(--trace-soft);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .scenario-note code {
+      flex: 0 0 auto;
+      color: var(--trace);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+    }
+
+    .process-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    .process-node {
+      position: relative;
+      min-height: 142px;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .process-node::after {
+      content: "→";
+      position: absolute;
+      z-index: 2;
+      right: -16px;
+      top: 50%;
+      width: 21px;
+      color: var(--code);
+      background: #f9fbfc;
+      font: 800 15px/21px "SFMono-Regular", Consolas, monospace;
+      text-align: center;
+    }
+
+    .process-node:last-child::after { display: none; }
+    .process-node.llm-node { border-top: 5px solid var(--llm); }
+    .process-node.code-node { border-top: 5px solid var(--code); }
+    .process-node.warn-node { border-top: 5px solid var(--uncertain); }
+    .process-node .utility { font-size: 9px; }
+    .process-node strong { display: block; margin-top: 9px; font-size: 16px; line-height: 1.3; }
+    .process-node p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+
+    .recent-box {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #eef5f7;
+    }
+
+    .recent-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+
+    .recent-head strong { font-size: 15px; }
+    .recent-head span { color: var(--muted); font-size: 10px; }
+    .recent-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .recent-list li {
+      padding: 9px 11px;
+      border: 1px solid #cad9de;
+      border-radius: 8px;
+      color: #41565f;
+      background: #fff;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .snapshot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .snapshot-card {
+      min-width: 0;
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .snapshot-card h4 { margin: 0 0 9px; font-size: 14px; }
+    .snapshot-card p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .snapshot-card ul { margin: 10px 0 0; padding-left: 18px; color: #41565f; font-size: 11px; line-height: 1.7; }
+    .snapshot-card code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; overflow-wrap: anywhere; }
+
+    .example-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border-bottom: 1px solid var(--line);
+      background: #e4edf1;
+    }
+
+    .example-tab {
+      position: relative;
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      padding: 14px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .example-tab:last-child { border-right: 0; }
+    .example-tab[aria-selected="true"] { color: var(--ink); background: #fff; }
+    .example-tab[aria-selected="true"]::after {
+      content: "";
+      position: absolute;
+      height: 4px;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      background: var(--trace);
+    }
+
+    .example-stage { padding: 25px 27px 28px; }
+    .stage-panel { display: none; }
+    .stage-panel.active { display: block; }
+
+    .stage-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .stage-title h3 {
+      margin: 0;
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: 24px;
+      letter-spacing: -0.035em;
+    }
+
+    .stage-title span { color: var(--muted); font-size: 12px; }
+
+    .transcript {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .utterance {
+      position: relative;
+      min-height: 108px;
+      padding: 15px 15px 14px 68px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .utterance.traced { border-color: var(--trace); box-shadow: inset 4px 0 var(--trace); }
+
+    .dia {
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      color: var(--code);
+    }
+
+    .traced .dia { color: var(--trace); font-weight: 800; }
+    .speaker { display: block; margin-bottom: 6px; font-weight: 750; font-size: 12px; }
+    .utterance p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+
+    .ignored-data {
+      display: inline-block;
+      margin-top: 9px;
+      padding: 4px 7px;
+      color: var(--uncertain);
+      background: var(--uncertain-soft);
+      border-radius: 999px;
+      font-size: 10px;
+    }
+
+    .context-grid,
+    .effect-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .context-card,
+    .effect-card {
+      min-height: 126px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .context-card .utility,
+    .effect-card .utility { color: var(--muted); font-size: 9px; }
+    .context-card strong,
+    .effect-card strong { display: block; margin-top: 11px; font-size: 17px; line-height: 1.25; }
+    .context-card p,
+    .effect-card p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+
+    .event-list { display: grid; gap: 8px; }
+    .event-row {
+      display: grid;
+      grid-template-columns: 114px minmax(0, 1fr) 230px;
+      gap: 12px;
+      align-items: center;
+      padding: 11px 13px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      font-size: 12px;
+    }
+
+    .event-row.traced { border-color: var(--trace); background: var(--trace-soft); }
+    .event-date,
+    .event-topic { font-family: "SFMono-Regular", Consolas, monospace; color: var(--muted); font-size: 10px; }
+    .event-text { line-height: 1.5; }
+    .event-ref { color: var(--trace); font-weight: 800; }
+
+    .file-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .file-card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .file-name {
+      padding: 10px 13px;
+      color: #fff;
+      background: var(--code);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+      overflow-wrap: anywhere;
+    }
+
+    .file-card pre {
+      margin: 0;
+      padding: 15px;
+      color: #24363e;
+      background: #f8fbfc;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    mark {
+      color: var(--trace);
+      background: var(--trace-soft);
+      border-radius: 3px;
+      padding: 1px 3px;
+      font-weight: 800;
+    }
+
+    .effect-card.good { border-top: 5px solid var(--confirmed); }
+    .effect-card.warn { border-top: 5px solid var(--uncertain); }
+    .effect-card.trace { border-top: 5px solid var(--trace); }
+
+    @media (max-width: 1120px) {
+      .masthead { grid-template-columns: 1fr; }
+      .workspace { grid-template-columns: 1fr; }
+      .inspector { position: static; }
+    }
+
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 22px, 1480px); padding-top: 25px; }
+      .defaults { grid-template-columns: 1fr; }
+      .default-item { min-height: 80px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .default-item:last-child { border-bottom: 0; }
+      .toolbar { align-items: flex-start; flex-direction: column; }
+      .flow { grid-template-columns: 1fr; padding: 22px; }
+      .step::after { width: 1px; height: 35px; right: auto; left: 50%; top: auto; bottom: -35px; }
+      .step:nth-child(4)::after,
+      .step:nth-child(8)::after { display: block; }
+      .storage-split { grid-column: span 1; grid-template-columns: 1fr; }
+      .finding-strip { grid-template-columns: 1fr; }
+      .example-head { grid-template-columns: 1fr; }
+      .scenario-tabs { grid-template-columns: 1fr; }
+      .scenario-tab { min-height: 52px; }
+      .scenario-note { align-items: flex-start; flex-direction: column; }
+      .process-grid,
+      .recent-list,
+      .snapshot-grid { grid-template-columns: 1fr; }
+      .process-node::after {
+        content: "↓";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -16px;
+      }
+      .example-tabs { grid-template-columns: 1fr; }
+      .example-tab { border-right: 0; border-bottom: 1px solid var(--line); text-align: left; }
+      .transcript,
+      .context-grid,
+      .effect-grid,
+      .file-grid { grid-template-columns: 1fr; }
+      .event-row { grid-template-columns: 1fr; gap: 5px; }
+      .stage-title { align-items: flex-start; flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+
+    /* 第二版视觉：连续时间轴、对话气泡和无边框数据记录 */
+    body {
+      background:
+        radial-gradient(circle at 12% 8%, rgba(35, 124, 117, .09), transparent 28%),
+        radial-gradient(circle at 88% 34%, rgba(180, 79, 116, .07), transparent 24%),
+        #f3f7f5;
+    }
+
+    .shell { width: min(1320px, calc(100% - 48px)); }
+
+    .defaults {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .default-item {
+      min-height: 90px;
+      padding: 10px 20px;
+      border-right: 1px solid rgba(20, 33, 39, .18);
+    }
+
+    .workspace { grid-template-columns: minmax(0, 1fr) 330px; gap: 46px; }
+    .diagram,
+    .inspector,
+    .finding-strip {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .toolbar { padding: 15px 0; border-color: rgba(20, 33, 39, .18); }
+    .flow { grid-template-columns: 1fr; gap: 0; padding: 20px 0 24px; }
+
+    .step {
+      min-height: 92px;
+      padding: 16px 18px 16px 78px;
+      border: 0;
+      border-radius: 0 30px 30px 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .step:hover,
+    .step:focus-visible,
+    .step.active {
+      transform: translateX(5px);
+      outline: none;
+      box-shadow: none;
+      background: linear-gradient(90deg, rgba(14, 116, 144, .1), transparent 84%);
+    }
+
+    .step.uncertain { box-shadow: none; }
+
+    .step.llm:hover,
+    .step.llm:focus-visible,
+    .step.llm.active {
+      background: linear-gradient(90deg, rgba(116, 83, 166, .11), transparent 84%);
+    }
+
+    .step::after {
+      width: 1px;
+      height: 30px;
+      left: 24px;
+      right: auto;
+      top: auto;
+      bottom: -15px;
+      background: rgba(20, 33, 39, .22);
+    }
+
+    .step:nth-child(4)::after { display: block; }
+
+    .step-no {
+      position: absolute;
+      left: 0;
+      top: 16px;
+      width: 49px;
+      height: 49px;
+      justify-content: center;
+      border: 1px solid var(--code);
+      border-radius: 50%;
+      color: var(--code);
+      background: #f3f7f5;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .llm .step-no { border-color: var(--llm); color: var(--llm); }
+    .type-chip { display: none; }
+    .step h2 { margin: 0 0 5px; font-size: 20px; }
+    .step p { max-width: 520px; }
+    .step-evidence {
+      position: static;
+      display: block;
+      margin-top: 7px;
+    }
+
+    .storage-split {
+      grid-column: auto;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      min-height: 0;
+      margin: 6px 0 12px 76px;
+      padding: 8px 0 8px 20px;
+      border: 0;
+      border-left: 1px dashed var(--code);
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .storage-split .step { min-height: 118px; padding-left: 66px; }
+    .storage-split .step-no { width: 42px; height: 42px; }
+
+    .legend { padding: 0; }
+    .inspector {
+      position: sticky;
+      top: 22px;
+      padding-left: 28px;
+      border-left: 1px solid rgba(20, 33, 39, .2);
+      overflow: visible;
+    }
+
+    .inspector-head {
+      padding: 4px 0 20px;
+      color: var(--ink);
+      background: transparent;
+    }
+
+    .inspector-head .utility { color: var(--code); opacity: 1; }
+    .inspector-body { padding: 0; }
+
+    .example-lab {
+      margin-top: 56px;
+      border: 0;
+      border-radius: 34px;
+      background: rgba(255, 255, 255, .78);
+      box-shadow: 0 30px 90px rgba(20, 33, 39, .1);
+    }
+
+    .example-head {
+      padding: 34px 38px 31px;
+      border-radius: 34px 34px 0 0;
+      background: #162a2a;
+    }
+
+    .scenario-tabs {
+      position: relative;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0;
+      padding: 27px 26px 18px;
+      border: 0;
+      background: transparent;
+    }
+
+    .scenario-tabs::before {
+      content: "";
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      top: 44px;
+      height: 1px;
+      background: rgba(20, 33, 39, .2);
+    }
+
+    .scenario-tab {
+      position: relative;
+      z-index: 1;
+      min-height: 76px;
+      padding: 37px 8px 0;
+      border-radius: 0;
+      color: var(--muted);
+      background: transparent;
+      text-align: center;
+    }
+
+    .scenario-tab::before {
+      content: "";
+      position: absolute;
+      top: 1px;
+      left: 50%;
+      width: 31px;
+      height: 31px;
+      border: 7px solid rgba(255,255,255,.9);
+      border-radius: 50%;
+      background: #91aaa5;
+      transform: translateX(-50%);
+      box-shadow: 0 0 0 1px rgba(20, 33, 39, .16);
+    }
+
+    .scenario-tab[aria-selected="true"] {
+      color: var(--trace);
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .scenario-tab[aria-selected="true"]::before {
+      background: var(--trace);
+      box-shadow: 0 0 0 5px rgba(184, 50, 104, .14);
+    }
+
+    .scenario-tab:focus { outline: none; }
+    .scenario-tab:focus-visible::before {
+      box-shadow: 0 0 0 5px rgba(14, 116, 144, .2), 0 0 0 7px var(--code);
+    }
+
+    .scenario-tab span { display: none; }
+    .scenario-tab strong { font-size: 11px; }
+    .scenario-body { padding: 26px 38px 40px; }
+
+    .scenario-note {
+      margin: 0 0 27px;
+      padding: 0 0 0 17px;
+      border-left: 2px solid var(--trace);
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .example-tabs {
+      display: flex;
+      gap: 24px;
+      padding: 5px 38px 0;
+      border: 0;
+      background: transparent;
+      overflow-x: auto;
+    }
+
+    .example-tab {
+      flex: 0 0 auto;
+      padding: 17px 0 12px;
+      border: 0;
+      background: transparent;
+    }
+
+    .example-tab[aria-selected="true"] { background: transparent; }
+    .example-tab[aria-selected="true"]::after { height: 2px; }
+    .example-tab:focus { outline: none; }
+    .example-tab:focus-visible { box-shadow: inset 0 0 0 2px var(--code); }
+    .example-stage { padding: 26px 38px 40px; }
+
+    .transcript { gap: 13px 34px; }
+    .utterance {
+      min-height: 0;
+      padding: 17px 20px 17px 68px;
+      border: 0;
+      border-radius: 24px 24px 24px 7px;
+      background: #e5efeb;
+    }
+
+    .utterance:nth-child(even) {
+      transform: translateY(18px);
+      border-radius: 24px 24px 7px 24px;
+      background: #f0e8ed;
+    }
+
+    .utterance.traced {
+      border: 0;
+      box-shadow: inset 3px 0 var(--trace);
+      background: #f5e4eb;
+    }
+
+    .process-grid {
+      position: relative;
+      gap: 0;
+      margin: 50px 0 30px;
+    }
+
+    .process-grid::before {
+      content: "";
+      position: absolute;
+      left: 12.5%;
+      right: 12.5%;
+      top: 15px;
+      height: 1px;
+      background: rgba(20, 33, 39, .22);
+    }
+
+    .process-node {
+      min-height: 0;
+      padding: 48px 15px 5px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      text-align: center;
+    }
+
+    .process-node::before {
+      content: "";
+      position: absolute;
+      z-index: 2;
+      top: 5px;
+      left: 50%;
+      width: 21px;
+      height: 21px;
+      border: 5px solid #fff;
+      border-radius: 50%;
+      background: var(--code);
+      transform: translateX(-50%);
+      box-shadow: 0 0 0 1px rgba(20, 33, 39, .18);
+    }
+
+    .process-node.llm-node::before { background: var(--llm); }
+    .process-node.warn-node::before { background: var(--uncertain); }
+    .process-node::after { display: none; }
+    .process-node strong { font-size: 15px; }
+
+    .recent-box {
+      margin-top: 34px;
+      padding: 22px 0 0 34px;
+      border: 0;
+      border-left: 1px solid rgba(14, 116, 144, .35);
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .recent-list { gap: 0 34px; }
+    .recent-list li {
+      position: relative;
+      padding: 10px 0;
+      border: 0;
+      border-bottom: 1px solid rgba(20, 33, 39, .12);
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .recent-list li::before {
+      content: "";
+      position: absolute;
+      left: -39px;
+      top: 17px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--code);
+    }
+
+    .snapshot-grid {
+      gap: 0;
+      margin-top: 34px;
+      padding: 25px 0;
+      border-top: 1px solid rgba(20, 33, 39, .16);
+      border-bottom: 1px solid rgba(20, 33, 39, .16);
+    }
+
+    .snapshot-card {
+      padding: 0 28px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .snapshot-card:first-child { padding-left: 0; border-right: 1px solid rgba(20, 33, 39, .16); }
+
+    .event-list { gap: 0; }
+    .event-row {
+      padding: 13px 4px;
+      border: 0;
+      border-bottom: 1px solid rgba(20, 33, 39, .12);
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .event-row.traced {
+      border-color: rgba(20, 33, 39, .12);
+      background: linear-gradient(90deg, var(--trace-soft), transparent 74%);
+    }
+
+    .raw-detail {
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(20, 33, 39, .16);
+    }
+
+    .raw-detail summary {
+      width: fit-content;
+      padding: 9px 14px;
+      border: 1px solid rgba(20, 33, 39, .25);
+      border-radius: 999px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .model-input-stack {
+      display: grid;
+      gap: 22px;
+    }
+
+    .model-call {
+      border-left: 3px solid var(--llm);
+      background: #eef3f1;
+    }
+
+    .model-call.conditional { border-left-color: var(--uncertain); }
+
+    .model-call-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: baseline;
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid rgba(20, 33, 39, .13);
+    }
+
+    .model-call-head strong {
+      font-family: "Avenir Next", "PingFang SC", sans-serif;
+      font-size: 14px;
+    }
+
+    .model-call-head span {
+      color: var(--muted);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+    }
+
+    .model-call pre {
+      margin: 0;
+      padding: 18px;
+      color: #263b3b;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      tab-size: 2;
+    }
+
+    .model-input-note {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .file-card { border: 0; border-radius: 22px; background: #edf3f1; }
+    .file-name { background: transparent; color: var(--code); }
+    .file-card pre { background: transparent; }
+
+    .context-grid,
+    .effect-grid { gap: 0; }
+    .context-card,
+    .effect-card {
+      min-height: 0;
+      padding: 5px 22px;
+      border: 0;
+      border-left: 1px solid rgba(20, 33, 39, .16);
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .context-card:first-child,
+    .effect-card:first-child { border-left: 0; padding-left: 0; }
+    .effect-card.good,
+    .effect-card.warn,
+    .effect-card.trace { border-top: 0; }
+
+    .finding-strip {
+      margin-top: 46px;
+      padding: 24px 0;
+      gap: 0;
+      border-top: 1px solid rgba(20, 33, 39, .2);
+      border-bottom: 1px solid rgba(20, 33, 39, .2);
+      background: transparent;
+    }
+
+    .finding,
+    .finding:first-child {
+      min-height: 0;
+      padding: 0 23px;
+      border-left: 1px solid rgba(20, 33, 39, .16);
+      color: var(--ink);
+      background: transparent;
+    }
+
+    .finding:first-child { padding-left: 0; border-left: 0; }
+    .finding:first-child .utility,
+    .finding:first-child p { color: var(--muted); }
+
+    @media (max-width: 1120px) {
+      .workspace { grid-template-columns: 1fr; gap: 28px; }
+      .inspector { position: static; padding: 25px 0 0; border-left: 0; border-top: 1px solid rgba(20, 33, 39, .2); }
+    }
+
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 26px, 1320px); }
+      h1 { font-size: 36px; }
+      .mobile-title-break { display: inline; }
+      .defaults { grid-template-columns: repeat(3, 1fr); }
+      .default-item { min-height: 72px; padding: 8px 10px; border-right: 1px solid rgba(20, 33, 39, .18); border-bottom: 0; }
+      .default-item strong { font-size: 17px; }
+      .flow { padding: 18px 0; }
+      .step::after { left: 24px; bottom: -15px; height: 30px; }
+      .storage-split { grid-template-columns: 1fr; margin-left: 24px; padding-left: 26px; }
+      .example-head { padding: 28px 24px; }
+      .scenario-tabs {
+        display: flex;
+        gap: 0;
+        padding: 24px 10px 12px;
+        overflow-x: auto;
+      }
+      .scenario-tabs::before { left: 74px; right: 74px; top: 41px; }
+      .scenario-tab { flex: 0 0 132px; min-height: 72px; padding-top: 36px; }
+      .scenario-body,
+      .example-stage { padding: 22px 21px 32px; }
+      .example-tabs { grid-template-columns: none; padding-left: 21px; }
+      .transcript { grid-template-columns: 1fr; gap: 10px; }
+      .utterance:nth-child(even) { margin-left: 24px; transform: none; }
+      .utterance:nth-child(odd) { margin-right: 24px; }
+      .process-grid { grid-template-columns: 1fr; gap: 0; margin-top: 34px; }
+      .process-grid::before { left: 15px; right: auto; top: 18px; bottom: 18px; width: 1px; height: auto; }
+      .process-node { padding: 4px 0 27px 48px; text-align: left; }
+      .process-node::before { left: 15px; top: 2px; }
+      .recent-list,
+      .snapshot-grid { grid-template-columns: 1fr; }
+      .snapshot-card { padding: 20px 0; }
+      .snapshot-card:first-child { padding-top: 0; border-right: 0; border-bottom: 1px solid rgba(20, 33, 39, .16); }
+      .context-grid,
+      .effect-grid { grid-template-columns: 1fr; }
+      .context-card,
+      .effect-card { padding: 18px 0; border-left: 0; border-top: 1px solid rgba(20, 33, 39, .16); }
+      .event-row { grid-template-columns: 1fr; }
+      .finding-strip { grid-template-columns: 1fr 1fr; }
+      .finding,
+      .finding:first-child { padding: 16px; border: 0; }
+    }
+
+    @media (min-width: 761px) {
+      .mobile-title-break { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">NativeMem v10 · 当前默认保存设计</p>
+        <h1>一段对话如何<span class="mobile-title-break"><br></span>保存成记忆</h1>
+        <p class="dek">主流程只展示当前启用的配置。点击任一步骤，可以查看它具体处理什么、是否调用模型，以及目前有没有实验支持。</p>
+      </div>
+      <section class="defaults" aria-label="当前默认参数">
+        <div class="default-item"><span class="utility">写入间隔</span><strong>6 条消息</strong></div>
+        <div class="default-item"><span class="utility">前序信息</span><strong>最近 20 事件</strong></div>
+        <div class="default-item"><span class="utility">整理频率</span><strong>每 session</strong></div>
+      </section>
+    </header>
+
+    <section class="workspace">
+      <div class="diagram">
+        <div class="toolbar">
+          <span class="toolbar-title">选择步骤查看详细效用</span>
+          <div class="filters" role="group" aria-label="流程筛选">
+            <button class="filter" data-filter="all" aria-pressed="true">全部</button>
+            <button class="filter" data-filter="llm" aria-pressed="false">仅模型调用</button>
+            <button class="filter" data-filter="uncertain" aria-pressed="false">仅收益未确认</button>
+          </div>
+        </div>
+
+        <div class="flow" id="flow">
+          <button class="step code active" data-key="session">
+            <span class="step-no"><span>01</span><span class="type-chip">代码</span></span>
+            <h2>按 session 分段</h2>
+            <p>读取该 session 的消息和发生日期。</p>
+            <span class="step-evidence">边界规则</span>
+          </button>
+
+          <button class="step code uncertain" data-key="window">
+            <span class="step-no"><span>02</span><span class="type-chip">代码</span></span>
+            <h2>每 6 条切分</h2>
+            <p>决定每次 writer 看到的原始消息数量。</p>
+            <span class="step-evidence">W=10 待正式确认</span>
+          </button>
+
+          <button class="step code uncertain" data-key="context">
+            <span class="step-no"><span>03</span><span class="type-chip">代码</span></span>
+            <h2>准备辅助信息</h2>
+            <p>最近20条事件、日历和已有 topic 列表。</p>
+            <span class="step-evidence">未独立消融</span>
+          </button>
+
+          <button class="step llm" data-key="distill">
+            <span class="step-no"><span>04</span><span class="type-chip">模型</span></span>
+            <h2>事实提取 distill</h2>
+            <p>生成时间、摘要、引用和 topic。</p>
+            <span class="step-evidence">保存的主要步骤</span>
+          </button>
+
+          <button class="step llm uncertain" data-key="verify">
+            <span class="step-no"><span>05</span><span class="type-chip">模型</span></span>
+            <h2>补漏检查 verify</h2>
+            <p>检查大写词、引号短语和数字。</p>
+            <span class="step-evidence">当前未显示 QA 收益</span>
+          </button>
+
+          <button class="step code" data-key="refs">
+            <span class="step-no"><span>06</span><span class="type-chip">代码</span></span>
+            <h2>校验引用</h2>
+            <p>把行号转换为 D1:3 等原消息编号。</p>
+            <span class="step-evidence">可追溯</span>
+          </button>
+
+          <div class="storage-split" aria-label="双视图存储">
+            <button class="step code" data-key="timeline">
+              <span class="step-no"><span>07A</span><span class="type-chip">代码</span></span>
+              <h2>Timeline</h2>
+              <p>按日期保存，支持时间查询。</p>
+              <span class="step-evidence">时间视图</span>
+            </button>
+            <button class="step code uncertain" data-key="topics">
+              <span class="step-no"><span>07B</span><span class="type-chip">代码</span></span>
+              <h2>Topics</h2>
+              <p>按模型选择的主题路径保存。</p>
+              <span class="step-evidence">topic 数量可能偏多</span>
+            </button>
+          </div>
+
+          <button class="step llm uncertain" data-key="maintenance">
+            <span class="step-no"><span>08</span><span class="type-chip">代码 + 模型</span></span>
+            <h2>Session 整理</h2>
+            <p>精确去重、topic 合并、同义行合并和分节。</p>
+            <span class="step-evidence">占总调用 58%–89%</span>
+          </button>
+
+          <button class="step llm uncertain" data-key="final">
+            <span class="step-no"><span>09</span><span class="type-chip">模型</span></span>
+            <h2>最终整理</h2>
+            <p>全部 session 完成后再整理所有 topic。</p>
+            <span class="step-evidence">必要性未验证</span>
+          </button>
+        </div>
+
+        <div class="legend" aria-label="图例">
+          <span>确定性代码处理</span>
+          <span class="legend-llm">包含模型调用</span>
+          <span class="legend-uncertain">效用尚未独立确认</span>
+        </div>
+      </div>
+
+      <aside class="inspector" aria-live="polite">
+        <div class="inspector-head">
+          <span class="utility" id="detail-index">步骤 01 · 代码</span>
+          <h2 id="detail-title">按 session 分段</h2>
+        </div>
+        <div class="inspector-body">
+          <div class="detail-block">
+            <p class="detail-label">具体做什么</p>
+            <p class="detail-value" id="detail-action"></p>
+          </div>
+          <div class="detail-block">
+            <p class="detail-label">预期效用</p>
+            <p class="detail-value" id="detail-utility"></p>
+          </div>
+          <div class="detail-block">
+            <p class="detail-label">当前证据</p>
+            <p class="detail-value" id="detail-evidence"></p>
+            <span class="status" id="detail-status"></span>
+          </div>
+          <div class="detail-block">
+            <p class="detail-label">模型成本</p>
+            <p class="detail-value" id="detail-cost"></p>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="example-lab" id="example">
+      <header class="example-head">
+        <div>
+          <p class="eyebrow">连续样例 · LoCoMo sample 0</p>
+          <h2>查看窗口、Session 整理和最终整理</h2>
+          <p>窗口 1、窗口 2 和 session 1 的保存结果来自本次 GPT‑5.5、W=6 建库。默认显示窗口 2，因此可以直接看到最近事件如何进入下一次 Writer。</p>
+        </div>
+        <div class="trace-key">默认：窗口 2 · recent=6</div>
+      </header>
+
+      <div class="scenario-tabs" role="tablist" aria-label="连续处理阶段">
+        <button class="scenario-tab" role="tab" aria-selected="false" data-scenario="window1"><span>Session 1</span><strong>窗口 1 · D1:1–D1:6</strong></button>
+        <button class="scenario-tab" role="tab" aria-selected="true" data-scenario="window2"><span>Session 1</span><strong>窗口 2 · D1:7–D1:12</strong></button>
+        <button class="scenario-tab" role="tab" aria-selected="false" data-scenario="session-end"><span>Boundary</span><strong>Session 结束</strong></button>
+        <button class="scenario-tab" role="tab" aria-selected="false" data-scenario="next-session"><span>Session 2</span><strong>下一 Session 开始</strong></button>
+        <button class="scenario-tab" role="tab" aria-selected="false" data-scenario="all-end"><span>Final</span><strong>全部 Session 结束</strong></button>
+      </div>
+
+      <section class="scenario-panel" data-scenario-panel="window1" role="tabpanel">
+      <div class="example-tabs" role="tablist" aria-label="窗口 1 处理步骤">
+        <button class="example-tab" role="tab" aria-selected="true" data-example="input">1 · 原始消息</button>
+        <button class="example-tab" role="tab" aria-selected="false" data-example="context">2 · Writer 输入</button>
+        <button class="example-tab" role="tab" aria-selected="false" data-example="events">3 · 事件结果</button>
+        <button class="example-tab" role="tab" aria-selected="false" data-example="files">4 · 保存文件</button>
+        <button class="example-tab" role="tab" aria-selected="false" data-example="effect">5 · 实际效用</button>
+      </div>
+
+      <div class="example-stage">
+        <section class="stage-panel active" data-panel="input" role="tabpanel">
+          <div class="stage-title">
+            <h3>输入窗口：6 条真实消息</h3>
+            <span>session 时间：2023-05-08 13:56</span>
+          </div>
+          <div class="transcript">
+            <article class="utterance">
+              <span class="dia">D1:1</span><span class="speaker">Caroline</span>
+              <p>Hey Mel! Good to see you! How have you been?</p>
+            </article>
+            <article class="utterance">
+              <span class="dia">D1:2</span><span class="speaker">Melanie</span>
+              <p>Hey Caroline! Good to see you! I'm swamped with the kids &amp; work. What's up with you? Anything new?</p>
+            </article>
+            <article class="utterance traced">
+              <span class="dia">D1:3</span><span class="speaker">Caroline</span>
+              <p>I went to a LGBTQ support group yesterday and it was so powerful.</p>
+            </article>
+            <article class="utterance">
+              <span class="dia">D1:4</span><span class="speaker">Melanie</span>
+              <p>Wow, that's cool, Caroline! What happened that was so awesome? Did you hear any inspiring stories?</p>
+            </article>
+            <article class="utterance">
+              <span class="dia">D1:5</span><span class="speaker">Caroline</span>
+              <p>The transgender stories were so inspiring! I was so happy and thankful for all the support.</p>
+              <span class="ignored-data">另有 image metadata，当前 writer 不读取</span>
+            </article>
+            <article class="utterance">
+              <span class="dia">D1:6</span><span class="speaker">Melanie</span>
+              <p>Wow, love that painting! So cool you found such a helpful group. What's it done for you?</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="stage-panel" data-panel="context" role="tabpanel">
+          <div class="stage-title">
+            <h3>模型收到的文本</h3>
+            <span>窗口 1 · 两次调用的 messages 结构</span>
+          </div>
+          <p class="model-input-note">固定任务约束按字段归纳；动态日期、上下文和消息按实际输入展示。模型实际接收的是 system 与 user 两条文本消息。</p>
+          <div class="model-input-stack">
+            <section class="model-call">
+              <div class="model-call-head"><strong>调用 1 · v10_distill</strong><span>system + user</span></div>
+              <pre>messages = [
+  {
+    role: "system",
+    content: {
+      task: "提炼所有具体事实；每个事实单独成为事件",
+      observation_date: "2023-05-08",
+      calendar: [
+        "2023-05-08 星期一/Mon",
+        "2023-05-07 星期日/Sun",
+        "...此前三周其余 19 行..."
+      ],
+      known_topics: "（暂无）",
+      recent_events: [],
+      requirements: [
+        "保留专有名词、数字和相对时间词",
+        "summary 使用英文并内联引用局部行号",
+        "优先复用已有 topic 路径"
+      ],
+      output: {"events":[{"when":"YYYY-MM-DD","summary":"...","refs":[1],"topic":"..."}]}
+    }
+  },
+  {
+    role: "user",
+    content: """
+      [1] Caroline: Hey Mel! Good to see you! How have you been?
+      [2] Melanie: Hey Caroline! Good to see you! I'm swamped with the kids &amp; work. What's up with you? Anything new?
+      [3] Caroline: I went to a LGBTQ support group yesterday and it was so powerful.
+      [4] Melanie: Wow, that's cool, Caroline! What happened that was so awesome? Did you hear any inspiring stories?
+      [5] Caroline: The transgender stories were so inspiring! I was so happy and thankful for all the support.
+      [6] Melanie: Wow, love that painting! So cool you found such a helpful group. What's it done for you?
+    """
+  }
+]</pre>
+            </section>
+
+            <section class="model-call conditional">
+              <div class="model-call-head"><strong>调用 2 · v10_distill_verify</strong><span>仅 missing 非空时</span></div>
+              <pre>messages = [
+  { role: "system", content: &lt;与调用 1 相同的 system 文本&gt; },
+  { role: "user", content: &lt;与调用 1 相同的 6 条编号消息&gt; },
+  { role: "assistant", content: &lt;调用 1 返回的原始 JSON&gt; },
+  {
+    role: "user",
+    content: "以下原文里的具体信息（专有名词/数字）在你上一轮的事件里漏了："
+             + missing.join("、")
+             + "。请把每一条都补成对应的事件（同样给 when/summary/refs/topic），"
+             + "只输出补充的事件 JSON：{\"events\":[...]}。"
+  }
+]
+
+missing = verify_event_coverage(current_messages, first_events)</pre>
+            </section>
+          </div>
+        </section>
+
+        <section class="stage-panel" data-panel="events" role="tabpanel">
+          <div class="stage-title">
+            <h3>保存前的结构化事件</h3>
+            <span>来自本次 GPT‑5.5 / W=6 结果</span>
+          </div>
+          <div class="event-list">
+            <div class="event-row"><span class="event-date">2023-05-08</span><span class="event-text">Melanie was swamped with the kids and work.</span><span class="event-topic">D1:2 · Melanie/family_and_work</span></div>
+            <div class="event-row traced"><span class="event-date">2023-05-07</span><span class="event-text">Caroline went to a LGBTQ support group yesterday.</span><span class="event-topic"><span class="event-ref">D1:3</span> · Caroline/LGBTQ_support_group</span></div>
+            <div class="event-row traced"><span class="event-date">2023-05-07</span><span class="event-text">Caroline found the LGBTQ support group yesterday (2023-05-07) powerful.</span><span class="event-topic"><span class="event-ref">D1:3</span> · Caroline/LGBTQ_support_group</span></div>
+            <div class="event-row"><span class="event-date">2023-05-07</span><span class="event-text">Caroline heard transgender stories and found them inspiring.</span><span class="event-topic">D1:5 · Caroline/LGBTQ_support_group</span></div>
+            <div class="event-row"><span class="event-date">2023-05-07</span><span class="event-text">Caroline felt happy and thankful for the support.</span><span class="event-topic">D1:5 · Caroline/LGBTQ_support_group</span></div>
+            <div class="event-row"><span class="event-date">2023-05-08</span><span class="event-text">Melanie noticed a painting and loved it.</span><span class="event-topic">D1:6 · painting</span></div>
+          </div>
+        </section>
+
+        <section class="stage-panel" data-panel="files" role="tabpanel">
+          <div class="stage-title">
+            <h3>同一事件写入两个文件</h3>
+            <span>D1:3 在两侧保持相同引用</span>
+          </div>
+          <div class="file-grid">
+            <article class="file-card">
+              <div class="file-name">timeline/2023/05/07.md</div>
+              <pre>[2023-05-07] Caroline went to a LGBTQ support group yesterday (2023-05-07). · [<mark>D1:3</mark>] → topics/Caroline/LGBTQ_support_group.md
+
+[2023-05-07] Caroline found the LGBTQ support group yesterday (2023-05-07) powerful. · [<mark>D1:3</mark>] → topics/Caroline/LGBTQ_support_group.md</pre>
+            </article>
+            <article class="file-card">
+              <div class="file-name">topics/Caroline/LGBTQ_support_group.md</div>
+              <pre>[2023-05-07](timeline/2023/05/07.md) Caroline went to a LGBTQ support group yesterday ([2023-05-07](timeline/2023/05/07.md)) [<mark>D1:3</mark>].
+
+[2023-05-07](timeline/2023/05/07.md) Caroline found the LGBTQ support group yesterday ([2023-05-07](timeline/2023/05/07.md)) powerful [<mark>D1:3</mark>].</pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="stage-panel" data-panel="effect" role="tabpanel">
+          <div class="stage-title">
+            <h3>这次保存产生的实际效果</h3>
+            <span>区分已实现作用和当前限制</span>
+          </div>
+          <div class="effect-grid">
+            <article class="effect-card good">
+              <span class="utility">可以回答</span>
+              <strong>何时参加支持小组？</strong>
+              <p>回答：2023-05-07。日历把 yesterday 转换成了日期。</p>
+            </article>
+            <article class="effect-card trace">
+              <span class="utility">可以追溯</span>
+              <strong>定位到 D1:3</strong>
+              <p>Timeline 和 Topics 都保留同一个原消息编号。</p>
+            </article>
+            <article class="effect-card good">
+              <span class="utility">两种查询</span>
+              <strong>日期与主题</strong>
+              <p>可以按 2023-05-07 查询，也可以按 LGBTQ support group 查询。</p>
+            </article>
+            <article class="effect-card warn">
+              <span class="utility">当前限制</span>
+              <strong>图像信息未保存</strong>
+              <p>D1:5 的 img_url、blip_caption 和 query 没有进入 writer 输入。</p>
+            </article>
+          </div>
+        </section>
+      </div>
+      </section>
+
+      <section class="scenario-panel active" data-scenario-panel="window2" role="tabpanel">
+        <div class="example-tabs" role="tablist" aria-label="窗口 2 处理步骤">
+          <button class="example-tab" role="tab" aria-selected="false" data-example="input">1 · 原始消息</button>
+          <button class="example-tab" role="tab" aria-selected="true" data-example="context">2 · Writer 输入</button>
+          <button class="example-tab" role="tab" aria-selected="false" data-example="events">3 · 事件结果</button>
+          <button class="example-tab" role="tab" aria-selected="false" data-example="files">4 · 保存文件</button>
+          <button class="example-tab" role="tab" aria-selected="false" data-example="effect">5 · 实际效用</button>
+        </div>
+        <div class="example-stage">
+        <section class="stage-panel" data-panel="input" role="tabpanel">
+          <div class="stage-title">
+            <h3>输入窗口：6 条真实消息</h3>
+            <span>session 时间：2023-05-08 13:56</span>
+          </div>
+          <div class="transcript">
+            <article class="utterance traced">
+              <span class="dia">D1:7</span><span class="speaker">Caroline</span>
+              <p>The support group has made me feel accepted and given me courage to embrace myself.</p>
+            </article>
+            <article class="utterance">
+              <span class="dia">D1:8</span><span class="speaker">Melanie</span>
+              <p>That's really cool. You've got guts. What now?</p>
+            </article>
+            <article class="utterance traced">
+              <span class="dia">D1:9</span><span class="speaker">Caroline</span>
+              <p>Gonna continue my edu and check out career options, which is pretty exciting!</p>
+            </article>
+            <article class="utterance">
+              <span class="dia">D1:10</span><span class="speaker">Melanie</span>
+              <p>Wow, Caroline! What kinda jobs are you thinkin' of? Anything that stands out?</p>
+            </article>
+            <article class="utterance traced">
+              <span class="dia">D1:11</span><span class="speaker">Caroline</span>
+              <p>I'm keen on counseling or working in mental health — I'd love to support those with similar issues.</p>
+            </article>
+            <article class="utterance">
+              <span class="dia">D1:12</span><span class="speaker">Melanie</span>
+              <p>You'd be a great counselor! Your empathy and understanding will really help the people you work with.</p>
+              <span class="ignored-data">另有 image metadata，当前 writer 不读取</span>
+            </article>
+          </div>
+
+        </section>
+        <section class="stage-panel active" data-panel="context" role="tabpanel">
+          <div class="scenario-note">
+            <span>这是同一 session 的第二个窗口。Writer 会收到窗口 1 已经提炼出的 6 条摘要，因此 recent 不再为空。</span>
+            <code>event_history[-20:] → 6 items</code>
+          </div>
+          <div class="stage-title">
+            <h3>模型收到的文本</h3>
+            <span>窗口 2 · recent 已包含窗口 1 的 6 条摘要</span>
+          </div>
+          <p class="model-input-note">固定任务约束与窗口 1 相同。下面完整展示窗口 2 新增的 recent 文本和当前 6 条消息；known_topics 仍为空，因为快照只在 session 开始时读取一次。</p>
+          <div class="model-input-stack">
+            <section class="model-call">
+              <div class="model-call-head"><strong>调用 1 · v10_distill</strong><span>system + user</span></div>
+              <pre>messages = [
+  {
+    role: "system",
+    content: {
+      task: "提炼所有具体事实；每个事实单独成为事件",
+      observation_date: "2023-05-08",
+      calendar: [
+        "2023-05-08 星期一/Mon",
+        "2023-05-07 星期日/Sun",
+        "...此前三周其余 19 行..."
+      ],
+      known_topics: "（暂无）",
+      recent_events: [
+        "Melanie was swamped with the kids and work.",
+        "Caroline went to a LGBTQ support group yesterday.",
+        "Caroline found the LGBTQ support group powerful.",
+        "Caroline heard transgender stories and found them inspiring.",
+        "Caroline felt happy and thankful for the support.",
+        "Melanie noticed a painting and loved it."
+      ],
+      recent_instruction: "旧事实不要重复；新进展沿用 topic；消解代词",
+      output: {"events":[{"when":"YYYY-MM-DD","summary":"...","refs":[1],"topic":"..."}]}
+    }
+  },
+  {
+    role: "user",
+    content: """
+      [1] Caroline: The support group has made me feel accepted and given me courage to embrace myself.
+      [2] Melanie: That's really cool. You've got guts. What now?
+      [3] Caroline: Gonna continue my edu and check out career options, which is pretty exciting!
+      [4] Melanie: Wow, Caroline! What kinda jobs are you thinkin' of? Anything that stands out?
+      [5] Caroline: I'm keen on counseling or working in mental health — I'd love to support those with similar issues.
+      [6] Melanie: You'd be a great counselor! Your empathy and understanding will really help the people you work with.
+    """
+  }
+]
+
+not_sent_to_model = ["img_url", "blip_caption", "query"]</pre>
+            </section>
+
+            <section class="model-call conditional">
+              <div class="model-call-head"><strong>调用 2 · v10_distill_verify</strong><span>仅 missing 非空时</span></div>
+              <pre>messages = [
+  { role: "system", content: &lt;上面的完整 system 文本，包含 6 条 recent&gt; },
+  { role: "user", content: &lt;上面的 6 条编号消息&gt; },
+  { role: "assistant", content: &lt;调用 1 返回的原始 JSON&gt; },
+  {
+    role: "user",
+    content: "以下原文里的具体信息（专有名词/数字）在你上一轮的事件里漏了："
+             + missing.join("、")
+             + "。请把每一条都补成对应的事件（同样给 when/summary/refs/topic），"
+             + "只输出补充的事件 JSON：{\"events\":[...]}。"
+  }
+]
+
+missing = verify_event_coverage(current_messages, first_events)</pre>
+            </section>
+          </div>
+
+        </section>
+
+        <section class="stage-panel" data-panel="events" role="tabpanel">
+          <div class="stage-title">
+            <h3>保存前的结构化事件</h3>
+            <span>来自本次 GPT‑5.5 / W=6 结果 · 7 条</span>
+          </div>
+          <div class="event-list" style="margin-top: 18px;">
+            <div class="event-row traced"><span class="event-date">2023-05-08</span><span class="event-text">The LGBTQ support group made Caroline feel accepted and gave her courage to embrace herself.</span><span class="event-topic">D1:7 · Caroline/LGBTQ_support_group</span></div>
+            <div class="event-row traced"><span class="event-date">2023-05-08</span><span class="event-text">Caroline planned to continue her education.</span><span class="event-topic">D1:9 · Caroline/education</span></div>
+            <div class="event-row"><span class="event-date">2023-05-08</span><span class="event-text">Caroline planned to check out career options.</span><span class="event-topic">D1:9 · Caroline/career_plans</span></div>
+            <div class="event-row"><span class="event-date">2023-05-08</span><span class="event-text">Caroline was interested in counseling as a career option.</span><span class="event-topic">D1:11 · Caroline/career_plans</span></div>
+            <div class="event-row"><span class="event-date">2023-05-08</span><span class="event-text">Caroline was interested in working in mental health.</span><span class="event-topic">D1:11 · Caroline/career_plans</span></div>
+            <div class="event-row"><span class="event-date">2023-05-08</span><span class="event-text">Caroline wanted to support people with similar issues through counseling or mental health work.</span><span class="event-topic">D1:11 · Caroline/career_plans</span></div>
+            <div class="event-row"><span class="event-date">2023-05-08</span><span class="event-text">Melanie said Caroline would be a great counselor because her empathy and understanding would help clients.</span><span class="event-topic">D1:12 · Caroline/career_plans</span></div>
+          </div>
+
+        </section>
+
+        <section class="stage-panel" data-panel="files" role="tabpanel">
+          <div class="stage-title">
+            <h3>事件写入两个检索视图</h3>
+            <span>Timeline 按日期 · Topics 按主题</span>
+          </div>
+          <div class="file-grid" style="margin-top: 18px;">
+            <article class="file-card">
+              <div class="file-name">timeline/2023/05/08.md</div>
+              <pre>[2023-05-08] Caroline planned to continue her education. · [<mark>D1:9</mark>] → topics/Caroline/education.md
+
+[2023-05-08] Caroline was interested in counseling as a career option. · [<mark>D1:11</mark>] → topics/Caroline/career_plans.md</pre>
+            </article>
+            <article class="file-card">
+              <div class="file-name">topics/Caroline/career_plans.md</div>
+              <pre>[2023-05-08](timeline/2023/05/08.md) Caroline planned to check out career options [<mark>D1:9</mark>].
+
+[2023-05-08](timeline/2023/05/08.md) Caroline was interested in counseling as a career option [<mark>D1:11</mark>].</pre>
+            </article>
+          </div>
+
+        </section>
+
+        <section class="stage-panel" data-panel="effect" role="tabpanel">
+          <div class="stage-title">
+            <h3>这次保存产生的实际效果</h3>
+            <span>与窗口 1 使用相同的检查维度</span>
+          </div>
+          <div class="effect-grid">
+            <article class="effect-card good">
+              <span class="utility">可以回答</span>
+              <strong>Caroline 想从事什么工作？</strong>
+              <p>回答：counseling 或 mental health，并希望帮助有相似经历的人。</p>
+            </article>
+            <article class="effect-card trace">
+              <span class="utility">可以追溯</span>
+              <strong>定位到 D1:9 与 D1:11</strong>
+              <p>教育计划和职业意向分别保留原始消息编号。</p>
+            </article>
+            <article class="effect-card good">
+              <span class="utility">前序联系</span>
+              <strong>recent 已有 6 条事件</strong>
+              <p>Writer 可以同时看到窗口 1 的支持小组相关摘要。</p>
+            </article>
+            <article class="effect-card warn">
+              <span class="utility">当前限制</span>
+              <strong>topic 快照未刷新</strong>
+              <p>同一 session 内新建的 topic 不会出现在下一窗口的 known topics 字段中。</p>
+            </article>
+          </div>
+        </section>
+        </div>
+      </section>
+
+      <section class="scenario-panel" data-scenario-panel="session-end" role="tabpanel">
+        <div class="scenario-body">
+          <div class="scenario-note">
+            <span>session 1 的所有窗口处理完成后才执行整理。这个实测目录没有保存整理前的中间文件，因此这里只区分已确认的执行规则和整理后的实际文件。</span>
+            <code>tidy_every_sessions=1</code>
+          </div>
+          <div class="stage-title">
+            <h3>Session 结束：模型调用输入</h3>
+            <span>实测：3 个窗口 · 20 条事件 · 最终 8 个 topic</span>
+          </div>
+          <p class="model-input-note">完全重复行先由代码删除。下面只列可能发生的模型调用；本例 topic 数量为 8，因此 topic consolidation 没有调用。</p>
+          <div class="model-input-stack">
+            <section class="model-call conditional">
+              <div class="model-call-head"><strong>未调用 · v8_consolidate</strong><span>触发条件：topic_count &gt; 30</span></div>
+              <pre>system = {
+  task: "从完整 topic 路径清单中找出语义相同的文件",
+  topic_files: [
+    "Caroline/LGBTQ_support_group  (5 lines)",
+    "Caroline/career_plans  (5 lines)",
+    "...其余 topic 路径与行数..."
+  ],
+  output: {"merges":[{"into":"existing/path","from":["existing/path"]}]}
+}
+
+actual_example: skipped because 8 &lt;= 30</pre>
+            </section>
+
+            <section class="model-call">
+              <div class="model-call-head"><strong>可能调用 · v8_merge_lines</strong><span>每个达到阈值的 touched topic 一次</span></div>
+              <pre>messages = [
+  {
+    role: "system",
+    content: "只找陈述同一事实的近重复行；不改文本；输出行号。"
+             + " JSON: {\"groups\":[{\"keep\":3,\"merge\":[7,12]}]}"
+  },
+  {
+    role: "user",
+    content: """
+      [1] &lt;topic 文件中的第一条事件原文&gt;
+      [2] &lt;topic 文件中的第二条事件原文&gt;
+      ...
+    """
+  }
+]</pre>
+            </section>
+
+            <section class="model-call">
+              <div class="model-call-head"><strong>可能调用 · v8_sections</strong><span>同一 topic，merge 之后</span></div>
+              <pre>messages = [
+  {
+    role: "system",
+    content: "只做分节；不改写、合并、删除事件行；每个编号必须恰好出现一次。"
+             + " JSON: {\"sections\":[{\"heading\":\"Career\",\"lines\":[2,1]}]}"
+  },
+  {
+    role: "user",
+    content: """
+      [1] &lt;merge 后保留的第一条事件原文&gt;
+      [2] &lt;merge 后保留的第二条事件原文&gt;
+      ...
+    """
+  }
+]</pre>
+            </section>
+          </div>
+          <div class="snapshot-grid">
+            <article class="snapshot-card">
+              <h4>整理后的实际 topic：8 个</h4>
+              <ul>
+                <li><code>Caroline/LGBTQ_support_group.md</code></li>
+                <li><code>Caroline/career_plans.md</code></li>
+                <li><code>Caroline/education.md</code></li>
+                <li><code>Caroline/research.md</code></li>
+                <li><code>Melanie/family/kids.md</code></li>
+                <li><code>Melanie/family_and_work.md</code></li>
+                <li><code>Melanie/painting.md</code></li>
+                <li><code>painting.md</code></li>
+              </ul>
+            </article>
+            <article class="snapshot-card">
+              <h4>这里能确认什么</h4>
+              <p>最终目录和调用统计是实际结果；无法从当前产物单独判断每一行是在 session tidy 还是 final tidy 中改变，因为两阶段没有分别保存 checkpoint。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="scenario-panel" data-scenario-panel="next-session" role="tabpanel">
+        <div class="scenario-body">
+          <div class="scenario-note">
+            <span>进入 session 2 时，recent 事件列表按当前实现重置为空；topic 快照会从磁盘重新读取，因此能看到 session 1 已保存的 8 个 topic。</span>
+            <code>event_history=[] · known_view=reload()</code>
+          </div>
+          <div class="stage-title">
+            <h3>下一 Session：模型收到的文本</h3>
+            <span>session 2 时间：2023-05-25 13:14</span>
+          </div>
+          <p class="model-input-note">这是根据 session 2 原始数据和当前代码规则构造的输入。现有单-session 实测目录没有实际调用这一阶段，因此这里只展示确定的请求内容，不展示模型输出。</p>
+          <div class="model-input-stack">
+            <section class="model-call">
+              <div class="model-call-head"><strong>调用 · v10_distill</strong><span>session 2 / window 1</span></div>
+              <pre>messages = [
+  {
+    role: "system",
+    content: {
+      observation_date: "2023-05-25",
+      calendar: ["2023-05-25 星期四/Thu", "...此前三周..."],
+      known_topics: [
+        "Caroline/LGBTQ_support_group",
+        "Caroline/career_plans",
+        "Caroline/education",
+        "Caroline/research",
+        "Melanie/family/kids",
+        "Melanie/family_and_work",
+        "Melanie/painting",
+        "painting"
+      ],
+      recent_events: []
+    }
+  },
+  {
+    role: "user",
+    content: """
+      [1] Melanie: Hey Caroline, since we last chatted, I've had a lot of things happening to me. I ran a charity race for mental health last Saturday – it was really rewarding. Really made me think about taking care of our minds.
+      [2] Caroline: That charity race sounds great, Mel! Making a difference &amp; raising awareness for mental health is super rewarding - I'm really proud of you for taking part!
+      [3] Melanie: Thanks, Caroline! The event was really thought-provoking. I'm starting to realize that self-care is really important. It's a journey for me, but when I look after myself, I'm able to better look after my family.
+      [4] Caroline: I totally agree, Melanie. Taking care of ourselves is so important - even if it's not always easy. Great that you're prioritizing self-care.
+      [5] Melanie: Yeah, it's tough. So I'm carving out some me-time each day - running, reading, or playing my violin - which refreshes me and helps me stay present for my fam!
+      [6] Caroline: That's great, Mel! Taking time for yourself is so important. You're doing an awesome job looking after yourself and your family!
+    """
+  }
+]</pre>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="scenario-panel" data-scenario-panel="all-end" role="tabpanel">
+        <div class="scenario-body">
+          <div class="scenario-note">
+            <span>全部 session 完成后，final tidy 对所有 topic 再执行整理，包括此前未达到 session 整理阈值的文件。</span>
+            <code>final_tidy_passes=1</code>
+          </div>
+          <div class="stage-title">
+            <h3>最终整理：模型收到的文本</h3>
+            <span>当前没有 final tidy 0/1 的 QA 消融</span>
+          </div>
+          <p class="model-input-note">final=True 时，输入格式与 Session 整理相同，但 target 从 touched topics 改为全部 topic。下面用实际的 <code>Caroline/career_plans.md</code> 内容展示两次请求。</p>
+          <div class="model-input-stack">
+            <section class="model-call">
+              <div class="model-call-head"><strong>调用 1 · v8_merge_lines</strong><span>target: Caroline/career_plans</span></div>
+              <pre>messages = [
+  {
+    role: "system",
+    content: "只找陈述同一事实的近重复行；不改文本；输出 groups JSON。"
+  },
+  {
+    role: "user",
+    content: """
+      [1] [2023-05-08](timeline/2023/05/08.md) Caroline planned to check out career options [D1:9].
+      [2] [2023-05-08](timeline/2023/05/08.md) Caroline was interested in counseling as a career option [D1:11].
+      [3] [2023-05-08](timeline/2023/05/08.md) Caroline was interested in working in mental health [D1:11].
+      [4] [2023-05-08](timeline/2023/05/08.md) Caroline wanted to support people with similar issues through counseling or mental health work [D1:11].
+      [5] [2023-05-08](timeline/2023/05/08.md) Melanie said Caroline would be a great counselor because Caroline's empathy and understanding would help the people she worked with [D1:12].
+    """
+  }
+]
+
+output_schema = {"groups":[{"keep":"&lt;line_no&gt;","merge":["&lt;line_no&gt;"]}]}</pre>
+            </section>
+
+            <section class="model-call">
+              <div class="model-call-head"><strong>调用 2 · v8_sections</strong><span>同一文件 · merge 后内容</span></div>
+              <pre>messages = [
+  {
+    role: "system",
+    content: "只做分节；每个编号恰好出现一次；不改任何事件文本。"
+  },
+  {
+    role: "user",
+    content: """
+      [1] [2023-05-08](timeline/2023/05/08.md) Caroline planned to check out career options [D1:9].
+      [2] [2023-05-08](timeline/2023/05/08.md) Caroline was interested in counseling as a career option [D1:11].
+      [3] [2023-05-08](timeline/2023/05/08.md) Caroline was interested in working in mental health [D1:11].
+      [4] [2023-05-08](timeline/2023/05/08.md) Caroline wanted to support people with similar issues through counseling or mental health work [D1:11].
+      [5] [2023-05-08](timeline/2023/05/08.md) Melanie said Caroline would be a great counselor because Caroline's empathy and understanding would help the people she worked with [D1:12].
+    """
+  }
+]
+
+output_schema = {
+  "sections": [
+    {"heading":"&lt;section title&gt;","lines":["&lt;line_no&gt;"]}
+  ]
+}</pre>
+            </section>
+          </div>
+          <div class="effect-grid">
+            <article class="effect-card good">
+              <span class="utility">输出状态</span>
+              <strong>文件可供检索</strong>
+              <p>Timeline 与 Topics 都已经写入磁盘。</p>
+            </article>
+            <article class="effect-card warn">
+              <span class="utility">统计限制</span>
+              <strong>两次整理未拆账</strong>
+              <p>当前 build.json 按 merge/sections 统计，没有分别记录 session 与 final。</p>
+            </article>
+            <article class="effect-card warn">
+              <span class="utility">效用限制</span>
+              <strong>缺少关闭对照</strong>
+              <p>尚不能证明 final tidy 提高 LoCoMo QA。</p>
+            </article>
+            <article class="effect-card trace">
+              <span class="utility">引用保持</span>
+              <strong>dia_id 仍保留</strong>
+              <p>整理后条目仍可定位到原始对话编号。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="finding-strip" aria-label="当前实验结论">
+      <article class="finding">
+        <span class="utility">当前判断</span>
+        <strong>W=10 是正式候选，默认仍是 W=6</strong>
+        <p>小规模结果还不足以修改全量配置。</p>
+      </article>
+      <article class="finding">
+        <span class="utility">Verify</span>
+        <strong>QA 未提升</strong>
+        <p>关闭后输入 token 减少 34%–56%。</p>
+      </article>
+      <article class="finding">
+        <span class="utility">整理成本</span>
+        <strong>58%–89% 调用</strong>
+        <p>topic 数量直接影响整理请求数量。</p>
+      </article>
+      <article class="finding">
+        <span class="utility">输入限制</span>
+        <strong>只处理 text</strong>
+        <p>img_url、blip_caption 和 query 当前不会保存。</p>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const details = {
+      session: {
+        index: "步骤 01 · 代码",
+        title: "按 session 分段",
+        action: "按数据中的 session 边界顺序处理消息，并读取该 session 的发生日期。切换 session 后，最近事件上下文会清空。",
+        utility: "避免把不同日期的对话直接作为同一次增量写入，也为相对日期换算提供观测日期。",
+        evidence: "这是当前的数据边界规则，没有做过跨 session 与不分 session 的单变量对照。",
+        status: "结构规则",
+        uncertain: true,
+        cost: "不调用模型。"
+      },
+      window: {
+        index: "步骤 02 · 代码",
+        title: "每 6 条切分",
+        action: "默认每 6 条 dialogue message 组成一个 writer 输入；不是 6 次用户与 agent 往返。",
+        utility: "控制 writer 调用次数、单次输入长度和局部事实密度。",
+        evidence: "W=2 成本过高。当前单-session 对照中，W=10 保持 QA，同时减少 23%–29% 输入 token；尚未完成全量确认。",
+        status: "候选参数",
+        uncertain: true,
+        cost: "W 越小，distill 和 verify 调用越多。"
+      },
+      context: {
+        index: "步骤 03 · 代码",
+        title: "准备辅助信息",
+        action: "附加同一 session 最近 20 条已提炼事件、代码生成的日历，以及 session 开始时已有 topic 名称与条目数。",
+        utility: "最近事件用于指代消解和避免重复；日历用于相对日期换算；topic 列表用于复用已有路径。",
+        evidence: "三个部分尚未分别关闭测试，当前只能说明它们被使用，不能说明每一项都必要。",
+        status: "收益未确认",
+        uncertain: true,
+        cost: "不增加调用次数，但会增加每次 distill 的输入 token。"
+      },
+      distill: {
+        index: "步骤 04 · 模型",
+        title: "事实提取 distill",
+        action: "writer 根据当前窗口输出事件 JSON：when、summary、refs 和 topic。每条事件应只表达一个具体事实。",
+        utility: "决定保存哪些事实、采用什么摘要、引用哪些原消息，以及写入哪个主题路径。",
+        evidence: "这是生成结构化记忆的主要模型步骤。不同模型会产生不同事件数量和 topic 数量。",
+        status: "必要步骤",
+        uncertain: false,
+        cost: "每个窗口至少 1 次模型调用。"
+      },
+      verify: {
+        index: "步骤 05 · 模型",
+        title: "补漏检查 verify",
+        action: "代码从当前窗口提取大写词、引号短语和数字；如果它们没有出现在摘要中，就把缺失列表和原窗口再次发给模型补写。",
+        utility: "设计目标是减少专名和数字遗漏。",
+        evidence: "W=10 的两个 writer 对照中，开关 verify 都是 4/4 QA。GPT-5.5 事件数不变；GPT-4o-mini 新增内容中有大量问候和感叹。",
+        status: "当前未显示收益",
+        uncertain: true,
+        cost: "本次关闭后输入 token 减少 34%–56%。"
+      },
+      refs: {
+        index: "步骤 06 · 代码",
+        title: "校验引用",
+        action: "把模型使用的局部行号转换为真实 dia_id，例如 D1:3；没有合法引用的事件直接丢弃。",
+        utility: "让每条记忆可以追溯到原消息，也支持后续按 dia_id 读取原文。",
+        evidence: "有明确的可追溯作用，但 dia_id 出现不代表相关语义一定保存完整。",
+        status: "工程作用明确",
+        uncertain: false,
+        cost: "不调用模型。"
+      },
+      timeline: {
+        index: "步骤 07A · 代码",
+        title: "Timeline 时间视图",
+        action: "把事件写入 timeline/YYYY/MM/DD.md，并保留摘要、dia_id 和对应 topic 文件链接。",
+        utility: "支持按日期、时间范围和事件顺序查询。",
+        evidence: "当前时间检索使用该视图，但尚未做移除 timeline 的消融。",
+        status: "结构作用明确",
+        uncertain: false,
+        cost: "写文件和日期链接均由代码完成。"
+      },
+      topics: {
+        index: "步骤 07B · 代码",
+        title: "Topics 主题视图",
+        action: "按照 writer 返回的层级路径写入 topics/，同一事件同时保留日期链接和 dia_id。",
+        utility: "支持按人物、经历和主题定位记忆。",
+        evidence: "模型路由不稳定。W=6 时 GPT-4o-mini 生成 16 个 topic，GPT-5.5 生成 8 个，前者产生更多整理调用。",
+        status: "有用但不稳定",
+        uncertain: true,
+        cost: "写文件不调用模型；topic 过多会增加后续整理调用。"
+      },
+      maintenance: {
+        index: "步骤 08 · 代码 + 模型",
+        title: "Session 整理",
+        action: "先由代码删除完全重复行；topic 超过 30 个时调用模型合并近义 topic；随后对达到阈值的文件调用模型合并同义行并生成分节。",
+        utility: "控制重复内容和 topic 数量，使长文件具有分节结构。",
+        evidence: "精确去重作用明确；模型整理尚未证明 QA 收益。本次整理占总调用的 58%–89%。",
+        status: "主要成本，收益未确认",
+        uncertain: true,
+        cost: "一个 topic 可能分别触发同义行合并和分节两次调用。"
+      },
+      final: {
+        index: "步骤 09 · 模型",
+        title: "最终整理",
+        action: "所有 session 完成后，对全部 topic 再执行一次整理，处理此前未达到整理阈值的内容。",
+        utility: "让最后新增的事件也有机会去重和分节。",
+        evidence: "尚未做 final tidy 0/1 的单变量实验，不能确认它对最终 QA 是否必要。",
+        status: "收益未确认",
+        uncertain: true,
+        cost: "可能再次对多个 topic 产生模型调用。"
+      }
+    };
+
+    const steps = [...document.querySelectorAll(".step")];
+    const filters = [...document.querySelectorAll(".filter")];
+    const title = document.querySelector("#detail-title");
+    const index = document.querySelector("#detail-index");
+    const action = document.querySelector("#detail-action");
+    const utility = document.querySelector("#detail-utility");
+    const evidence = document.querySelector("#detail-evidence");
+    const status = document.querySelector("#detail-status");
+    const cost = document.querySelector("#detail-cost");
+
+    function showDetail(key) {
+      const item = details[key];
+      steps.forEach(step => step.classList.toggle("active", step.dataset.key === key));
+      index.textContent = item.index;
+      title.textContent = item.title;
+      action.textContent = item.action;
+      utility.textContent = item.utility;
+      evidence.textContent = item.evidence;
+      cost.textContent = item.cost;
+      status.textContent = item.status;
+      status.classList.toggle("uncertain", item.uncertain);
+    }
+
+    steps.forEach(step => step.addEventListener("click", () => showDetail(step.dataset.key)));
+
+    filters.forEach(filter => {
+      filter.addEventListener("click", () => {
+        const mode = filter.dataset.filter;
+        filters.forEach(item => item.setAttribute("aria-pressed", String(item === filter)));
+        steps.forEach(step => {
+          const match = mode === "all"
+            || (mode === "llm" && step.classList.contains("llm"))
+            || (mode === "uncertain" && step.classList.contains("uncertain"));
+          step.classList.toggle("dimmed", !match);
+        });
+      });
+    });
+
+    const scenarioTabs = [...document.querySelectorAll(".scenario-tab")];
+    const scenarioPanels = [...document.querySelectorAll(".scenario-panel")];
+    scenarioTabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        const selected = tab.dataset.scenario;
+        scenarioTabs.forEach(item => item.setAttribute("aria-selected", String(item === tab)));
+        scenarioPanels.forEach(panel => panel.classList.toggle("active", panel.dataset.scenarioPanel === selected));
+      });
+    });
+
+    document.querySelectorAll(".scenario-panel").forEach(scenario => {
+      const exampleTabs = [...scenario.querySelectorAll(".example-tab")];
+      const examplePanels = [...scenario.querySelectorAll(".stage-panel")];
+      exampleTabs.forEach(tab => {
+        tab.addEventListener("click", () => {
+          const selected = tab.dataset.example;
+          exampleTabs.forEach(item => item.setAttribute("aria-selected", String(item === tab)));
+          examplePanels.forEach(panel => panel.classList.toggle("active", panel.dataset.panel === selected));
+        });
+      });
+    });
+
+    showDetail("session");
+  </script>
+</body>
+</html>

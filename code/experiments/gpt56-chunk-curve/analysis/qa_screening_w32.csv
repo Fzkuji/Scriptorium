@@ -1,0 +1,9 @@
+tier,benchmark,write_turns,metric,value,n,scope
+terra,locomo,32,locked_judge_accuracy,0.8980891719745223,314,two-conversation screening subset
+terra,longmemeval-s,32,accuracy,1.0,2,two-question integration screening
+terra,beam-100k,32,rubric_nugget_mean,0.5577083333333334,40,two-conversation screening subset
+terra,beam-100k,32,question_pass_rate,0.65,40,two-conversation screening subset
+sol,locomo,32,locked_judge_accuracy,0.910828025477707,314,two-conversation screening subset
+sol,longmemeval-s,32,accuracy,1.0,2,two-question integration screening
+sol,beam-100k,32,rubric_nugget_mean,0.5552083333333333,40,two-conversation screening subset
+sol,beam-100k,32,question_pass_rate,0.6,40,two-conversation screening subset

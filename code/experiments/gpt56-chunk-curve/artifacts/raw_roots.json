@@ -1,0 +1,122 @@
+[
+  {
+    "bytes": 31360990,
+    "files": 1333,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260718-formal-r2",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 26714117,
+    "files": 954,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260718-reduced-4-8-16-32",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 18370743,
+    "files": 1113,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260719-w32-only",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 93849346,
+    "files": 4690,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260719-remaining-4-8-16-32-r1",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 9279576,
+    "files": 226,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260720-recovery-r1",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 2136177,
+    "files": 111,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260720-recovery-r2",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 1915675,
+    "files": 49,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260720-recovery-r3",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 12729838,
+    "files": 496,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260720-recovery-r4",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 10604387,
+    "files": 534,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260720-recovery-r5",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 1574225,
+    "files": 79,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260720-recovery-r6",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 6014695,
+    "files": 252,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260720-recovery-r7",
+    "role": "construction_target_source"
+  },
+  {
+    "bytes": 409607746,
+    "files": 20912,
+    "path": "results/formal/gpt56-w32-screening-qa-20260719",
+    "role": "qa_or_scoring"
+  },
+  {
+    "bytes": 5246654,
+    "files": 1684,
+    "path": "results/formal/gpt56-w32-screening-scores-20260719-r1",
+    "role": "qa_or_scoring"
+  },
+  {
+    "bytes": 3986894,
+    "files": 4,
+    "path": "results/formal/gpt56-w32-screening-analysis-20260719-r1",
+    "role": "qa_or_scoring"
+  },
+  {
+    "bytes": 534,
+    "files": 3,
+    "path": "results/formal/gpt56-chunk-curve-frontier-20260718",
+    "role": "excluded_archive"
+  },
+  {
+    "bytes": 1011646,
+    "files": 98,
+    "path": "results/formal/gpt56-chunk-curve-frontier-smoke-20260718",
+    "role": "excluded_archive"
+  },
+  {
+    "bytes": 10922235,
+    "files": 39,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260718-formal",
+    "role": "excluded_archive"
+  },
+  {
+    "bytes": 27936,
+    "files": 2,
+    "path": "results/formal/gpt56-chunk-curve-subscription-20260719-recovery-proxy",
+    "role": "excluded_archive"
+  },
+  {
+    "bytes": 1636038,
+    "files": 95,
+    "path": "results/formal/gpt56-chunk-curve-subscription-smoke-20260718",
+    "role": "excluded_archive"
+  },
+  {
+    "bytes": 4154789,
+    "files": 9,
+    "path": "results/formal/gpt56-w32-screening-analysis-20260719-r1-invalid-font-archive",
+    "role": "excluded_archive"
+  }
+]

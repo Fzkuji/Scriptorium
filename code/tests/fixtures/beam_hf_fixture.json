@@ -1,0 +1,98 @@
+{
+  "100K": [
+    {
+      "conversation_id": "fixture-100k-0",
+      "conversation_seed": {
+        "category": "coding",
+        "id": 0,
+        "subtopics": ["caching"],
+        "theme": "translation service",
+        "title": "Cache configuration"
+      },
+      "narratives": "fixture",
+      "user_profile": {
+        "user_info": "A backend developer",
+        "user_relationships": ""
+      },
+      "conversation_plan": "Discuss and then update a cache TTL.",
+      "chat": [
+        [
+          {
+            "role": "user",
+            "content": "Set the translation cache TTL to ten minutes.",
+            "time_anchor": "March-15-2024",
+            "index": "0",
+            "id": 0,
+            "question_type": "knowledge_update"
+          },
+          {
+            "role": "assistant",
+            "content": "I will use a ten-minute TTL.",
+            "time_anchor": "March-15-2024",
+            "index": "1",
+            "id": 1,
+            "question_type": "knowledge_update"
+          }
+        ],
+        [
+          {
+            "role": "user",
+            "content": "Update the TTL to twenty minutes instead.",
+            "time_anchor": "March-18-2024",
+            "index": "2",
+            "id": 2,
+            "question_type": "knowledge_update"
+          },
+          {
+            "role": "assistant",
+            "content": "The current TTL is now twenty minutes.",
+            "time_anchor": "March-18-2024",
+            "index": "3",
+            "id": 3,
+            "question_type": "knowledge_update"
+          }
+        ]
+      ],
+      "probing_questions": "{'abstention': [{'question': 'Where did I study?', 'difficulty': 'easy', 'ideal_response': \"I don't have enough information to answer this question.\", 'rubric': ['The response should state that the education history is unavailable.']}], 'knowledge_update': [{'question_text': 'What is the current translation cache TTL?', 'difficulty': 'easy', 'answer': 'Twenty minutes.', 'rubric': {'nuggets': [{'description': 'The response should state twenty minutes.'}]}}]}"
+    }
+  ],
+  "1M": [
+    {
+      "conversation_id": "fixture-1m-0",
+      "conversation_seed": {
+        "category": "general",
+        "id": 1,
+        "subtopics": ["pets"],
+        "theme": "pet care",
+        "title": "Veterinary appointment"
+      },
+      "narratives": "fixture",
+      "user_profile": {
+        "user_info": "Owns a dog named Ada",
+        "user_relationships": ""
+      },
+      "conversation_plan": "Discuss a veterinary appointment.",
+      "chat": [
+        [
+          {
+            "role": "user",
+            "content": "Ada's veterinary appointment is on April 8.",
+            "time_anchor": "2024/04/01",
+            "index": "0",
+            "id": 0,
+            "question_type": "temporal_reasoning"
+          },
+          {
+            "role": "assistant",
+            "content": "I noted the April 8 appointment.",
+            "time_anchor": "2024/04/01",
+            "index": "1",
+            "id": 1,
+            "question_type": "temporal_reasoning"
+          }
+        ]
+      ],
+      "probing_questions": "{'temporal_reasoning': [{'question_text': \"When is Ada's veterinary appointment?\", 'difficulty': 'easy', 'answer': 'April 8.', 'rubric': ['The response should state April 8.']}]}"
+    }
+  ]
+}

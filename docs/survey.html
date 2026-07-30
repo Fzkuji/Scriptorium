@@ -1,0 +1,363 @@
+<!DOCTYPE html><html lang="en" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model-Aligned Memory — 前期调研</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/themes.css" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script>tailwind.config={darkMode:['class','[data-theme="dark"]'],theme:{extend:{fontFamily:{sans:['"Noto Sans SC"','Inter','system-ui','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
+<style>
+html{font-family:'Noto Sans SC','Inter',system-ui,sans-serif;font-size:16.5px;line-height:1.8;-webkit-font-smoothing:antialiased}
+body{background:hsl(var(--b1));color:hsl(var(--bc))}
+.prose h2{font-size:1.375rem;font-weight:700;margin-top:2.5rem;margin-bottom:.75rem;padding-bottom:.5rem;border-bottom:2px solid #4263eb;color:#1a1a2e;scroll-margin-top:5rem}
+[data-theme="dark"] .prose h2{color:#dbe4ff;border-color:#5c7cfa}
+.prose h3{font-size:1.1rem;font-weight:600;margin-top:1.75rem;margin-bottom:.5rem;color:#2b2d42;scroll-margin-top:5rem}
+[data-theme="dark"] .prose h3{color:#c9d1d9}
+.prose a{color:#4263eb;font-weight:500;text-decoration:none;border-bottom:1px solid rgba(66,99,235,.3);transition:all .15s}
+.prose a:hover{color:#3b5bdb;border-bottom-color:#3b5bdb}
+[data-theme="dark"] .prose a{color:#91a7ff}
+.prose code{background:hsl(var(--b2));color:#4263eb;padding:.15rem .4rem;border-radius:4px;font-size:.85em}
+.prose blockquote{border-left:3px solid #4263eb;background:hsl(var(--b2));border-radius:0 8px 8px 0;padding:.75rem 1.25rem;font-style:normal}
+.prose table{font-size:.9rem;border-collapse:collapse;width:100%;table-layout:auto}
+.prose th{font-weight:600;background:hsl(var(--b2));white-space:nowrap}
+.prose td,.prose th{padding:.6rem 1rem;border:1px solid hsl(var(--b3));vertical-align:top;line-height:1.6}
+.prose tbody tr:nth-child(even){background:hsl(var(--b2)/.4)}
+.prose tbody tr:hover{background:hsl(var(--b2)/.7)}
+[data-theme="dark"] .prose tbody tr:nth-child(even){background:hsl(var(--b2)/.3)}
+[data-theme="dark"] .prose tbody tr:hover{background:hsl(var(--b2)/.5)}
+.toc-link{display:block;padding:.35rem 0 .35rem 1rem;font-size:14px;font-weight:600;color:hsl(var(--bc)/.7);border-left:3px solid transparent;text-decoration:none;transition:all .15s}
+.toc-link:hover{color:#4263eb;border-left-color:#bac8ff;background:rgba(66,99,235,.04);border-radius:0 6px 6px 0}
+.toc-link.active{color:#4263eb;border-left-color:#4263eb;font-weight:700;background:rgba(66,99,235,.06);border-radius:0 6px 6px 0}
+.toc-link.toc-h3{padding-left:2rem;font-size:13px;font-weight:400;color:hsl(var(--bc)/.55)}
+#progress-bar{position:fixed;top:0;left:0;height:2px;width:0;z-index:60;background:#4263eb;transition:width .1s}
+</style></head>
+<body>
+<div id="progress-bar"></div>
+<div class="flex min-h-screen">
+  <aside class="hidden lg:block w-64 border-r border-base-300 p-6 sticky top-0 h-screen overflow-y-auto"><nav id="toc">
+<a class="toc-link" href="#background">§1 研究背景</a>
+<a class="toc-link toc-h3" href="#llm-wiki">LLM Wiki</a>
+<a class="toc-link toc-h3" href="#概率与检索">概率与检索</a>
+<a class="toc-link toc-h3" href="#知识外化">知识外化</a>
+<a class="toc-link toc-h3" href="#file-knowledge-org">文件与知识组织</a>
+<a class="toc-link" href="#llm-memory-系统">§2 相关工作全景</a>
+<a class="toc-link toc-h3" href="#cat-filesystem">文件系统方法</a>
+<a class="toc-link toc-h3" href="#cat-embedding">Embedding 方法</a>
+<a class="toc-link toc-h3" href="#cat-rl">RL 训练方法</a>
+<a class="toc-link toc-h3" href="#cat-os">层次/OS 方法</a>
+<a class="toc-link toc-h3" href="#cat-graph">图/双路径方法</a>
+<a class="toc-link toc-h3" href="#cat-other">其他方法</a>
+<a class="toc-link toc-h3" href="#cat-product">产品级系统</a>
+<a class="toc-link toc-h3" href="#cat-survey">综述论文</a>
+<a class="toc-link" href="#技术对比">§3 对比与定位</a>
+<a class="toc-link toc-h3" href="#maintenance-comparison">维护机制对比</a>
+<a class="toc-link" href="#memory-benchmarks">§4 Benchmarks</a>
+</nav></aside>
+  <main class="flex-1 max-w-none p-8 lg:p-12"><article class="prose max-w-none">
+<!-- bc --><nav style="font-size:.8rem;margin-bottom:1.5rem;padding-bottom:.75rem;border-bottom:1px solid hsl(var(--b3))"><a href="../../../Research-Wiki.html" style="color:hsl(var(--bc)/.5);text-decoration:none;border:none">Research Wiki</a> <span style="color:hsl(var(--bc)/.3);margin:0 .3rem">/</span> <a href="../../Research Ideas.html" style="color:hsl(var(--bc)/.5);text-decoration:none;border:none">Research Ideas</a> <span style="color:hsl(var(--bc)/.3);margin:0 .3rem">/</span> <a href="../Model-Aligned-Wiki.html" style="color:hsl(var(--bc)/.5);text-decoration:none;border:none">Model-Aligned Memory</a> <span style="color:hsl(var(--bc)/.3);margin:0 .3rem">/</span> <span style="color:hsl(var(--bc)/.8);font-weight:500">前期调研</span></nav>
+
+<h1>前期调研：相关工作</h1>
+<p style="font-size:.85rem;color:hsl(var(--bc)/.5)">updated 2026-06-25 — 覆盖 2024–2026.06 所有主要 LLM Memory 研究（30+ 方法）</p>
+
+<h2 id="background">§1 研究背景</h2>
+
+<h3 id="llm-wiki">LLM Wiki</h3>
+
+<dl>
+<dt>Karpathy LLM Wiki (2026)</dt>
+<dd>LLM 增量读取原始文档，维护结构化 markdown wiki。三层架构：raw sources → wiki → schema。文档组织由 prompt schema 决定，不基于模型概率。<strong>对标</strong>：我们的方法可以用在 wiki 的组织层——Karpathy 解决"内容整理"，我们解决"按什么结构整理"。</dd>
+
+<dt>MemCoT (arXiv 2604.08216, 2026)</dt>
+<dd>给 LLM 配备外部记忆模块，推理时通过 CoT 调用记忆条目。记忆组织是预定义结构。</dd>
+</dl>
+
+<h3 id="概率与检索">概率与检索</h3>
+
+<dl>
+<dt>Perplexity Trap (ICLR 2025, arXiv 2503.08684)</dt>
+<dd>发现 PLM 检索器系统性高估低困惑度文档的相关性，提出 CDC 去偏。<strong>关键关联</strong>：证实"模型概率影响检索排序"这个现象。我们反过来利用它——把概率偏差从 bug 变成 feature。</dd>
+
+<dt>eRAG (SIGIR 2024, arXiv 2404.13781)</dt>
+<dd>用 LLM 对单文档生成回答的质量来评估文档检索价值。不重组文档结构。</dd>
+
+<dt>Semantic Perplexity (arXiv 2510.21440, 2025)</dt>
+<dd>量化"有/无检索内容时 LLM 回答困惑度差异"作为检索质量度量。用困惑度衡量效果，但不涉及文档重组。</dd>
+
+<dt>LLM Hidden-State Confidence for RAG (SIGIR 2025, arXiv 2509.06472)</dt>
+<dd>用 LLM hidden states 构造 confidence 模型，量化检索文档对回答的增益，据此重排。<strong>最接近方向</strong>：它用模型内部状态评估文档，但方向是 rerank 已有文档，不是重新组织文档结构。</dd>
+</dl>
+
+<h3 id="知识外化">知识外化与自适应检索</h3>
+
+<dl>
+<dt>Self-RAG (ICLR 2024, arXiv 2310.11511)</dt>
+<dd>训练 LLM 插入 reflection tokens 自适应决定是否检索。仍依赖外部检索器。</dd>
+
+<dt>SimRAG (NAACL 2025)</dt>
+<dd>两阶段微调改善 RAG 检索质量。文档组织仍是给定的。</dd>
+
+<dt>MACR (arXiv 2606.20245, 2026)</dt>
+<dd>用语义熵量化 LLM 置信度，将模型内部知识外化为文本并与外部知识对比。目的是冲突检测，不是文档编排。</dd>
+
+<dt>Knowledge Mechanisms in LLMs: A Survey (arXiv 2407.15017, 2024)</dt>
+<dd>综述 LLM 中知识的存储、提取、编辑机制。理解模型知识表征的背景文献。</dd>
+</dl>
+
+<h3 id="file-knowledge-org">文件与知识组织理论</h3>
+
+<p>我们的方法用文件系统（markdown 文件 + 目录）作为记忆载体，结构设计需要理论基础。以下调研覆盖个人信息管理、信息架构、知识管理、LLM 文件系统和认知科学五个方向。</p>
+
+<table>
+<thead><tr><th>方向</th><th>关键研究</th><th>核心结论</th><th>对我们的启示</th></tr></thead>
+<tbody>
+<tr>
+<td><strong>个人信息管理（PIM）</strong></td>
+<td>
+<a href="https://digital.lib.washington.edu/researchworks/items/46a2f731-9530-4974-b68d-5e4351b70f92">Boardman &amp; Sasse 2004</a> "Stuff Goes into the Computer and Doesn't Come Out"：研究人怎么组织文件，发现堆叠 vs 归档策略因人而异，同一人在不同工具间的层级结构也不同。<br>
+<a href="https://ils.unc.edu/courses/2014_fall/inls151_003/Readings/JonesPIM2010.pdf">William Jones 2007/2010</a> PIM 综述：总结三大挑战——finding（找到）、keeping（决定存哪）、re-finding（再次找到）。
+</td>
+<td>没有"最优文件数量"或"最优层级深度"的通用答案，最优取决于使用者（对我们来说就是 LLM）。信息碎片化（相关信息散落不同位置）是核心问题。</td>
+<td>我们的 wiki 天然避免碎片化（单一文件系统 + markdown 链接）。RSP 让"使用者"（LLM）自己决定结构，符合 PIM "最优取决于使用者"的结论。</td>
+</tr>
+<tr>
+<td><strong>信息架构：层级结构</strong></td>
+<td>
+<a href="https://www.geoff-hart.com/articles/2007/hierarchies.htm">Dwight Miller 1981</a> 广度 vs 深度实验：测试 1层64项 / 2层8项 / 3层4项 / 6层2项 的检索效率。<br>
+Miller's Law (7±2)：人的工作记忆容量约 7±2 个项目。
+</td>
+<td>极扁（1层64项）和极深（6层2项）都不好，<strong>中间配置（2层、每层8项）最优</strong>。更重要的发现：<strong>标签清晰度比层级结构更重要</strong>——文件名足够清晰时，即使层级较深也能高效导航。</td>
+<td>对 LLM 来说"认知限制"不是 7±2 而是 context window，但原理类似——ls 列出太多文件时选择困难。我们的"具体名词命名"约束直接对应"标签清晰度"这个核心因素。</td>
+</tr>
+<tr>
+<td><strong>知识管理方法</strong></td>
+<td>
+<strong>Zettelkasten</strong>（Niklas Luhmann）：每条笔记是独立卡片，靠链接组织。A-Mem 用的就是这个。<br>
+<strong>PARA 方法</strong>（Tiago Forte）：Projects/Areas/Resources/Archives 四类强制分类。<br>
+<a href="https://www.eleanorkonik.com/p/yet-another-hot-take-on-folders-versus-tags">文件夹 vs 标签 vs 链接对比</a>
+</td>
+<td>Zettelkasten 灵活但规模大了检索变难。PARA 分类清晰但僵化。<strong>混合方案最好</strong>——文件夹做粗分类 + 链接做跨类关联。</td>
+<td>我们的 wiki 是天然的混合方案（文件/文件夹层级 + markdown 链接关联）。但 Zettelkasten 的"规模大了检索难"问题对我们也存在——RFR 的目标之一就是应对这个。</td>
+</tr>
+<tr>
+<td><strong>LLM 语义文件系统</strong></td>
+<td>
+<a href="https://arxiv.org/abs/2410.11843"><strong>LSFS</strong> (ICLR 2025)</a>：用 LLM 替代传统文件系统命令，通过自然语言做文件 CRUD + 语义检索。构建语义索引，支持 semantic group-by、join 等操作。<br>
+代码：<a href="https://github.com/agiresearch/AIOS-LSFS">GitHub</a>
+</td>
+<td>检索准确率比传统文件系统高 15%，速度快 2.1×。证明了 LLM 管理文件系统是可行的。</td>
+<td>"LLM + 文件系统"方向的先驱验证。但 LSFS 是通用文件管理工具，不是记忆系统——没有 RSP（不考虑检索者视角放置）、不涉及存储内容的保真度（copy vs 摘要）。</td>
+</tr>
+<tr>
+<td><strong>认知科学：记忆组织</strong></td>
+<td>
+<a href="https://www.simplypsychology.org/semantic-memory.html">Collins &amp; Quillian 1969</a> 语义网络模型：人的语义记忆按层级组织（动物→鸟→金丝雀），节点之间用属性链接。<br>
+<strong>Tulving 1972</strong> 情节记忆 vs 语义记忆：情节记忆按时间+上下文组织（何时何地发生了什么），语义记忆按类别组织。
+</td>
+<td>两种记忆检索方式不同——语义记忆靠类别导航，情节记忆靠时间/场景线索。</td>
+<td>我们的 wiki 天然对应这两种记忆：文件按实体（人名/项目名）组织 = 语义记忆，文件内按时间戳 [YYYY-MM-DD] 排列 = 情节记忆。5W1H 框架（Tulving 1972）确保情节记忆的完整性。</td>
+</tr>
+</tbody>
+</table>
+
+<h2 id="llm-memory-系统">§2 相关工作全景（2024–2026.06）</h2>
+
+<p>按方法类型分类，覆盖 2024 年至 2026 年 6 月所有主要 LLM Memory 研究。</p>
+
+<!-- ===== 1. File-system / Text-based ===== -->
+<h3 id="cat-filesystem">1. 文件系统 / 文本记忆方法</h3>
+<p>和我们方法最接近的一类——用文件/文本结构组织记忆，不依赖向量数据库。</p>
+
+<table>
+<thead><tr><th>方法</th><th>时间</th><th>核心思路</th><th>基础设施</th><th>LoCoMo LJ</th><th>和我们的异同</th><th>链接</th><th>代码</th></tr></thead>
+<tbody>
+<tr style="background:rgba(235,66,66,.06)"><td><strong>HORMA</strong></td><td>2026.06</td><td>LLM 自由组织文件系统 + Bash 命令导航 + GRPO 训练检索 agent</td><td>文件系统 + RL</td><td>51.6</td><td><strong>最接近</strong>。和我们都用文件系统+工具调用。区别：HORMA 无 RSP（不从检索者角度放置）、需 RL 训练、强依赖大模型（换弱模型跌到 21.0）、让模型自由生成笔记（我们 copy 原文）</td><td><a href="https://arxiv.org/abs/2606.11680">2606.11680</a></td><td>—</td></tr>
+<tr><td><strong>ByteRover</strong></td><td>2026.04</td><td>LLM 自主策划知识的文件树（Context Tree），带来源追溯和变更理由</td><td>文件系统</td><td>—</td><td>和我们都用 LLM 管理文件树。区别：ByteRover 面向 agent 任务知识，不是个人对话记忆；有"自适应知识生命周期"管理</td><td><a href="https://arxiv.org/abs/2604.01599">2604.01599</a></td><td><a href="https://github.com/campfirein/byterover-cli">GitHub</a></td></tr>
+<tr><td><strong>MemGPT / Letta</strong></td><td>2024</td><td>LLM 自主调 function calling 管理 core + archival 两级纯文本记忆</td><td>文本</td><td>—</td><td>先驱工作。两级平铺无结构，无去重，依赖 system prompt 质量</td><td><a href="https://arxiv.org/abs/2310.08560">2310.08560</a></td><td><a href="https://github.com/letta-ai/letta">GitHub</a></td></tr>
+<tr><td><strong>MemWalker</strong></td><td>2024</td><td>长文本分段摘要构建摘要树，LLM 推理导航检索</td><td>文本树</td><td>—</td><td>树结构不灵活；面向单文档不是个人记忆</td><td><a href="https://arxiv.org/abs/2310.05029">2310.05029</a></td><td>—</td></tr>
+<tr><td><strong>Karpathy LLM Wiki</strong></td><td>2026</td><td>LLM 增量读取原始文档，维护结构化 markdown wiki（raw → wiki → schema）</td><td>文件系统</td><td>—</td><td>形式相同（markdown wiki），但组织靠 prompt schema，不用 RSP。面向知识整理，不是个人记忆</td><td>—</td><td>—</td></tr>
+<tr><td><strong>Perplexity Brain</strong></td><td>2026.06</td><td>Agent 工作记忆 → LLM wiki，夜间自动合成工作日志为 wiki 页面，+25% correctness</td><td>文件系统</td><td>—</td><td>形式都是 wiki-based memory，但组织靠 prompt/schema 驱动。产品不是论文，没有标准 benchmark 评测</td><td>—</td><td>—</td></tr>
+</tbody>
+</table>
+
+<!-- ===== 2. Embedding-based ===== -->
+<h3 id="cat-embedding">2. Embedding / 向量检索方法</h3>
+
+<table>
+<thead><tr><th>方法</th><th>时间</th><th>核心思路</th><th>基础设施</th><th>LoCoMo LJ</th><th>和我们的区别</th><th>链接</th><th>代码</th></tr></thead>
+<tbody>
+<tr><td><strong>Mem0</strong></td><td>2024–2026</td><td>向量 + KG + BM25 三路并行检索；ADD-only 存储（2026 新算法）</td><td>向量DB + 图DB + Embedding</td><td>57.86</td><td>多层基础设施；embedding 检索不与 LLM 对齐；2026 新算法也用 ADD-only（和我们 copy 原文类似）</td><td><a href="https://github.com/mem0ai/mem0">GitHub</a></td><td><a href="https://github.com/mem0ai/mem0">GitHub</a></td></tr>
+<tr><td><strong>A-Mem</strong></td><td>2025.02</td><td>Zettelkasten 原子笔记 + embedding + 图遍历；LLM 判断链接</td><td>向量DB + Embedding</td><td>51.29</td><td>链接建立靠 LLM（贵）；检索靠 embedding 不与 LLM 对齐</td><td><a href="https://arxiv.org/abs/2502.12110">2502.12110</a></td><td><a href="https://github.com/WujiangXu/A-mem">GitHub</a></td></tr>
+<tr><td><strong>MemoryBank</strong></td><td>2024</td><td>对话 + 摘要 + 用户画像；Ebbinghaus 遗忘曲线自动删；FAISS 检索</td><td>FAISS + Embedding</td><td>39.77</td><td>全存 + 固定遗忘；不区分重要性</td><td><a href="https://arxiv.org/abs/2305.10250">2305.10250</a></td><td><a href="https://github.com/zhongwanjun/MemoryBank-SiliconFriend">GitHub</a></td></tr>
+<tr><td><strong>Zep / Graphiti</strong></td><td>2024–2025</td><td>向量 + 时序知识图谱 + BM25；时间感知的实体关系管理</td><td>向量DB + 图DB + BM25</td><td>65.99</td><td>重基础设施；时间推理靠图结构</td><td><a href="https://github.com/getzep/graphiti">GitHub</a></td><td><a href="https://github.com/getzep/graphiti">GitHub</a></td></tr>
+<tr><td><strong>LangMem</strong></td><td>2025</td><td>LangChain 的记忆原语（store/retrieve/update），embedding 检索</td><td>向量DB + Embedding</td><td>58.11</td><td>框架级工具，不是独立方法</td><td><a href="https://github.com/langchain-ai/langmem">GitHub</a></td><td><a href="https://github.com/langchain-ai/langmem">GitHub</a></td></tr>
+</tbody>
+</table>
+
+<!-- ===== 3. RL / Training-based ===== -->
+<h3 id="cat-rl">3. RL / 训练方法</h3>
+
+<table>
+<thead><tr><th>方法</th><th>时间</th><th>核心思路</th><th>训练方式</th><th>LoCoMo LJ</th><th>和我们的区别</th><th>链接</th><th>代码</th></tr></thead>
+<tbody>
+<tr><td><strong>DeltaMem</strong></td><td>2026.04</td><td>用 RL（GRPO）学习何时 ADD/UPDATE/DELETE 记忆；Memory-based Levenshtein Distance 作为奖励</td><td>GRPO</td><td>75.13</td><td>需要训练；我们完全 training-free</td><td><a href="https://arxiv.org/abs/2604.01560">2604.01560</a></td><td><a href="https://github.com/declare-lab/delta-Mem">GitHub</a></td></tr>
+<tr><td><strong>Memory-R1</strong></td><td>2025.08</td><td>Memory Manager + Answer Agent 双 agent，PPO/GRPO 训练</td><td>PPO/GRPO</td><td>—</td><td>需要训练两个 agent；F1 提升 28%</td><td><a href="https://arxiv.org/abs/2508.19828">2508.19828</a></td><td><a href="https://github.com/yansikuan/memory-r1">GitHub</a></td></tr>
+<tr><td><strong>MemReader</strong></td><td>2026.04</td><td>GRPO 训练 4B 检索 agent，学习从记忆中选择相关内容</td><td>GRPO</td><td>—</td><td>LongMemEval ~83%；专门训练检索而非存储</td><td><a href="https://arxiv.org/abs/2604.07877">2604.07877</a></td><td>—</td></tr>
+<tr><td><strong>AtomMem</strong></td><td>2026.06</td><td>记忆管理建模为 POMDP，GRPO 训练 CRUD 操作策略</td><td>GRPO</td><td>—</td><td>面向 multi-hop QA 任务，不是个人对话记忆</td><td><a href="https://arxiv.org/abs/2606.19847">2606.19847</a></td><td><a href="https://github.com/MINE-USTC/AtomMem">GitHub</a></td></tr>
+</tbody>
+</table>
+
+<!-- ===== 4. Hierarchical / OS ===== -->
+<h3 id="cat-os">4. 层次结构 / OS 方法</h3>
+
+<table>
+<thead><tr><th>方法</th><th>时间</th><th>核心思路</th><th>LoCoMo LJ</th><th>LongMemEval</th><th>链接</th><th>代码</th></tr></thead>
+<tbody>
+<tr><td><strong>TiMem</strong></td><td>2026.01</td><td>时间层次记忆巩固（temporal-hierarchical consolidation），对话 → 事件 → 主题三层</td><td>75.30</td><td>76.88</td><td><a href="https://arxiv.org/abs/2601.02845">2601.02845</a></td><td><a href="https://github.com/TiMEM-AI/timem">GitHub</a></td></tr>
+<tr><td><strong>EverMemOS</strong></td><td>2026.01</td><td>自组织记忆操作系统，结构化长程推理</td><td>—</td><td>83.0</td><td><a href="https://arxiv.org/abs/2601.02163">2601.02163</a></td><td><a href="https://github.com/EverMind-AI/EverMemOS">GitHub</a></td></tr>
+<tr><td><strong>MemoryOS</strong></td><td>2025.05</td><td>三层架构（短期/中期/长期），FIFO + 分页策略</td><td>60.79</td><td>—</td><td><a href="https://arxiv.org/abs/2506.06326">2506.06326</a></td><td><a href="https://github.com/BAI-LAB/MemoryOS">GitHub</a></td></tr>
+<tr><td><strong>MemOS</strong></td><td>2025</td><td>自进化记忆 OS，超持久记忆 + 混合检索 + 跨任务技能复用</td><td>69.24</td><td>—</td><td><a href="https://github.com/MemTensor/MemOS">GitHub</a></td><td><a href="https://github.com/MemTensor/MemOS">GitHub</a></td></tr>
+<tr><td><strong>HMO</strong></td><td>2026.04</td><td>三层目录（primary cache + secondary + archive）+ 用户画像驱动</td><td>—</td><td>—</td><td><a href="https://arxiv.org/abs/2604.01670">2604.01670</a></td><td>—</td></tr>
+<tr><td><strong>HiMem</strong></td><td>2026.01</td><td>层次长期记忆，面向 long-horizon agent</td><td>—</td><td>—</td><td><a href="https://arxiv.org/abs/2601.06377">2601.06377</a></td><td>—</td></tr>
+<tr><td><strong>H-Mem</strong></td><td>2026.05</td><td>四级语义抽象层次 + 位置索引编码 + Ebbinghaus 遗忘</td><td>—</td><td>—</td><td><a href="https://arxiv.org/abs/2605.15701">2605.15701</a></td><td>—</td></tr>
+</tbody>
+</table>
+
+<!-- ===== 5. Graph / Dual-route ===== -->
+<h3 id="cat-graph">5. 图结构 / 双路径方法</h3>
+
+<table>
+<thead><tr><th>方法</th><th>时间</th><th>核心思路</th><th>LoCoMo LJ</th><th>LongMemEval</th><th>链接</th><th>代码</th></tr></thead>
+<tbody>
+<tr><td><strong>Mnemis</strong> (Microsoft)</td><td>2026.02, ACL 2026</td><td>System-1 相似检索 + System-2 层次图全局遍历；LLM 驱动语义聚类建层次</td><td><strong>93.9</strong></td><td><strong>91.6</strong></td><td><a href="https://arxiv.org/abs/2602.15313">2602.15313</a></td><td><a href="https://github.com/microsoft/Mnemis">GitHub</a></td></tr>
+<tr><td><strong>Hindsight</strong> (Vectorize.io)</td><td>2025.12</td><td>四网络（事实/经验/实体摘要/信念）+ retain/recall/reflect 三操作</td><td>89.61</td><td>91.4</td><td><a href="https://arxiv.org/abs/2512.12818">2512.12818</a></td><td><a href="https://github.com/vectorize-io/hindsight">GitHub</a></td></tr>
+<tr><td><strong>Chain-of-Memory</strong></td><td>2026.01</td><td>轻量记忆链构建 + 动态链演化；自适应截断非关键上下文</td><td>—</td><td>76.4</td><td><a href="https://arxiv.org/abs/2601.14287">2601.14287</a></td><td>—</td></tr>
+</tbody>
+</table>
+
+<!-- ===== 6. Other ===== -->
+<h3 id="cat-other">6. 其他创新方法</h3>
+
+<table>
+<thead><tr><th>方法</th><th>时间</th><th>核心思路</th><th>Benchmark</th><th>链接</th><th>代码</th></tr></thead>
+<tbody>
+<tr><td><strong>SimpleMem</strong></td><td>2026.01</td><td>记忆原子化 + 自适应合并 + 上下文感知剪枝；4× 加速</td><td>LoCoMo F1=43.24</td><td><a href="https://arxiv.org/abs/2601.02553">2601.02553</a></td><td><a href="https://github.com/aiming-lab/SimpleMem">GitHub</a></td></tr>
+<tr><td><strong>AdaMem</strong></td><td>2026.03</td><td>自适应用户中心记忆：工作记忆/情节/人格/图四类</td><td>LoCoMo F1=44.65</td><td><a href="https://arxiv.org/abs/2603.16496">2603.16496</a></td><td>—</td></tr>
+<tr><td><strong>E-mem</strong></td><td>2026.01</td><td>多 agent 情节上下文重建，保留未压缩记忆，局部推理后聚合</td><td>LoCoMo F1=54.17</td><td><a href="https://arxiv.org/abs/2601.21714">2601.21714</a></td><td>—</td></tr>
+<tr><td><strong>MemRouter</strong></td><td>2026.05</td><td>embedding 路由策略决定是否存储，仅训练 12M 参数</td><td>LoCoMo F1=55.5</td><td><a href="https://arxiv.org/abs/2605.00356">2605.00356</a></td><td>—</td></tr>
+<tr><td><strong>LightMem</strong></td><td>2026</td><td>Atkinson-Shiffrin 人类记忆模型：感觉/短期/长期，离线 sleep-time 更新</td><td>LoCoMo LJ=66.43</td><td><a href="https://arxiv.org/abs/2604.01560">DeltaMem ref</a></td><td><a href="https://github.com/zjunlp/LightMem">GitHub</a></td></tr>
+<tr><td><strong>OmniMem / Omni-SimpleMem</strong></td><td>2026.04</td><td>AutoResearch 指导的多模态 agent 记忆，自动发现最优记忆策略</td><td>LoCoMo F1=61.3</td><td><a href="https://arxiv.org/abs/2604.01007">2604.01007</a></td><td><a href="https://github.com/aiming-lab/OmniMem">GitHub</a></td></tr>
+<tr><td><strong>ES-Mem</strong></td><td>2026.01</td><td>事件分割记忆，基于认知科学的事件边界检测</td><td>—</td><td><a href="https://arxiv.org/abs/2601.07582">2601.07582</a></td><td>—</td></tr>
+<tr><td><strong>AMA</strong></td><td>2026.01</td><td>多 agent 协作记忆（Retriever/Judge/Refresher/Constructor 四 agent）</td><td>—</td><td><a href="https://arxiv.org/abs/2601.20352">2601.20352</a></td><td>—</td></tr>
+<tr><td><strong>MemSifter</strong></td><td>2026.03</td><td>小模型做 proxy reasoning 筛选记忆，先推理再筛证据</td><td>—</td><td><a href="https://arxiv.org/abs/2603.03379">2603.03379</a></td><td>—</td></tr>
+<tr><td><strong>Neuromem</strong></td><td>2026.02</td><td>流式外部记忆的颗粒化分解</td><td>—</td><td><a href="https://arxiv.org/abs/2602.13967">2602.13967</a></td><td>—</td></tr>
+<tr><td><strong>D-Mem</strong></td><td>2026.03</td><td>双过程记忆系统（System 1 + System 2）</td><td>—</td><td><a href="https://arxiv.org/abs/2603.18631">2603.18631</a></td><td>—</td></tr>
+<tr><td><strong>A-MAC</strong></td><td>2026.03</td><td>自适应记忆准入控制：未来效用/事实置信/语义新颖度/时间衰减/内容类型五因子</td><td>—</td><td><a href="https://arxiv.org/abs/2603.04549">2603.04549</a></td><td>—</td></tr>
+<tr><td><strong>MemCoT</strong></td><td>2026.04</td><td>推理时通过 CoT 调用外部记忆模块</td><td>—</td><td><a href="https://arxiv.org/abs/2604.08216">2604.08216</a></td><td>—</td></tr>
+<tr><td><strong>FluxMem</strong></td><td>2026.02</td><td>统一框架支持自适应多种记忆结构</td><td>—</td><td><a href="https://arxiv.org/abs/2602.14038">2602.14038</a></td><td>—</td></tr>
+<tr><td><strong>SSGM</strong></td><td>2026.03</td><td>记忆安全与稳定性治理框架</td><td>—</td><td><a href="https://arxiv.org/abs/2603.11768">2603.11768</a></td><td>—</td></tr>
+</tbody>
+</table>
+
+<!-- ===== 7. Products ===== -->
+<h3 id="cat-product">7. 产品级记忆系统</h3>
+
+<table>
+<thead><tr><th>产品</th><th>时间</th><th>记忆方式</th><th>特点</th></tr></thead>
+<tbody>
+<tr><td><strong>ChatGPT Memory</strong></td><td>2024–2026</td><td>显式存储用户偏好和事实 + 后台"dreaming"跨会话合成模式</td><td>用户可编辑；2025 加入离线记忆巩固</td></tr>
+<tr><td><strong>Claude Memory</strong></td><td>2025–2026</td><td>CLAUDE.md 文件 + Projects 持久上下文</td><td>用户显式管理，透明可控</td></tr>
+<tr><td><strong>Perplexity Brain</strong></td><td>2026.06</td><td>从 session 和 connector 自动推断上下文图，wiki 组织</td><td>自动推断不需手动管理；+25% correctness</td></tr>
+<tr><td><strong>OpenAI Memory</strong></td><td>2024–2026</td><td>ChatGPT 内置 memory API</td><td>闭源不可复现</td></tr>
+</tbody>
+</table>
+
+<!-- ===== 8. Surveys ===== -->
+<h3 id="cat-survey">8. 综述论文</h3>
+
+<dl>
+<dt>Memory in the LLM Era (arXiv 2604.01707, 2026.04)</dt>
+<dd>统一框架下的模块化记忆架构与策略综述。</dd>
+
+<dt>Anatomy of Agentic Memory (arXiv 2602.19320, 2026.02)</dt>
+<dd>Agent 记忆的分类学与评测局限性分析。</dd>
+
+<dt>Memory for Autonomous LLM Agents (arXiv 2603.07670, 2026.03)</dt>
+<dd>自主 agent 记忆的机制、评测与前沿综述。</dd>
+
+<dt>Rethinking Memory in LLM-based Agents (arXiv 2505.00675, 2025.05)</dt>
+<dd>记忆的表征、操作与新兴话题。</dd>
+
+<dt>Adaptation of Agentic AI: Post-Training, Memory, and Skills (arXiv 2512.16301, 2025.12)</dt>
+<dd>Agent AI 的后训练、记忆、技能三大适配综述。</dd>
+
+<dt>State of AI Agent Memory 2026 (Mem0 blog)</dt>
+<dd>Mem0 团队的产业视角综述，覆盖 benchmark、架构、生产差距。</dd>
+</dl>
+
+<h2 id="技术对比">§3 对比与定位</h2>
+
+<table>
+<thead><tr><th>方法</th><th>存储载体</th><th>存储内容</th><th>检索方式</th><th>需要训练</th><th>外部依赖</th><th>LoCoMo LJ</th></tr></thead>
+<tbody>
+<tr><td>MemGPT</td><td><abbr title="列表：将记忆条目按时间顺序追加到一个扁平列表中，无结构化组织">列表</abbr></td><td><abbr title="原文：直接存储对话中的原始文本片段，不经过 LLM 改写或压缩">原文</abbr></td><td><abbr title="LLM关键词搜索：LLM 自主生成搜索关键词，后台做文本匹配或 embedding 搜索返回 top-k">LLM关键词搜索</abbr></td><td>否</td><td>无</td><td>—</td></tr>
+<tr><td>MemoryBank</td><td><abbr title="向量DB：使用向量数据库（如 FAISS、Qdrant）存储记忆的 embedding 向量，支持相似度检索">向量DB</abbr></td><td><abbr title="摘要：LLM 将对话内容压缩为简短摘要后存储，会丢失具体细节（如人名、日期、数字等）">摘要</abbr></td><td><abbr title="向量搜索：将查询编码为 embedding 向量，在向量数据库中按余弦相似度检索最相关的 top-k 条记忆">向量搜索</abbr></td><td>否</td><td><abbr title="Embedding模型：需要部署 sentence-transformers 等 embedding 模型将文本转为向量">Embedding模型</abbr>, <abbr title="向量DB：需要部署和维护向量数据库服务（如 FAISS、Qdrant、Chroma）">向量DB</abbr></td><td>39.77</td></tr>
+<tr><td>A-Mem</td><td><abbr title="向量DB：使用向量数据库存储记忆的 embedding 向量">向量DB</abbr>, <abbr title="轻量图：程序内部维护的图结构（节点=记忆，边=关联），不需要独立数据库服务，用 Python dict/对象实现，退出后需序列化保存。区别于图DB（Neo4j 等独立服务）">轻量图</abbr></td><td><abbr title="原子笔记：LLM 将信息压缩为一个独立的笔记单元（含文本+关键词+标签），灵感来自 Zettelkasten 笔记法">原子笔记</abbr></td><td><abbr title="向量搜索：embedding 相似度检索入口节点">向量搜索</abbr>, <abbr title="图遍历：从入口节点沿图的边扩展 1-2 跳，拉入关联记忆补充上下文">图遍历</abbr></td><td>否</td><td><abbr title="Embedding模型：需要 sentence-transformers 模型">Embedding模型</abbr>, <abbr title="向量DB：需要向量数据库">向量DB</abbr></td><td>51.29</td></tr>
+<tr><td>HORMA</td><td><abbr title="文件系统：使用操作系统的文件和目录结构存储记忆，每个文件是一个 markdown 文档，目录层级表示主题分类">文件系统</abbr></td><td><abbr title="结构化笔记：LLM 将对话内容改写为带时间戳和来源引用的结构化笔记，非原文">结构化笔记</abbr></td><td><abbr title="文件导航：LLM 通过 ls/cat/grep 等命令浏览文件系统，逐步定位到目标文件和段落">文件导航</abbr></td><td><abbr title="是：需要用 GRPO 强化学习训练一个轻量检索 agent（如 Qwen 3.5 4B）">是</abbr></td><td><abbr title="RL训练：需要准备训练数据、GPU 算力和强化学习框架来训练检索 agent">RL训练</abbr></td><td>51.6*</td></tr>
+<tr><td>Mem0</td><td><abbr title="向量DB：使用 Qdrant 等向量数据库">向量DB</abbr>, <abbr title="图DB：使用独立的图数据库服务（如 Neo4j）存储实体关系，需要单独部署和维护">图DB</abbr></td><td><abbr title="三元组：LLM 从对话中抽取（主体, 关系, 客体）三元组，如（Alice, 喜欢, 咖啡），丢失上下文和细节">三元组</abbr></td><td><abbr title="向量搜索：embedding 相似度检索">向量搜索</abbr>, <abbr title="图遍历：从查询中抽取实体，在知识图谱中查找相关关系">图遍历</abbr>, <abbr title="BM25：基于词频的传统关键词检索，作为向量搜索的补充信号">BM25</abbr></td><td>否</td><td><abbr title="Embedding模型：需要 embedding 模型">Embedding模型</abbr>, <abbr title="向量DB：需要 Qdrant 等向量数据库">向量DB</abbr>, <abbr title="图DB：需要 Neo4j 等图数据库">图DB</abbr></td><td>57.86</td></tr>
+<tr><td>LangMem</td><td><abbr title="向量DB：使用向量数据库存储记忆">向量DB</abbr></td><td><abbr title="摘要：LLM 生成的压缩摘要">摘要</abbr></td><td><abbr title="向量搜索：embedding 相似度检索">向量搜索</abbr></td><td>否</td><td><abbr title="Embedding模型：需要 embedding 模型">Embedding模型</abbr>, <abbr title="向量DB：需要向量数据库">向量DB</abbr></td><td>58.11</td></tr>
+<tr><td>Zep</td><td><abbr title="向量DB：使用向量数据库">向量DB</abbr>, <abbr title="图DB：使用独立图数据库存储实体关系">图DB</abbr></td><td><abbr title="三元组：实体关系三元组">三元组</abbr></td><td><abbr title="向量搜索：embedding 检索">向量搜索</abbr>, <abbr title="图遍历：图数据库中查找关系">图遍历</abbr>, <abbr title="BM25：关键词检索补充">BM25</abbr></td><td>否</td><td><abbr title="Embedding模型：需要 embedding 模型">Embedding模型</abbr>, <abbr title="向量DB：需要向量数据库">向量DB</abbr>, <abbr title="图DB：需要图数据库">图DB</abbr></td><td>65.99</td></tr>
+<tr><td>MemOS</td><td><abbr title="层次结构：将记忆按层级组织（如 短期→工作→长期），不同层有不同的存储和淘汰策略">层次结构</abbr>, <abbr title="向量DB：底层使用向量数据库">向量DB</abbr></td><td><abbr title="摘要：LLM 生成的压缩摘要">摘要</abbr></td><td><abbr title="层次导航：按记忆层级逐层检索，先查短期记忆再查长期记忆">层次导航</abbr>, <abbr title="向量搜索：embedding 检索">向量搜索</abbr></td><td>否</td><td><abbr title="Embedding模型：需要 embedding 模型">Embedding模型</abbr>, <abbr title="向量DB：需要向量数据库">向量DB</abbr></td><td>69.24</td></tr>
+<tr><td>DeltaMem</td><td><abbr title="向量DB：使用向量数据库">向量DB</abbr></td><td><abbr title="RL决定：由强化学习训练的策略决定存储什么内容和格式">RL决定</abbr></td><td><abbr title="RL检索：由强化学习训练的策略决定检索什么、怎么检索">RL检索</abbr></td><td><abbr title="是：需要强化学习训练存储和检索策略">是</abbr></td><td><abbr title="RL训练：需要 GPU 算力和 RL 框架">RL训练</abbr></td><td>75.13</td></tr>
+<tr><td>TiMem</td><td><abbr title="时间树：按时间维度组织的树结构，根节点是最粗粒度（年），叶节点是具体事件，支持时间范围查询">时间树</abbr>, <abbr title="向量DB：使用向量数据库">向量DB</abbr></td><td><abbr title="事件摘要：LLM 将对话提取为带时间戳的事件摘要">事件摘要</abbr></td><td><abbr title="时间树导航：沿时间树从粗到细定位相关时间段">时间树导航</abbr>, <abbr title="向量搜索：embedding 检索">向量搜索</abbr></td><td>否</td><td><abbr title="Embedding模型：需要 embedding 模型">Embedding模型</abbr>, <abbr title="向量DB：需要向量数据库">向量DB</abbr></td><td>75.30</td></tr>
+<tr style="background:rgba(235,66,66,.08);font-weight:600"><td>Ours</td><td><abbr title="文件系统：markdown 文件 + 目录结构，LLM 通过 RSP 原则决定文件位置">文件系统</abbr></td><td><abbr title="原文：直接从对话中复制原始文本，不经过 LLM 改写、压缩或抽取（Copy Don't Generate）">原文</abbr></td><td><abbr title="文件导航：LLM 通过 ls/cat/grep 等工具函数浏览 wiki 文件系统查找信息">文件导航</abbr></td><td>否</td><td>无</td><td>83.5†</td></tr>
+<tr><td>Hindsight</td><td><abbr title="轻量图：程序内部的图结构（Python 对象），节点为事件，边为因果关系，不需要独立数据库">轻量图</abbr></td><td><abbr title="因果链：LLM 分析事件之间的因果关系并构建链式结构">因果链</abbr></td><td><abbr title="图遍历：沿因果链遍历查找相关事件">图遍历</abbr></td><td>否</td><td><abbr title="Embedding模型：需要 embedding 模型">Embedding模型</abbr></td><td>89.61</td></tr>
+<tr><td>Mnemis</td><td><abbr title="轻量图：程序内部的事件图结构（Python 对象），不需要独立数据库">轻量图</abbr></td><td><abbr title="事件摘要：LLM 提取的事件摘要节点">事件摘要</abbr></td><td><abbr title="图遍历：在事件图中遍历查找相关节点">图遍历</abbr></td><td>否</td><td><abbr title="Embedding模型：需要 embedding 模型">Embedding模型</abbr></td><td>93.9</td></tr>
+</tbody>
+</table>
+
+<p style="font-size:.8rem;color:hsl(var(--bc)/.5)">按 LoCoMo LJ 升序排列。*HORMA 使用 Claude Sonnet 4.5；†我们使用 qwen3.6-flash（存储/检索/Judge）；其他方法使用 GPT-4o-mini。不同模型和 Judge 导致数字不完全可比。</p>
+
+<h3 id="maintenance-comparison">记忆结构维护机制对比</h3>
+
+<table>
+<thead><tr><th>方法</th><th>名字优化</th><th>归属优化</th><th>粒度优化</th><th>关联优化</th><th>触发方式</th></tr></thead>
+<tbody>
+<tr><td>Mem0</td><td>—</td><td>UPDATE/DELETE（语义对比）</td><td>—</td><td>图谱自动关联</td><td>存储时</td></tr>
+<tr><td>A-Mem</td><td>—</td><td>—</td><td>相似笔记合并</td><td>LLM 判断建链接</td><td>存储时</td></tr>
+<tr><td>HORMA</td><td>Skill Evolution 间接改进 prompt</td><td>—</td><td>—</td><td>—</td><td>离线（跨任务）</td></tr>
+<tr><td>DeltaMem</td><td>—</td><td>RL 策略决定 ADD/UPDATE/DELETE</td><td>—</td><td>—</td><td>存储时（RL）</td></tr>
+<tr><td>TiMem</td><td>—</td><td>—</td><td>时间巩固（对话→事件→主题）</td><td>时间树隐式关联</td><td>存储时</td></tr>
+<tr><td>Mnemis</td><td>—</td><td>—</td><td>语义聚类建层次</td><td>多对多层次关系</td><td>存储时</td></tr>
+<tr><td>Hindsight</td><td>—</td><td>—</td><td>—</td><td>Reflect 推断跨网络信念</td><td>定期</td></tr>
+<tr><td>MemoryBank</td><td>—</td><td>—</td><td>遗忘曲线淘汰</td><td>—</td><td>定期</td></tr>
+<tr><td>MemOS</td><td>—</td><td>三层间迁移（短期→长期）</td><td>—</td><td>—</td><td>定期</td></tr>
+<tr style="background:rgba(235,66,66,.08);font-weight:600"><td>Ours</td><td>重命名（检索反馈）</td><td>移动项目（检索反馈）</td><td>拆分/合并容器（检索反馈）</td><td>添加交叉引用（检索反馈）</td><td>检索失败时</td></tr>
+</tbody>
+</table>
+
+<p style="font-size:.85rem">现有方法中没有任何一个同时覆盖四类问题。名字优化几乎无人关注（仅 HORMA 间接涉及）。粒度优化只做合并（细→粗），无拆分（粗→细）。关联都在存储时建立，无事后补充。我们是唯一基于检索反馈驱动的结构优化方案。</p>
+
+<h2 id="memory-benchmarks">§4 Memory Benchmarks</h2>
+
+<table>
+<thead><tr><th>Benchmark</th><th>来源</th><th>规模</th><th>测试维度</th></tr></thead>
+<tbody>
+<tr><td><strong>LoCoMo</strong> (arXiv 2402.17753)</td><td>ACL 2024</td><td>10 conversations, ~1986 QA</td><td>single-hop, temporal, multi-hop, open-domain, adversarial</td></tr>
+<tr><td><strong>LongMemEval</strong> (arXiv 2410.10813)</td><td>ICLR 2025</td><td>500 QA</td><td>knowledge update, multi-session, single-session (user/assistant/preference), temporal reasoning</td></tr>
+<tr><td><strong>BEAM</strong></td><td>Mem0, 2026</td><td>1M–10M tokens</td><td>10 种能力，大规模场景</td></tr>
+<tr><td><strong>MemBench</strong> (arXiv 2510.17281)</td><td>2025</td><td>—</td><td>事实记忆 vs 反思记忆；效率与容量退化</td></tr>
+<tr><td><strong>EvolMem</strong> (arXiv 2601.03543)</td><td>2026</td><td>多 session</td><td>认知驱动的记忆演化</td></tr>
+<tr><td><strong>PERMA</strong> (arXiv 2603.23231)</td><td>2026</td><td>事件驱动</td><td>个性化 agent 偏好变化</td></tr>
+</tbody>
+</table>
+
+</article></main>
+</div>
+<script>
+window.addEventListener('scroll',()=>{const h=document.documentElement.scrollHeight-window.innerHeight;document.getElementById('progress-bar').style.width=h>0?(window.scrollY/h*100)+'%':'0%'});
+const tocLinks=document.querySelectorAll('.toc-link'),headings=[...document.querySelectorAll('h2[id],h3[id]')];
+function updateToc(){let cur=null;for(const h of headings){if(h.getBoundingClientRect().top<=100)cur=h}tocLinks.forEach(l=>l.classList.remove('active'));if(cur){const l=document.querySelector('.toc-link[href="#'+cur.id+'"]');if(l)l.classList.add('active')}}
+window.addEventListener('scroll',updateToc,{passive:true});updateToc();
+</script></body></html>

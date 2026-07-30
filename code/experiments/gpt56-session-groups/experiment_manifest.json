@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "name": "GPT-5.6 session-group construction sweep",
+  "source_experiment": "experiments/gpt56-chunk-curve/experiment_manifest.json",
+  "benchmarks": {
+    "locomo": [
+      2,
+      4,
+      8,
+      16
+    ],
+    "longmemeval-s": [
+      2,
+      4,
+      8,
+      16
+    ],
+    "beam-100k": [
+      1,
+      2
+    ]
+  },
+  "tiers": [
+    "luna",
+    "terra",
+    "sol"
+  ],
+  "units": {
+    "locomo": [
+      "conv-44",
+      "conv-48"
+    ],
+    "longmemeval-s": [
+      "2318644b",
+      "gpt4_6dc9b45b"
+    ],
+    "beam-100k": [
+      "100K-conv-1",
+      "100K-conv-2"
+    ]
+  },
+  "run_count": 60,
+  "write_turns": "session",
+  "context_mode": "none",
+  "maintenance": "after each session group plus one final pass",
+  "reasoning_effort": "none"
+}

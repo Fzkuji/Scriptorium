@@ -1,0 +1,190 @@
+<title>NativeMem v8.8 建库与检索全流程</title>
+<style>
+:root{
+  --bg:#FAFAF7; --panel:#FFFFFF; --ink:#22272E; --muted:#6B7280; --line:#E4E2DA;
+  --llm:#B45309; --llm-bg:#FDF3E3; --llm-line:#EAC98F;
+  --code:#0E7490; --code-bg:#EAF6F9; --code-line:#A8D8E4;
+  --file:#3F6212; --file-bg:#F1F7E8; --file-line:#C3DCA0;
+  --hl:#FFF3C4;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#16191D; --panel:#1E2228; --ink:#E8EAED; --muted:#9AA1AA; --line:#333941;
+  --llm:#F0A24B; --llm-bg:#2C2318; --llm-line:#6B4E23;
+  --code:#5BC4DC; --code-bg:#14282E; --code-line:#25505C;
+  --file:#A3CE6B; --file-bg:#1E2917; --file-line:#42541F;
+  --hl:#4A3D12;
+}}
+:root[data-theme="dark"]{
+  --bg:#16191D; --panel:#1E2228; --ink:#E8EAED; --muted:#9AA1AA; --line:#333941;
+  --llm:#F0A24B; --llm-bg:#2C2318; --llm-line:#6B4E23;
+  --code:#5BC4DC; --code-bg:#14282E; --code-line:#25505C;
+  --file:#A3CE6B; --file-bg:#1E2917; --file-line:#42541F;
+  --hl:#4A3D12;
+}
+:root[data-theme="light"]{
+  --bg:#FAFAF7; --panel:#FFFFFF; --ink:#22272E; --muted:#6B7280; --line:#E4E2DA;
+  --llm:#B45309; --llm-bg:#FDF3E3; --llm-line:#EAC98F;
+  --code:#0E7490; --code-bg:#EAF6F9; --code-line:#A8D8E4;
+  --file:#3F6212; --file-bg:#F1F7E8; --file-line:#C3DCA0;
+  --hl:#FFF3C4;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);margin:0;
+  font:15px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+main{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:26px;line-height:1.3;margin:0 0 6px;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 28px;font-size:14px}
+h2{font-size:19px;margin:44px 0 4px;padding-top:20px;border-top:1px solid var(--line)}
+h2 .no{color:var(--muted);font-weight:400;margin-right:8px;font-variant-numeric:tabular-nums}
+.h2note{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.92em}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0 4px;font-size:13px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+.dot.l{background:var(--llm-bg);border:1.5px solid var(--llm)}
+.dot.c{background:var(--code-bg);border:1.5px solid var(--code)}
+.dot.f{background:var(--file-bg);border:1.5px solid var(--file)}
+
+.box{border:1.5px solid var(--line);border-radius:8px;background:var(--panel);padding:14px 18px;margin:10px 0}
+.box.llm{border-color:var(--llm);background:var(--llm-bg)}
+.box.code{border-color:var(--code);background:var(--code-bg)}
+.box.file{border-color:var(--file);background:var(--file-bg)}
+.box .tag{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:2px}
+.box.llm .tag{color:var(--llm)} .box.code .tag{color:var(--code)} .box.file .tag{color:var(--file)}
+.box .t{font-weight:600}
+.box .d{color:var(--muted);font-size:13.5px;margin-top:2px}
+.arrow{text-align:center;color:var(--muted);font-size:15px;line-height:1;margin:2px 0;user-select:none}
+.arrow small{font-size:12px;vertical-align:2px;margin-left:6px}
+
+pre{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:12px 16px;overflow-x:auto;font-size:12.8px;line-height:1.65;margin:8px 0}
+pre b{color:var(--llm)} pre i{color:var(--code);font-style:normal} pre u{background:var(--hl);text-decoration:none;border-radius:2px;padding:0 2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:720px){.grid2{grid-template-columns:1fr}}
+
+.turns{border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:hidden;margin:8px 0}
+.turns .tr{display:grid;grid-template-columns:64px 1fr;border-top:1px solid var(--line);font-size:13px}
+.turns .tr:first-child{border-top:none}
+.turns .id{padding:5px 10px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;color:var(--muted);background:var(--bg);font-variant-numeric:tabular-nums}
+.turns .tx{padding:5px 12px}
+.chunkband{display:grid;grid-template-columns:64px 1fr;font-size:12px}
+.chunkband div{padding:4px 10px;font-weight:600}
+.cb1{background:var(--code-bg);color:var(--code)}
+.cb2{background:var(--llm-bg);color:var(--llm)}
+.cb3{background:var(--file-bg);color:var(--file)}
+
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:8px 0}
+th,td{border:1px solid var(--line);padding:6px 12px;text-align:left;vertical-align:top}
+th{background:var(--panel);font-size:12.5px}
+td.mono,th.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12.5px;font-variant-numeric:tabular-nums}
+
+.note{border-left:3px solid var(--llm);padding:6px 14px;color:var(--muted);font-size:13.5px;margin:14px 0;background:var(--panel);border-radius:0 6px 6px 0}
+.cost{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.cost .c{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:10px 14px}
+.cost .n{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.cost .k{font-size:12.5px;color:var(--muted)}
+</style>
+<main>
+<h1>NativeMem v8.8 全流程:一段对话怎么变成记忆,又怎么被读出来</h1>
+<p class="sub">以 LoCoMo sample 0(19 个 session、419 句)为例 · 引用格式为统一后的规范写法</p>
+
+<div class="legend">
+  <span><span class="dot l"></span>模型调用(花钱花时间)</span>
+  <span><span class="dot c"></span>纯代码(免费、瞬间)</span>
+  <span><span class="dot f"></span>落盘的文件</span>
+</div>
+
+<h2><span class="no">①</span>切块:一个 session 怎么被切开</h2>
+<p class="h2note">你最关心的一步。session = 某一天的一次完整对话,例如 session 2(2023-05-25)有 13 句,每句自带原生编号 dia_id:</p>
+
+<div class="turns">
+  <div class="chunkband"><div class="cb1">块 1</div><div class="cb1">第 1–6 句 → 一次模型调用</div></div>
+  <div class="tr"><div class="id">D2:1</div><div class="tx">Melanie: Hey Caroline! How have you been?</div></div>
+  <div class="tr"><div class="id">D2:2</div><div class="tx">Caroline: I've been good! Busy with some big plans...</div></div>
+  <div class="tr"><div class="id">D2:3</div><div class="tx">Melanie: Big plans? Tell me!</div></div>
+  <div class="tr"><div class="id">D2:4</div><div class="tx">Caroline: ……</div></div>
+  <div class="tr"><div class="id">D2:5</div><div class="tx">Melanie: ……</div></div>
+  <div class="tr"><div class="id">D2:6</div><div class="tx">Caroline: ……</div></div>
+  <div class="chunkband"><div class="cb2">块 2</div><div class="cb2">第 7–12 句 → 下一次模型调用</div></div>
+  <div class="tr"><div class="id">D2:7</div><div class="tx">Melanie: ……</div></div>
+  <div class="tr"><div class="id">D2:8</div><div class="tx">Caroline: I'm researching adoption agencies.</div></div>
+  <div class="tr"><div class="id">D2:9</div><div class="tx">Melanie: That's awesome and kind!</div></div>
+  <div class="tr"><div class="id">D2:10</div><div class="tx">Caroline: ……</div></div>
+  <div class="tr"><div class="id">D2:11</div><div class="tx">Caroline: I chose it because it helps LGBTQ+ folks.</div></div>
+  <div class="tr"><div class="id">D2:12</div><div class="tx">Melanie: ……</div></div>
+  <div class="chunkband"><div class="cb3">块 3</div><div class="cb3">第 13 句(不足 6 句,尾块照收)</div></div>
+  <div class="tr"><div class="id">D2:13</div><div class="tx">Caroline: ……</div></div>
+</div>
+
+<p>规则就一条:<b>非空的句子按顺序每 6 句切一块</b>(<code>NATIVEMEM_CHUNK_TURNS=6</code>),最后不足 6 句的凑一块。切的时候句子和它的 dia_id 成对带走,<b>编号对齐靠构造保证</b>,不做文本重解析(否则句子里的空行会让编号错位)。</p>
+
+<h2><span class="no">②</span>提取:一个块进模型,出来一串"原子事实"</h2>
+<p class="h2note">每块一次模型调用。发出去的东西有三层:</p>
+
+<pre><i>【system】</i>distill 指令:提取原子事实;topic=路径(可分层,如 Caroline/adoption);
+         日期换算成绝对日期;已有话题清单:<u>Caroline/adoption(9条), Melanie/family/kids(110条)…</u> ← 优先复用,禁开同义新文件
+<i>【滚动上下文】</i>本 session 前面块已提取的最近 20 条摘要 ← 防重复提取;he/she 按它消解成人名
+<i>【user】</i>块内句子,重新编号 [1]–[6]:
+  [1] Melanie: ……
+  [2] Caroline: I'm researching adoption agencies.
+  [3] Melanie: That's awesome and kind!
+  …</pre>
+
+<p>模型返回 JSON,每条事实说清"哪天、什么事、出自第几句、归哪个话题":</p>
+
+<pre>{"when":"2023-05-25","summary":"Caroline is researching adoption agencies <b>[2]</b>","topic":"Caroline/adoption"}
+{"when":"2023-05-25","summary":"Caroline chose the agency for its LGBTQ+ support <b>[2,5]</b>","topic":"Caroline/adoption"}</pre>
+
+<p>代码拿"块内编号 ↔ dia_id"对照表(块 2 的 [2]=D2:8、[5]=D2:11)把编号换成真引用。随后<b>硬校验</b>:原文里的专名/数字若没被任何摘要覆盖,连块再问一次补抽(只补一轮)——这是"事实不丢"的保险。</p>
+
+<h2><span class="no">③</span>写盘:一条事实,两个视图各写一行</h2>
+<p class="h2note">纯代码,零成本。同一条事实同时进时间线(索引)和话题文件(内容),互相有指针:</p>
+
+<div class="grid2">
+<div class="box file" style="margin:0">
+  <span class="tag">timeline/2023/05/25.md(一天一文件)</span>
+  <pre style="margin:6px 0 0">[2023-05-25] Caroline is researching
+adoption agencies · <u>[D2:8]</u> <b>→ topics/Caroline/adoption.md</b></pre>
+  <div class="d">行尾箭头指向所属话题文件;写入前查指纹(同引用+同文本)防重复</div>
+</div>
+<div class="box file" style="margin:0">
+  <span class="tag">topics/Caroline/adoption.md(话题文件)</span>
+  <pre style="margin:6px 0 0">[<b>2023-05-25</b>](timeline/2023/05/25.md) Caroline
+chose the agency for its LGBTQ+ support <u>[D2:8,11]</u></pre>
+  <div class="d">日期是链接,点回时间线;引用内联在提到的位置</div>
+</div>
+</div>
+
+<p class="note">引用统一规范:一个方括号只装一个对话,连续句折区间、散句逗号列举 —— <code>[D2:8]</code> / <code>[D2:8,11]</code> / <code>[D2:12-14]</code> / 跨对话 <code>[D2:8,11] [D5:1]</code>。全库只有这一种写法。</p>
+
+<h2><span class="no">④</span>session 收尾:整理这一天攒下的行</h2>
+
+<div class="box code"><span class="tag">代码</span><span class="t">精确去重</span><div class="d">同引用、同规范化文本的行只留一条(每个 session 末都跑)</div></div>
+<div class="arrow">↓</div>
+<div class="box llm"><span class="tag">模型 · 仅超阈值才触发</span><span class="t">话题文件合并</span><div class="d">话题文件数 &gt; 30 时,把全部路径清单给模型提合并建议(adopt 并进 adoption),代码验证后执行、顺带改时间线反链</div></div>
+<div class="arrow">↓</div>
+<div class="box llm"><span class="tag">模型 · 每文件攒够 8 行未归节才触发,多文件并行</span><span class="t">行合并 + 分节(两次独立调用)</span><div class="d">行合并:模型只提"哪几行说的是同一事实",代码合并、引用取并集、dia_id 并集不变才生效。分节:模型只出"标题+行号"方案,代码搬行,<b>行文本逐字校验,一个字不许变</b>。任一校验不过 → 放弃,文件原样保留</div></div>
+
+<p>19 个 session 依次走完①–④(session 间串行,保证话题路由一致),最后对全库做一次收尾整理,库就建完了。</p>
+
+<h2><span class="no">⑤</span>答题:一个模型带着 bash 进库里找</h2>
+<p class="h2note">每题独立对话,最多 12 步,8 路并发。模型开局拿到问题 + 全库结构地图(目录树+每文件条目数,代码生成):</p>
+
+<div class="box llm"><span class="tag">模型</span><span class="t">1. 看地图挑话题文件,整个 cat 读全文</span><div class="d">按语义挑 1–3 个最可能的文件;同一人物有多个文件先 ls 列全、都读完再选。靠语义不靠字面(问 pet,库里写的可能是 guinea pig)</div></div>
+<div class="arrow">↓</div>
+<div class="box llm"><span class="tag">模型</span><span class="t">2. grep 兜底</span><div class="d">cat 没定位到才 grep,多种措辞轮着试;时间类问题 <code>cat timeline/2023/08/*.md</code> 一把读整月</div></div>
+<div class="arrow">↓</div>
+<div class="box llm"><span class="tag">模型</span><span class="t">3. read_original 回原文核对</span><div class="d">把候选行的引用全部取出一次传入(区间自动展开整段读);答前逐条对照问题核对</div></div>
+<div class="arrow">↓</div>
+<div class="box llm"><span class="tag">模型</span><span class="t">4. 回 timeline 交叉核对,给出 &lt;answer&gt;</span><div class="d">以时间线原子行和原文原词为准;必须给出最佳答案,禁止弃答</div></div>
+
+<h2><span class="no">⑥</span>成本账(v8.8 实测,sample 0)</h2>
+<div class="cost">
+  <div class="c"><div class="n">75 次</div><div class="k">distill 调用(串行)= 墙钟主体</div></div>
+  <div class="c"><div class="n">~258 次</div><div class="k">整理类调用(并行,躲在 distill 影子里)</div></div>
+  <div class="c"><div class="n">76 min</div><div class="k">建库(v8.5 时代 119 min)</div></div>
+  <div class="c"><div class="n">~5 min</div><div class="k">答 152 题(8 路并发)</div></div>
+  <div class="c"><div class="n">94.1</div><div class="k">严格分(可达上限约 97.8:3 道图片题 + 2 道判分口径不可得)</div></div>
+</div>
+
+</main>

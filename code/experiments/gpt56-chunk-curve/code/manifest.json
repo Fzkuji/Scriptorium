@@ -1,0 +1,333 @@
+[
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "67bd1d60f167276c969467c67d9231de2640907d6ac2a6c67b7897d1d9db21f9",
+    "path": "experiments/gpt56-chunk-curve/analyze.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/experiments/gpt56-chunk-curve/analyze.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "a8a3e9d03d66d11a14b8dd6f14df986addd42be739d8cc445ac03624b7ecd045",
+    "path": "scripts/prepare_gpt56_chunk_curve.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/prepare_gpt56_chunk_curve.py"
+  },
+  {
+    "build_hash_aliases": [
+      "runner"
+    ],
+    "current_hash_recorded_by_builds": true,
+    "current_sha256": "fe5cfac75d9965aefae6cecf7227376d802c2e8546d6562f5ca2add906af75e7",
+    "path": "scripts/run_gpt56_chunk_curve.py",
+    "recorded_build_hash_counts": {
+      "673b8d88824dd295974aaba4eae2b93a95763637debe806eab21a18d3a7b0aeb": 40,
+      "fe5cfac75d9965aefae6cecf7227376d802c2e8546d6562f5ca2add906af75e7": 32
+    },
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/run_gpt56_chunk_curve.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "3b2bbadac6af5d82cc6aee9728ae800b7606e3b9c0c763cf4eff462ef2b4ac5d",
+    "path": "scripts/orchestrate_gpt56_chunk_curve.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/orchestrate_gpt56_chunk_curve.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "0cd135a67f55d42ccecd3b4460b9ed446b32b58528e9bf44bd3a0e3ebcf91cf2",
+    "path": "scripts/gpt56_chunk_curve_qa_contract.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/gpt56_chunk_curve_qa_contract.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "077da0c95f56f2a0a2059cd67c9da4477f94d5d21cb5a6932c4771f8bead0124",
+    "path": "scripts/run_gpt56_chunk_curve_qa.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/run_gpt56_chunk_curve_qa.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "47b9a68b426b5b15fffd5907fa70d0645380294ca38a6b81ef4bf8b1891330ab",
+    "path": "scripts/audit_gpt56_chunk_curve_qa.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/audit_gpt56_chunk_curve_qa.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "52160a74eda0080382b257725877724d69ed2f2a5220ad6e7305bf5387e7c079",
+    "path": "scripts/analyze_gpt56_w32_builds.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/analyze_gpt56_w32_builds.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "976e776abd9595b5a85661e1d57d2452edd6ea39e3416e41afa72ab371d1ccbc",
+    "path": "scripts/analyze_gpt56_w32_screening.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/analyze_gpt56_w32_screening.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "4d3f973d38a021efbe5625af332854651d359176d224cb2a762da1567232702f",
+    "path": "scripts/readonly_nativemem_control.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/readonly_nativemem_control.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "c3a6130ff6f082062e2d943644225e504a5db2d6d5185e662eb279e1f2bbfdef",
+    "path": "scripts/controlled_locomo_answer_contract.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/controlled_locomo_answer_contract.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "e717686d31a2b1b2168e0f7e2ad10fbc5990a985281fd74e27ea6dca08946598",
+    "path": "scripts/controlled_subscription_qa_proxy.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/controlled_subscription_qa_proxy.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "1412a1afca6a037d7906b84fdf249c48a6651488b21c18e1fd6778f15aa3e7d1",
+    "path": "scripts/run_locked_locomo_eval_with_evidence.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/run_locked_locomo_eval_with_evidence.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "7708c08d35367a387fea1380ed48b10dbf6188ec38b40e4c6d6c579a31abffb2",
+    "path": "scripts/eval_beam_screening_subset.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/eval_beam_screening_subset.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "0231526f8995921275387756323aef4df4358ddda3ffaea91f68f026be427c22",
+    "path": "scripts/judge_beam_screening_subset.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/judge_beam_screening_subset.py"
+  },
+  {
+    "build_hash_aliases": [
+      "longmemeval_converter"
+    ],
+    "current_hash_recorded_by_builds": true,
+    "current_sha256": "db12b0c4635b2300cc7de13631c3e1d4d23fb17d0b398ca4dd7dfe6702f11105",
+    "path": "scripts/run_v88_gpt55_longmemeval.py",
+    "recorded_build_hash_counts": {
+      "2177ac2603af0c18e16d501cecd500751c6df051091cc9b10f8df0a27e98c3df": 1,
+      "cb0b5dbf6abed738a3a4b60ccc19135a6a86f7134bbfff61a70953495d4476fb": 66,
+      "db12b0c4635b2300cc7de13631c3e1d4d23fb17d0b398ca4dd7dfe6702f11105": 5
+    },
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/run_v88_gpt55_longmemeval.py"
+  },
+  {
+    "build_hash_aliases": [
+      "beam_converter"
+    ],
+    "current_hash_recorded_by_builds": true,
+    "current_sha256": "564f6e69b82bddc0edbfa4780ddde406199f4dc8d0b2bb9459f98f0e2d0d2661",
+    "path": "scripts/run_v88_gpt55_beam.py",
+    "recorded_build_hash_counts": {
+      "564f6e69b82bddc0edbfa4780ddde406199f4dc8d0b2bb9459f98f0e2d0d2661": 72
+    },
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/run_v88_gpt55_beam.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "c3d77b4a3d58d9d734f7f229cd7ca6d86b9a35d57c8b3cf6fcd2a3d816151c45",
+    "path": "scripts/evaluate_v88_gpt55_beam.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/evaluate_v88_gpt55_beam.py"
+  },
+  {
+    "build_hash_aliases": [
+      "locomo_evaluator"
+    ],
+    "current_hash_recorded_by_builds": true,
+    "current_sha256": "f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd",
+    "path": "scripts/eval_full.py",
+    "recorded_build_hash_counts": {
+      "f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd": 72
+    },
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/scripts/eval_full.py"
+  },
+  {
+    "build_hash_aliases": [
+      "adapter"
+    ],
+    "current_hash_recorded_by_builds": true,
+    "current_sha256": "56a366279fd3b4b5642b30ff58cb84604b9ea6419f94aa6ec60faeab75b88789",
+    "path": "src/adapters/run_nativemem.py",
+    "recorded_build_hash_counts": {
+      "56a366279fd3b4b5642b30ff58cb84604b9ea6419f94aa6ec60faeab75b88789": 72
+    },
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/src/adapters/run_nativemem.py"
+  },
+  {
+    "build_hash_aliases": [
+      "runtime"
+    ],
+    "current_hash_recorded_by_builds": true,
+    "current_sha256": "07f89fb04e6031306618bdab676f6d4d7210cfb3de444dea30e8eb9b23932f6a",
+    "path": "src/nativemem.py",
+    "recorded_build_hash_counts": {
+      "07f89fb04e6031306618bdab676f6d4d7210cfb3de444dea30e8eb9b23932f6a": 72
+    },
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/src/nativemem.py"
+  },
+  {
+    "build_hash_aliases": [
+      "v10_memory"
+    ],
+    "current_hash_recorded_by_builds": true,
+    "current_sha256": "603e3132e2a59475ea41ec03f4113e8971dae353dca983de2e0e9e85933e3679",
+    "path": "src/v10_memory.py",
+    "recorded_build_hash_counts": {
+      "603e3132e2a59475ea41ec03f4113e8971dae353dca983de2e0e9e85933e3679": 72
+    },
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/src/v10_memory.py"
+  },
+  {
+    "build_hash_aliases": [
+      "v8_memory"
+    ],
+    "current_hash_recorded_by_builds": true,
+    "current_sha256": "a3ce6101bb788a9b4cc109a2f3a3b28a56a0aabb6e54874100014bd4d2ad8405",
+    "path": "src/v8_memory.py",
+    "recorded_build_hash_counts": {
+      "a3ce6101bb788a9b4cc109a2f3a3b28a56a0aabb6e54874100014bd4d2ad8405": 72
+    },
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/src/v8_memory.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "800a853c2be232b7c72703d48089f4260161e51acb4187078182797251ca4978",
+    "path": "src/chatgpt_proxy.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/src/chatgpt_proxy.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "ecce9c4c79dc89d99534ac17b383a5cbb5b9f0c69ee98adaf0684742e3d95251",
+    "path": "benchmarks/longmemeval/src/evaluation/evaluate_qa.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/benchmarks/longmemeval/src/evaluation/evaluate_qa.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "16a11c882f85f33c1153c173c18e7ea638983260b2305861ead984dba8b8c659",
+    "path": "tests/test_analyze_gpt56_w32_builds.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_analyze_gpt56_w32_builds.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "144b2a90b81a4f2d90cd6cf4f1cf5e44cd5595e5de77e7c26b1788f5b2a3a9d7",
+    "path": "tests/test_analyze_gpt56_w32_screening.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_analyze_gpt56_w32_screening.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "30c19d45620a5170fb1372ca2f1feb0a617cd3d033d251ca87e445d6a910e317",
+    "path": "tests/test_audit_gpt56_chunk_curve_qa.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_audit_gpt56_chunk_curve_qa.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "3f6bab94faa455d2b2981c88e87bad4377e7ded3e5f4123afaac4efeb56a5d90",
+    "path": "tests/test_chatgpt_proxy.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_chatgpt_proxy.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "e951f1cd47c532d6f4d99bb5709cb64f82a6a2aa6c5f0e0d0580ad6db1492e8c",
+    "path": "tests/test_controlled_subscription_qa_proxy.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_controlled_subscription_qa_proxy.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "bbf74e09d9fc4147e877de90762c56bca4c02bf9555a4248569f8e8ba7169126",
+    "path": "tests/test_eval_beam_screening_subset.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_eval_beam_screening_subset.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "1d50a05ff7925375acdb38b3da2545aff3c3383f7aaf84d82979c10db1afc4ec",
+    "path": "tests/test_judge_beam_screening_subset.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_judge_beam_screening_subset.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "199d5086fac4ad1b68f6625450bc67517a9b61a956712ee491be63eaaeeb76f5",
+    "path": "tests/test_locked_locomo_eval_evidence.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_locked_locomo_eval_evidence.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "0a569a25efbfe4d4a28026f269bce474e94a9be0a5a0d26ab59a9b4510e5233e",
+    "path": "tests/test_nativemem_provider_policy.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_nativemem_provider_policy.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "9ce9c75cb4f3b26da451bd542792a44d642290af52f826714a1108256c45402f",
+    "path": "tests/test_run_gpt56_chunk_curve.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_run_gpt56_chunk_curve.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "3a01d4769ee491369c96df418875219569f2218b428a046a64ffcd50907cd298",
+    "path": "tests/test_run_gpt56_chunk_curve_qa.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_run_gpt56_chunk_curve_qa.py"
+  },
+  {
+    "build_hash_aliases": [],
+    "current_hash_recorded_by_builds": null,
+    "current_sha256": "5af731f72ae63f1a97535f0e877b542c41c9914f86118a94a18ee75360678155",
+    "path": "tests/test_v10_memory.py",
+    "recorded_build_hash_counts": {},
+    "snapshot": "experiments/gpt56-chunk-curve/code/current/tests/test_v10_memory.py"
+  }
+]

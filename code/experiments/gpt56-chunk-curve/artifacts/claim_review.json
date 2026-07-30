@@ -1,0 +1,9 @@
+{
+  "status": "local_assessment_complete_independent_review_pending",
+  "reason": "The independent read-only Codex result-to-claim review timed out after 300 seconds.",
+  "local_assessment": "experiments/gpt56-chunk-curve/analysis/RESULTS.md",
+  "claim_scope": {
+    "construction": "72 builds across three tiers, four windows, and six histories",
+    "downstream": "W=32 Terra/Sol screening subsets only"
+  }
+}

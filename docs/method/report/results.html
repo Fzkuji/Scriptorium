@@ -1,0 +1,348 @@
+<title>NativeMem v8 · 实验结果汇总</title>
+<style>
+  :root {
+    --ground: #f7f5f0;
+    --surface: #fffefb;
+    --ink: #1c1e24;
+    --ink-soft: #4a4e58;
+    --ink-faint: #878b95;
+    --rule: #e2ddd2;
+    --rule-soft: #ece8df;
+    --accent: #2f6f8f;
+    --accent-soft: #dcebf1;
+    --good: #2e7d54;
+    --good-bg: #e0f0e6;
+    --warn: #a8721a;
+    --warn-bg: #f5ead2;
+    --crit: #b23b3b;
+    --crit-bg: #f5dcda;
+    --mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Consolas", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #14161b; --surface: #1b1e25; --ink: #e8e6df; --ink-soft: #b0b3bc;
+      --ink-faint: #7d818c; --rule: #2c303a; --rule-soft: #23262f; --accent: #6cb6d6;
+      --accent-soft: #1e3844; --good: #66c58c; --good-bg: #163325; --warn: #d6a545;
+      --warn-bg: #33290f; --crit: #e07a7a; --crit-bg: #37201f;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #f7f5f0; --surface: #fffefb; --ink: #1c1e24; --ink-soft: #4a4e58;
+    --ink-faint: #878b95; --rule: #e2ddd2; --rule-soft: #ece8df; --accent: #2f6f8f;
+    --accent-soft: #dcebf1; --good: #2e7d54; --good-bg: #e0f0e6; --warn: #a8721a;
+    --warn-bg: #f5ead2; --crit: #b23b3b; --crit-bg: #f5dcda;
+  }
+  :root[data-theme="dark"] {
+    --ground: #14161b; --surface: #1b1e25; --ink: #e8e6df; --ink-soft: #b0b3bc;
+    --ink-faint: #7d818c; --rule: #2c303a; --rule-soft: #23262f; --accent: #6cb6d6;
+    --accent-soft: #1e3844; --good: #66c58c; --good-bg: #163325; --warn: #d6a545;
+    --warn-bg: #33290f; --crit: #e07a7a; --crit-bg: #37201f;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); line-height: 1.6;
+    font-feature-settings: "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 4rem 1.5rem 6rem; }
+
+  header.masthead { border-bottom: 2px solid var(--ink); padding-bottom: 1.5rem; margin-bottom: 3rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 .6rem;
+  }
+  h1 {
+    font-family: var(--mono); font-weight: 600; font-size: clamp(1.9rem, 4vw, 2.7rem);
+    letter-spacing: -.01em; margin: 0 0 .8rem; line-height: 1.1; text-wrap: balance;
+  }
+  .sub { color: var(--ink-soft); font-size: 1.02rem; max-width: 60ch; margin: 0; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 1.4rem; margin-top: 1.4rem;
+    font-family: var(--mono); font-size: .78rem; color: var(--ink-faint);
+  }
+  .meta-row b { color: var(--ink-soft); font-weight: 600; }
+
+  section { margin-bottom: 3.4rem; }
+  .sec-head { display: flex; align-items: baseline; gap: .9rem; margin-bottom: .4rem; }
+  .sec-num {
+    font-family: var(--mono); font-size: .82rem; color: var(--accent);
+    font-weight: 600; letter-spacing: .05em;
+  }
+  h2 {
+    font-family: var(--mono); font-size: 1.32rem; font-weight: 600;
+    margin: 0; letter-spacing: -.01em; line-height: 1.25;
+  }
+  .sec-note { color: var(--ink-soft); font-size: .94rem; margin: .5rem 0 1.4rem; max-width: 68ch; }
+  .sec-note code {
+    font-family: var(--mono); font-size: .85em; background: var(--rule-soft);
+    padding: .08em .38em; border-radius: 3px; color: var(--ink);
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+  th, td {
+    padding: .62rem .85rem; text-align: right; white-space: nowrap;
+    font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--rule-soft);
+  }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-family: var(--mono); font-size: .74rem; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--ink-faint); font-weight: 600;
+    border-bottom: 1.5px solid var(--rule); background: var(--rule-soft);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.highlight td { background: var(--accent-soft); font-weight: 600; }
+  tbody tr.baseline td { color: var(--ink-faint); }
+  td.metric { font-family: var(--mono); }
+  .lead { font-weight: 700; }
+
+  .score { font-family: var(--mono); font-weight: 600; padding: .12em .5em; border-radius: 4px; }
+  .s-good { color: var(--good); background: var(--good-bg); }
+  .s-warn { color: var(--warn); background: var(--warn-bg); }
+  .s-crit { color: var(--crit); background: var(--crit-bg); }
+
+  .delta { font-family: var(--mono); font-size: .82rem; font-weight: 600; }
+  .d-up { color: var(--good); }
+  .d-down { color: var(--crit); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 1.4rem 0; }
+  .card {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px;
+    padding: 1rem 1.1rem;
+  }
+  .card .k { font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); margin: 0 0 .3rem; }
+  .card .v { font-family: var(--mono); font-size: 1.7rem; font-weight: 600; line-height: 1; }
+  .card .u { font-size: .78rem; color: var(--ink-soft); margin-top: .3rem; }
+
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: .9rem 1.1rem; border-radius: 0 6px 6px 0; margin: 1.3rem 0;
+    font-size: .92rem; color: var(--ink);
+  }
+  .callout b { color: var(--accent); }
+
+  .chart-box { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 1.2rem; margin: 1.4rem 0; }
+  canvas { width: 100%; max-width: 100%; display: block; }
+
+  footer { border-top: 1px solid var(--rule); margin-top: 4rem; padding-top: 1.4rem; font-family: var(--mono); font-size: .76rem; color: var(--ink-faint); }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">LoCoMo Benchmark · with-original 口径</p>
+    <h1>NativeMem v8 实验结果汇总</h1>
+    <p class="sub">LLM 自管理文件系统 markdown 记忆(双视图:时间线 + 主题)。事件按 <code>[date] summary · [dia_id]</code> 存储,检索沿 dia_id 回溯原文。以下汇总自组织升级的消融链、文章化验尸与 oracle 对照。</p>
+    <div class="meta-row">
+      <span><b>judge</b> gpt-4o-mini（宽日期）</span>
+      <span><b>build/answer</b> qwen3.6-flash（方案 B）</span>
+      <span><b>双口径</b> 标准=judge 原判 · 严格=弃答算错</span>
+      <span><b>更新</b> 2026-07-10</span>
+    </div>
+  </header>
+
+  <!-- 基线参照 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">00</span><h2>基线参照</h2></div>
+    <p class="sec-note">同 with-original 口径下的对比基线,用于衡量 NativeMem 的位置。</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>方法</th><th>Overall J</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr class="baseline"><td>Full-context</td><td class="metric">72.7</td><td style="text-align:left">全对话塞进 context</td></tr>
+          <tr class="baseline"><td>LightMem / Nemori</td><td class="metric">~73</td><td style="text-align:left">同类记忆方法</td></tr>
+          <tr class="baseline"><td>Mem0</td><td class="metric">61.8</td><td style="text-align:left">向量检索记忆</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 1. 自组织升级消融链 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>自组织升级 · 消融链(3 样本双口径)</h2></div>
+    <p class="sec-note">把改动拆成四点逐一量化。<code>s0/1/2 · n=385 · 方案 B</code>。<b>标准</b> = judge 原判;<b>严格</b> = 弃答一律算错(正则 <code>not mentioned|no information|cannot be determined|not specified|unknown</code>)。旧 prompt 的 <code>Not mentioned</code> 被 judge 送分,标准分虚高,以严格分为准。</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>消融点</th><th>标准</th><th>严格</th><th>弃答</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="metric">1</td><td style="text-align:left">升级前 <code>v8ab3-B</code></td><td class="metric">79.7</td><td><span class="score s-warn">76.1</span></td><td class="metric">60</td><td style="text-align:left">平铺 topic,无整理</td></tr>
+          <tr><td class="metric">2</td><td style="text-align:left">结构升级 <code>v8selforg-b3</code></td><td class="metric">90.9</td><td><span class="score s-good">87.5</span></td><td class="metric">14</td><td style="text-align:left">递归地图+周期整理+计数感知</td></tr>
+          <tr class="highlight"><td class="metric">3</td><td style="text-align:left">检索 prompt 修 <code>v8promptfix-b3</code></td><td class="metric lead">91.7</td><td><span class="score s-good">91.7</span></td><td class="metric">0</td><td style="text-align:left">cat-first+枚举候选+反弃答</td></tr>
+          <tr><td class="metric">4</td><td style="text-align:left">文章化 <code>v8article-b3</code></td><td class="metric">88.1</td><td><span class="score s-crit">88.1</span></td><td class="metric">0</td><td style="text-align:left">净 −3.6,已砍</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout"><b>链条读法</b> — 结构升级 +11.4 严格(76.1→87.5)正中导航病根;检索 prompt 修再 +4.2 且弃答清零、标准/严格收敛(91.7)。文章化净掉 3.6 分,回退。第 3 点严格分项:multi-hop 89.2 · temporal 96.7 · open 90.5 · single 90.5。<span style="color:var(--ink-faint)">口径统一:旧文档第 3 点严格若写 90.1,重算为 91.7。</span></div>
+  </section>
+
+  <!-- 2. 方案 A/B 对比 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>方案 A（两模型）vs 方案 B（单模型）</h2></div>
+    <p class="sec-note">3 个样本(0/1/2)合并。<b>方案 A</b>:检索 agent 喂事件行+原文 → 独立 answerer 重新答题(标准公平对比协议)。<b>方案 B</b>:单个模型在连贯上下文里检索并直接答题(<code>NATIVEMEM_V8_SINGLE=1</code>)。</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>类别</th><th>方案 A</th><th>方案 B</th><th>Δ (B−A)</th></tr></thead>
+        <tbody>
+          <tr class="highlight"><td>Overall</td><td class="metric">83.9</td><td class="metric lead">89.9</td><td class="delta d-up">+6.0</td></tr>
+          <tr><td>Temporal</td><td class="metric">75.6</td><td class="metric">84.4</td><td class="delta d-up">+8.8</td></tr>
+          <tr><td>Open-domain</td><td class="metric">76.2</td><td class="metric">90.5</td><td class="delta d-up">+14.3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout"><b>为什么单模型更好</b> — 两模型交接会丢信息:检索模型已经在上下文里把答案推理出来了,却必须把记忆传给一个从零重新推理的新 answerer。单模型省掉这次交接,质量反而更高。<br><span style="color:var(--ink-faint)">口径警示:上表为标准口径。严格口径下 B 89.9→76.1(53 题弃答)、A 83.9→82.3,A/B 一度反转——B 的 <code>Not mentioned</code> 被 judge 送分。这正是消融链第 3 点反弃答 prompt 修的动因,修后 B 弃答清零、严格 91.7 重新确立单模型主方案。</span></div>
+  </section>
+
+  <!-- 3. 成本对比 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>成本对比（每题）</h2></div>
+    <p class="sec-note">方案 A 的检索成本与 B 几乎相同,差距全在 A 多出的独立答题阶段(1 次调用、1,152 输入 + 1,846 输出 token)。方案 B 既更准又更省。</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>成本项 / 每题</th><th>方案 A</th><th>方案 B</th><th>B 相对</th></tr></thead>
+        <tbody>
+          <tr><td>LLM 调用次数</td><td class="metric">6.50</td><td class="metric">5.37</td><td class="delta d-up">−17%</td></tr>
+          <tr class="highlight"><td>总 token</td><td class="metric">17,891</td><td class="metric lead">13,417</td><td class="delta d-up">−25%</td></tr>
+          <tr><td>其中·检索输入</td><td class="metric">13,848</td><td class="metric">12,344</td><td class="delta"> </td></tr>
+          <tr><td>其中·答题阶段</td><td class="metric">2,998</td><td class="metric">—</td><td class="delta d-up">省掉</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout"><b>取舍</b> — 方案 B 是主方案:overall +6 分、token −25%、调用 −17%。质量与成本同向改善,没有 trade-off。</div>
+  </section>
+
+  <!-- 4. 文章化验尸 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>第 4 点文章化验尸</h2></div>
+    <p class="sec-note">文章化(session 末把散行重写成连贯文章)在消融链第 4 点净掉 3.6 分。对 21 道翻错题(s0+s1)逐题归因,拆三桶。</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>桶</th><th>数量</th><th>原因</th></tr></thead>
+        <tbody>
+          <tr><td>A · 写丢</td><td class="metric">0</td><td style="text-align:left">信息零丢失</td></tr>
+          <tr><td>B · 写糊</td><td class="metric">7</td><td style="text-align:left">重写二次换算日期算错、原词被同义替换</td></tr>
+          <tr class="highlight"><td>C · 在库但检索选错文件</td><td class="metric lead">14</td><td style="text-align:left">文章化拆碎话题,事实散落兄弟文件,命中面变小</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout"><b>结论</b> — 文章化不丢信息,败在<b>重写失真 + 检索命中面缩小</b>;成本还是原子行的 3 倍(全程 8h vs 2.5h)。文章化路线砍掉,回归原子行(见第 5 点)。</div>
+  </section>
+
+  <!-- 5. Oracle 对照 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Oracle 对照 · sample 9</h2></div>
+    <p class="sec-note">opus 手建理想记忆 vs 自动 build,同一套 qwen 方案 B 检索,判断 build 质量是否是分数瓶颈。</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>记忆来源</th><th>Overall</th><th>Temporal</th><th>检索 token</th></tr></thead>
+        <tbody>
+          <tr><td>oracle（opus 手建）</td><td class="metric">88.0</td><td class="metric">80.4</td><td class="metric lead">13.9k</td></tr>
+          <tr class="highlight"><td>auto（自动 build）</td><td class="metric">87.3</td><td class="metric">81.6</td><td class="metric">23.6k</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout"><b>build 质量已饱和</b> — 手建与自动 overall 打平(88.0 vs 87.3),剩余分数在 qwen 检索/答题侧,不在记忆组织。oracle 只赢在成本(−41% token)和 temporal(+15.6,自动 build 的日期处理仍可挖)。</div>
+  </section>
+
+  <!-- 6. 消融链走势图 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>消融链严格分走势</h2></div>
+    <p class="sec-note">四个消融点的严格 overall 与弃答数。结构升级与检索 prompt 修拉起严格分并清零弃答,文章化回退。</p>
+    <div class="chart-box">
+      <canvas id="chunkChart" width="880" height="360" aria-label="消融链:严格分与弃答数"></canvas>
+    </div>
+    <div class="callout"><b>读法</b> — 折线为严格 overall(左轴),柱为弃答数(右轴)。第 1→3 点严格分 76.1→87.5→91.7 单调升、弃答 60→14→0 单调降,两条曲线同向说明"反弃答 + 整理"真实抬升覆盖率。第 4 点文章化严格分回落 88.1,已砍。</div>
+  </section>
+
+  <footer>
+    NativeMem v8 · results/ 汇总 · 所有 J 为 gpt-4o-mini judge 准确率 · 严格口径弃答算错,以严格分为准 · 3 样本合并数字更可信。
+  </footer>
+</div>
+
+<script>
+(function () {
+  var cv = document.getElementById('chunkChart');
+  if (!cv) return;
+  var dpr = window.devicePixelRatio || 1;
+  var cssW = cv.clientWidth || 880, cssH = 360;
+  cv.width = cssW * dpr; cv.height = cssH * dpr;
+  var ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  var ink = css('--ink'), soft = css('--ink-faint'), rule = css('--rule'),
+      accent = css('--accent'), warn = css('--warn'), good = css('--good');
+
+  var data = [
+    {lbl: '①升级前', score: 76.1, drop: 60},
+    {lbl: '②结构升级', score: 87.5, drop: 14},
+    {lbl: '③检索修',  score: 91.7, drop: 0},
+    {lbl: '④文章化', score: 88.1, drop: 0}
+  ];
+  var padL = 48, padR = 54, padT = 24, padB = 40;
+  var W = cssW, H = cssH;
+  var plotW = W - padL - padR, plotH = H - padT - padB;
+  var xs = data.map(function(d,i){ return padL + (plotW * i / (data.length - 1)); });
+
+  // 左轴 score 70-95, 右轴 弃答 0-70
+  var sMin = 70, sMax = 95, tMin = 0, tMax = 70;
+  function yScore(v){ return padT + plotH * (1 - (v - sMin) / (sMax - sMin)); }
+  function yTok(v){ return padT + plotH * (1 - (v - tMin) / (tMax - tMin)); }
+
+  ctx.font = '11px ' + (css('--mono') || 'monospace');
+
+  // 网格 + 左轴刻度
+  ctx.strokeStyle = rule; ctx.fillStyle = soft; ctx.lineWidth = 1;
+  [70,75,80,85,90,95].forEach(function(v){
+    var y = yScore(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.fillText(v, padL - 8, y + 4);
+  });
+  // 右轴刻度 弃答数
+  ctx.textAlign = 'left';
+  [0,20,40,60].forEach(function(v){
+    ctx.fillStyle = warn;
+    ctx.fillText(v, W - padR + 8, yTok(v) + 4);
+  });
+  // x 轴标签
+  ctx.fillStyle = ink; ctx.textAlign = 'center';
+  data.forEach(function(d,i){ ctx.fillText(d.lbl, xs[i], H - padB + 20); });
+
+  // 弃答柱(warn 色)
+  var bw = 26;
+  data.forEach(function(d,i){
+    var y = yTok(d.drop);
+    ctx.fillStyle = css('--warn-bg');
+    ctx.fillRect(xs[i] - bw/2, y, bw, (padT + plotH) - y);
+    ctx.strokeStyle = warn; ctx.lineWidth = 1.5;
+    ctx.strokeRect(xs[i] - bw/2, y, bw, (padT + plotH) - y);
+  });
+
+  // score 折线(accent)
+  ctx.strokeStyle = accent; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  data.forEach(function(d,i){
+    var x = xs[i], y = yScore(d.score);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  // score 点 + 标注
+  data.forEach(function(d,i){
+    var x = xs[i], y = yScore(d.score);
+    ctx.fillStyle = (d.score < 85) ? warn : good;
+    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = ink; ctx.textAlign = 'center';
+    ctx.font = 'bold 11px ' + (css('--mono') || 'monospace');
+    ctx.fillText(d.score.toFixed(1), x, y - 12);
+    ctx.font = '11px ' + (css('--mono') || 'monospace');
+  });
+
+  // 图例
+  ctx.textAlign = 'left';
+  ctx.fillStyle = accent; ctx.fillRect(padL, 6, 12, 3);
+  ctx.fillStyle = soft; ctx.fillText('严格 Overall（左轴）', padL + 18, 12);
+  ctx.strokeStyle = warn; ctx.strokeRect(padL + 150, 3, 10, 10);
+  ctx.fillText('弃答题数（右轴）', padL + 166, 12);
+})();
+</script>

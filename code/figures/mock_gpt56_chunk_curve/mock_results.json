@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "status": "synthetic_hypothetical",
+  "warning": "All values in this file are invented to preview a paper-ready result format. They are not experimental observations.",
+  "windows": ["4", "6", "8", "12", "16", "20", "24", "32", "session"],
+  "benchmarks": {
+    "LoCoMo": {"metric": "Accuracy (%)", "ci95_half_width": 0.65},
+    "LongMemEval-S": {"metric": "Accuracy (%)", "ci95_half_width": 1.0},
+    "BEAM 100K": {"metric": "Score (%)", "ci95_half_width": 0.8}
+  },
+  "models": {
+    "Sol": {
+      "model_id": "gpt-5.6-sol",
+      "selected_window": "24",
+      "color": "#0072B2",
+      "marker": "o",
+      "quality": {
+        "LoCoMo": [92.5, 92.4, 92.4, 92.3, 92.2, 92.1, 92.0, 91.3, 88.8],
+        "LongMemEval-S": [74.0, 73.8, 73.9, 73.8, 73.6, 73.5, 73.4, 72.5, 69.8],
+        "BEAM 100K": [79.7, 79.6, 79.6, 79.5, 79.4, 79.4, 79.2, 78.4, 75.9]
+      },
+      "cost": {
+        "calls_per_100_messages": [54.0, 39.0, 31.0, 23.0, 19.0, 16.5, 15.0, 12.8, 10.4],
+        "input_tokens_k_per_100_messages": [108.0, 75.0, 61.0, 46.0, 39.0, 35.0, 32.0, 28.0, 24.0],
+        "api_cost_usd_per_1000_messages": [15.20, 10.50, 8.50, 6.30, 5.40, 4.80, 4.40, 3.90, 3.50]
+      }
+    },
+    "Terra": {
+      "model_id": "gpt-5.6-terra",
+      "selected_window": "16",
+      "color": "#E69F00",
+      "marker": "s",
+      "quality": {
+        "LoCoMo": [91.8, 91.7, 91.7, 91.6, 91.3, 90.9, 90.4, 89.3, 86.9],
+        "LongMemEval-S": [72.8, 72.6, 72.7, 72.5, 72.2, 71.7, 71.0, 69.8, 67.0],
+        "BEAM 100K": [78.8, 78.7, 78.7, 78.6, 78.3, 77.8, 77.1, 75.8, 73.0]
+      },
+      "cost": {
+        "calls_per_100_messages": [55.0, 40.0, 31.5, 23.5, 19.4, 17.0, 15.4, 13.0, 10.7],
+        "input_tokens_k_per_100_messages": [111.0, 78.0, 63.0, 48.0, 41.0, 36.5, 33.5, 29.0, 25.0],
+        "api_cost_usd_per_1000_messages": [7.90, 5.40, 4.40, 3.30, 2.80, 2.50, 2.30, 2.05, 1.82]
+      }
+    },
+    "Luna": {
+      "model_id": "gpt-5.6-luna",
+      "selected_window": "12",
+      "color": "#009E73",
+      "marker": "^",
+      "quality": {
+        "LoCoMo": [90.9, 90.8, 90.7, 90.3, 89.6, 88.7, 87.9, 86.5, 83.7],
+        "LongMemEval-S": [71.1, 70.9, 70.8, 70.4, 69.6, 68.7, 67.8, 66.1, 63.8],
+        "BEAM 100K": [77.4, 77.3, 77.2, 76.7, 75.9, 74.9, 73.9, 72.4, 69.6]
+      },
+      "cost": {
+        "calls_per_100_messages": [57.0, 42.0, 33.0, 25.0, 20.5, 18.0, 16.3, 13.8, 11.2],
+        "input_tokens_k_per_100_messages": [117.0, 82.0, 67.0, 51.0, 43.5, 39.0, 35.5, 31.0, 27.0],
+        "api_cost_usd_per_1000_messages": [3.15, 2.18, 1.78, 1.34, 1.15, 1.03, 0.94, 0.84, 0.75]
+      }
+    }
+  },
+  "formal_results": [
+    {"model": "Sol", "configuration": "Default", "window": "6", "locomo": 92.4, "longmemeval": 73.8, "beam": 79.6, "calls_per_100": 39.0, "tokens_k_per_100": 75.0, "cost_per_1000": 10.50, "latency_min_per_1000": 84.0},
+    {"model": "Sol", "configuration": "Selected", "window": "24", "locomo": 92.0, "longmemeval": 73.4, "beam": 79.2, "calls_per_100": 15.0, "tokens_k_per_100": 32.0, "cost_per_1000": 4.40, "latency_min_per_1000": 36.8},
+    {"model": "Sol", "configuration": "Session", "window": "session", "locomo": 88.8, "longmemeval": 69.8, "beam": 75.9, "calls_per_100": 10.4, "tokens_k_per_100": 24.0, "cost_per_1000": 3.50, "latency_min_per_1000": 28.9},
+    {"model": "Terra", "configuration": "Default", "window": "6", "locomo": 91.7, "longmemeval": 72.6, "beam": 78.7, "calls_per_100": 40.0, "tokens_k_per_100": 78.0, "cost_per_1000": 5.40, "latency_min_per_1000": 79.2},
+    {"model": "Terra", "configuration": "Selected", "window": "16", "locomo": 91.3, "longmemeval": 72.2, "beam": 78.3, "calls_per_100": 19.4, "tokens_k_per_100": 41.0, "cost_per_1000": 2.80, "latency_min_per_1000": 41.5},
+    {"model": "Terra", "configuration": "Session", "window": "session", "locomo": 86.9, "longmemeval": 67.0, "beam": 73.0, "calls_per_100": 10.7, "tokens_k_per_100": 25.0, "cost_per_1000": 1.82, "latency_min_per_1000": 27.5},
+    {"model": "Luna", "configuration": "Default", "window": "6", "locomo": 90.8, "longmemeval": 70.9, "beam": 77.3, "calls_per_100": 42.0, "tokens_k_per_100": 82.0, "cost_per_1000": 2.18, "latency_min_per_1000": 74.5},
+    {"model": "Luna", "configuration": "Selected", "window": "12", "locomo": 90.3, "longmemeval": 70.4, "beam": 76.7, "calls_per_100": 25.0, "tokens_k_per_100": 51.0, "cost_per_1000": 1.34, "latency_min_per_1000": 47.0},
+    {"model": "Luna", "configuration": "Session", "window": "session", "locomo": 83.7, "longmemeval": 63.8, "beam": 69.6, "calls_per_100": 11.2, "tokens_k_per_100": 27.0, "cost_per_1000": 0.75, "latency_min_per_1000": 25.8}
+  ],
+  "selection_summary": [
+    {"model": "Sol", "selected_window": "24", "mean_quality_delta_pp": -0.4, "ci95_lower_pp": -1.0, "call_reduction_pct": 61.5, "token_reduction_pct": 57.3, "cost_reduction_pct": 58.1, "passes": true},
+    {"model": "Terra", "selected_window": "16", "mean_quality_delta_pp": -0.4, "ci95_lower_pp": -1.2, "call_reduction_pct": 51.5, "token_reduction_pct": 47.4, "cost_reduction_pct": 48.1, "passes": true},
+    {"model": "Luna", "selected_window": "12", "mean_quality_delta_pp": -0.5, "ci95_lower_pp": -1.4, "call_reduction_pct": 40.5, "token_reduction_pct": 37.8, "cost_reduction_pct": 38.5, "passes": true}
+  ]
+}

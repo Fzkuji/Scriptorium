@@ -1,0 +1,131 @@
+% Generated from analysis/summary.json and the audited W=32 screening summary.
+% All QA values are screening subsets, not full-benchmark scores.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Construction cost across writer windows, aggregated over 18 paired runs per window. Input is measured per 1K source tokens and time per 100 messages.}
+\label{tab:writer-window-construction}
+\begin{tabular}{rccccc}
+\toprule
+$W$ & Calls$\downarrow$ & Input$\downarrow$ & Output$\downarrow$ & Time$\downarrow$ & Abs./src.$\downarrow$ \\
+\midrule
+4  & 109.60 & 14,388.6 & 1,551.4 & 12.37 & 2.36 \\
+8  & 79.79  & 10,713.0 & 1,269.8 & 9.73  & 2.05 \\
+16 & 60.37  & 8,556.8  & 1,025.2 & 7.63  & 1.75 \\
+32 & \textbf{55.10} & \textbf{7,897.0} & \textbf{946.4} & \textbf{7.00} & \textbf{1.62} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{LoCoMo construction coverage across writer windows, averaged over three builders and two conversations. Gold-all uses turn-level annotated evidence.}
+\label{tab:writer-window-locomo}
+\begin{tabular}{rcc}
+\toprule
+$W$ & Source coverage$\uparrow$ & Gold-all$\uparrow$ \\
+\midrule
+4  & 84.31 & \textbf{99.69} \\
+8  & 79.17 & 99.03 \\
+16 & 76.57 & 99.24 \\
+32 & 74.26 & 98.90 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{LongMemEval-S construction coverage across writer windows, averaged over three builders and two histories. Gold-all uses answer-session coverage.}
+\label{tab:writer-window-longmemeval}
+\begin{tabular}{rcc}
+\toprule
+$W$ & Source coverage$\uparrow$ & Gold-all$\uparrow$ \\
+\midrule
+4  & 92.53 & 100.00 \\
+8  & 93.09 & 100.00 \\
+16 & 92.08 & 100.00 \\
+32 & \textbf{93.69} & 100.00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{BEAM-100K construction coverage across writer windows, averaged over three builders and two conversations. BEAM does not provide turn-level gold evidence.}
+\label{tab:writer-window-beam}
+\begin{tabular}{rc}
+\toprule
+$W$ & Source coverage$\uparrow$ \\
+\midrule
+4  & \textbf{99.66} \\
+8  & 99.65 \\
+16 & 97.91 \\
+32 & 98.82 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Builder-tier construction results at $W=32$, averaged over six histories. Input is measured per 1K source tokens and time per 100 messages.}
+\label{tab:w32-builder-tier}
+\begin{tabular}{lcccc}
+\toprule
+Builder & Calls$\downarrow$ & Input$\downarrow$ & Time$\downarrow$ & Source cov.$\uparrow$ \\
+\midrule
+Luna  & 55.97 & 9,185.0 & 8.17 & \textbf{93.20} \\
+Terra & \textbf{51.77} & \textbf{6,798.3} & \textbf{5.51} & 85.75 \\
+Sol   & 57.56 & 7,707.7 & 7.34 & 87.81 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{LoCoMo QA screening at $W=32$ on two conversations (314 questions).}
+\label{tab:w32-locomo-screening}
+\begin{tabular}{lc}
+\toprule
+Builder & Locked-judge accuracy$\uparrow$ \\
+\midrule
+Terra & 89.81 \\
+Sol   & \textbf{91.08} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{LongMemEval-S integration screening at $W=32$ on two questions.}
+\label{tab:w32-longmemeval-screening}
+\begin{tabular}{lc}
+\toprule
+Builder & Accuracy$\uparrow$ \\
+\midrule
+Terra & 2/2 \\
+Sol   & 2/2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\caption{BEAM-100K QA screening at $W=32$ on two conversations (40 questions).}
+\label{tab:w32-beam-screening}
+\begin{tabular}{lcc}
+\toprule
+Builder & Nugget mean$\uparrow$ & Pass rate$\uparrow$ \\
+\midrule
+Terra & \textbf{55.77} & \textbf{65.00} \\
+Sol   & 55.52 & 60.00 \\
+\bottomrule
+\end{tabular}
+\end{table}

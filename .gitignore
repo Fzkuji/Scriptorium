@@ -1,0 +1,48 @@
+# 外部仓库克隆（清单入库，源码按清单重新 clone）
+code/third_party/*
+!code/third_party/README.md
+!code/third_party/manifest.json
+!code/third_party/environments/
+!code/third_party/environments/*.txt
+
+# Benchmark 数据（体积大，按 README 说明下载）
+code/benchmarks/
+
+# 实验结果体积很大，全部保留在本地，不纳入主仓库；正式摘要另存 docs/。
+code/results/
+results
+
+# 记忆构建产物（可由脚本重新生成，只入库评测 JSON）
+code/results/*/memory*/
+code/results/*/raw*/
+code/results/**/memory*/
+
+# GPT-5.6 Writer-window 运行时文件（正式汇总结果单独生成）
+code/results/formal/gpt56-chunk-curve/proxy/
+code/results/formal/gpt56-chunk-curve/**/*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# LaTeX 编译产物
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+
+# 系统
+.DS_Store
+.env
+.venv/
+
+# paper/ 是独立 git 仓库（34+ commits 论文修订史），不作为子模块
+paper/
+
+# 适配器运行时工作目录
+.memos/
+.venv-*/
