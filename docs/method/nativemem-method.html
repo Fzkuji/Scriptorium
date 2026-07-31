@@ -92,19 +92,21 @@
   <p>Runtime 在查询开始时从目录路径和 Markdown headings 临时生成 compact structure map。该 map 不持久化，文件变化后重新生成，并计入查询的 memory-visible-token budget。</p>
 
   <h3 id="memory-unit">2.1 Memory Unit and Fields</h3>
-  <p>一个记忆单元表示一条可以独立定位、更新和引用的事实或事件。LLM 调用写入工具时使用 JSON 提交需要语义判断的字段；Runtime 生成稳定 ID、解析来源并将记录确定性地物化为 Markdown。JSON 是写入接口，不是权威记忆存储；可直接阅读、编辑、检索和由 Git 管理的 Markdown 文件才是权威状态。</p>
+  <p>一个记忆单元表示一条可以独立追踪来源和时间的事实或事件，但它不要求在 Topic 文件中独占一行。Topic 是由 LLM 自由编辑的 Markdown；记忆单元通过正文后的 footnote ID 与来源定义保持身份。JSON 只用于首次写入和 Runtime 内部 reconciliation，不是权威存储格式。</p>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>字段</th><th>产生者</th><th>示例</th><th>定义</th></tr></thead>
     <tbody>
       <tr><td><code>memory_id</code></td><td>Runtime</td><td><code>mem_7f31c2</code></td><td>记忆单元的稳定唯一标识，与来源 ID 分离；内容、日期或 Topic 位置更新时保持不变。</td></tr>
-      <tr><td><code>content</code></td><td>LLM</td><td>用户于 2026-07-20 搬到上海。</td><td>记忆正文；每个单元只表达一条可以独立引用的事实或事件。</td></tr>
-      <tr><td><code>when</code></td><td>LLM</td><td><code>2026-07-20</code></td><td>事实发生时间，而非写入时间；原文没有足够时间证据时为空。</td></tr>
-      <tr><td><code>source_refs</code></td><td>LLM 选择，Runtime 解析</td><td><code>["src_17", "src_41"]</code></td><td>支持该记忆的一个或多个候选来源 handle。来源可以是消息或文件；handle 只用于本次写入，持久化时转换为稳定定位信息。</td></tr>
-      <tr><td><code>topic_path</code></td><td>LLM</td><td><code>personal/residence.md</code></td><td>该单元在 Topical View 中所属的 Markdown 文件路径。</td></tr>
-      <tr><td><code>heading</code></td><td>LLM</td><td>居住经历</td><td>该单元在 Topic 文件中的章节位置。</td></tr>
+      <tr><td><code>content</code></td><td>LLM 直接编辑</td><td>用户于 2026 年 7 月搬到上海。</td><td>footnote ID 之前对应的自然语言正文；可以位于连贯段落中，不要求列表式记录。</td></tr>
+      <tr><td><code>when</code></td><td>LLM / Reconciler 判断，Runtime 校验</td><td><code>2026-07-20</code></td><td>事实发生时间，而非写入时间；无法确定时进入 <code>undated</code>。</td></tr>
+      <tr><td><code>source_refs</code></td><td>LLM / Reconciler 选择，Runtime 解析</td><td><code>["src_17", "src_41"]</code></td><td>一个或多个真实消息或文件来源。临时 handle 在提交前转换为稳定的 message ID、文件路径和定位信息。</td></tr>
+      <tr><td><code>topic_path</code></td><td>由 LLM 编辑后的文件位置表示</td><td><code>topics/personal/residence.md</code></td><td>不重复写入记忆正文；Runtime 从实际 Markdown 路径读取。</td></tr>
+      <tr><td><code>heading</code></td><td>由 LLM 编辑后的标题层级表示</td><td>居住经历</td><td>不重复写入记忆正文；Runtime 从 <code>#</code> 标题层级读取。</td></tr>
     </tbody>
   </table></div>
-  <p>Runtime 在调用 Writer 前为当前可用证据建立候选来源表。对话来源保留原系统的 <code>thread_id</code> 与 <code>message_id</code>；文件来源保留路径以及页码、章节或行号等定位信息。来源 handle 只是供 LLM 选择的短引用，不作为长期 ID。</p>
+
+  <h4>Source candidates</h4>
+  <p>Runtime 为当前新增消息、已有引用以及 Agent 本轮实际读取过的文件建立候选来源表。对话来源保留原系统的 <code>thread_id</code> 与 <code>message_id</code>；文件来源保留路径以及页码、章节或行号。来源 handle 只在当前写入或 reconciliation 中使用。</p>
   <pre><code>{
   "src_17": {
     "type": "message",
@@ -119,7 +121,9 @@
   }
 }</code></pre>
   <p><code>title</code>、文件路径和页码均由 Runtime 从文档元数据、正文标题、文件名及解析结果中获取，不由 LLM 编写。标题获取顺序为：文档元数据标题、正文标题、原始文件名。缺少标题时直接显示文件名，不根据内容生成新标题。</p>
-  <p>LLM 的一次写入调用只提交：</p>
+
+  <h4>Initial write</h4>
+  <p>首次从新 Source 构建记忆时，Writer 可以用一次结构化调用提交需要语义判断的内容：</p>
   <pre><code>{
   "content": "用户于 2026-07-20 搬到上海。",
   "when": "2026-07-20",
@@ -127,13 +131,44 @@
   "topic_path": "personal/residence.md",
   "heading": "居住经历"
 }</code></pre>
-  <p>Runtime 校验来源、生成 <code>memory_id</code> 并自动生成可读链接文字。链接文字使用 session title 与消息开头片段，或文档标题与定位信息；链接目标始终使用稳定的原始 ID 或文件路径。上述参数在 Topic 文件中的权威表示为：</p>
+
+  <h4>Authoritative Markdown</h4>
+  <p>Runtime 校验来源、生成 <code>memory_id</code> 并插入 footnote。之后 LLM 直接编辑这份 Markdown，不需要为普通更新调用 <code>update_memory</code>：</p>
   <pre><code>## 居住经历
 
-[2026-07-20] 用户搬到上海。 `mem_7f31c2`
+用户于 2026 年 7 月搬到上海。[^mem_7f31c2]
+同年 8 月搬到浦东，并开始在新公司工作。[^mem_21ab90][^mem_a8d910]
 
-Sources: [项目迁移讨论 · “我准备下个月搬到上海……”](../../sources/thread_123.md#msg_a8f2) · [劳动合同 · 第 2 页](../../documents/employment-contract.pdf#page=2)</code></pre>
-  <p>如果原系统没有稳定的 message ID，Runtime 才生成 ID；消息顺序由 Source 文件顺序和时间戳表示，不编码进 <code>memory_id</code>。Timeline 路径由 <code>when</code> 计算，Recent 中的位置由写入顺序维护。创建时间、更新时间、Git commit、跨视图位置和可重建检索索引均属于 Runtime 元数据，不是 LLM 写入字段。</p>
+[^mem_7f31c2]: 2026-07-20 · Sources: [项目迁移讨论 · “我准备下个月搬到上海……”](../../sources/thread_123.md#msg_a8f2)
+[^mem_21ab90]: 2026-08-03 · Sources: [居住地点更新 · “现在已经搬到浦东……”](../../sources/thread_456.md#msg_b31d)
+[^mem_a8d910]: 2026-08-05 · Sources: [入职讨论 · “今天正式入职……”](../../sources/thread_456.md#msg_c902)</code></pre>
+  <p>一个段落被解析为交替出现的正文片段和引用组。每个引用组对应从段落开头或上一个引用组之后开始、到当前引用组之前结束的正文；连续的多个 ID 共同对应同一段正文。标题、代码块和 footnote 定义不参与正文解析。</p>
+
+  <h4>Direct editing and automatic reconciliation</h4>
+  <p>LLM 可以直接重命名标题、移动段落、调整顺序和改写正文。一次文件写操作结束后，Runtime 比较修改前后的 Topic：</p>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>修改</th><th>处理方式</th></tr></thead>
+    <tbody>
+      <tr><td>只改变标题、路径、顺序、空白或 Markdown 格式</td><td>代码根据保留的 ID 直接同步，不调用 Reconciler</td></tr>
+      <tr><td>已有 ID 对应的正文发生变化</td><td>自动调用 Reconciler，判断是同一事实改写还是新增事实</td></tr>
+      <tr><td>新增无 ID 正文、拆分、合并或旧 ID 消失</td><td>自动调用 Reconciler，恢复新旧记忆对应关系</td></tr>
+      <tr><td>找不到有效来源的新事实</td><td>拒绝提交并恢复修改前状态</td></tr>
+    </tbody>
+  </table></div>
+  <p>Reconciler 只读取修改过的章节、受影响的旧记忆和有限候选来源，并在 Runtime 内部返回旧 ID 对应、新记忆正文、日期和 source handles。编辑 Agent 不生成这份 JSON，也不额外调用记忆更新工具。Runtime 校验正文必须存在、来源必须真实、旧 ID 不得隐式删除，然后分配新 ID 并重建派生视图。</p>
+
+  <h4>Ordering and updates</h4>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>顺序</th><th>定义</th></tr></thead>
+    <tbody>
+      <tr><td>Source</td><td>保持原始消息数组、JSONL 或时间戳顺序，不受 Topic 编辑影响</td></tr>
+      <tr><td>Topic</td><td>按引用在 Markdown 中的出现顺序，由 LLM 决定</td></tr>
+      <tr><td>Timeline</td><td>按事件时间排序；同一时间按主要 Source 时间，再按 <code>memory_id</code></td></tr>
+      <tr><td>Recent</td><td>按首次创建顺序维护；普通改写和移动不改变顺序，新 ID 追加到尾部</td></tr>
+    </tbody>
+  </table></div>
+  <p>现实状态后来变化时新增带时间记忆，不覆盖旧事件。普通文件改写不能隐式删除旧 ID；删除错误派生记忆必须使用显式纠错操作，且 Source 永不删除。所有校验和跨视图生成完成后才原子替换文件并创建 Git commit；失败时回滚整次修改。</p>
+  <div class="callout"><strong>实现边界：</strong>以上是目标规范。当前 V11 已有 staged Topic、跨视图同步、ID/Source 校验和失败恢复，但仍使用 HTML comment marker 与固定单行事件；自由 Markdown footnote 解析和自动 Reconciler 尚未实现。</div>
 
   <h2 id="topic">§3 Topical View Structure</h2>
   <p><code>topics/</code> 是主要语义视图，采用“目录 → Topic 文件 → 章节 → 事件记录”。目录和文件名由 Agent 根据未来检索位置选择，不预设固定 taxonomy。</p>
@@ -148,10 +183,11 @@ Sources: [项目迁移讨论 · “我准备下个月搬到上海……”](../.
 
 ## Education and Career
 
-[2023-05-08] Caroline plans to pursue counseling or mental health work. `mem_a4c921`
+Caroline plans to pursue counseling or mental health work. She later began preparing applications for relevant programs.[^mem_a4c921][^mem_3c7120]
 
-Sources: [Career planning · “I plan to pursue counseling…”](../../sources/thread_caroline.md#msg_31)</code></pre>
-  <p>目标规范是一份文件只使用一个一级标题，二级或三级标题表示不同方面。每条事件包含日期或明确的 <code>undated</code> 标记、内容、稳定 <code>memory_id</code> 和一个或多个 source references。跨 Topic 关系通过共同的 <code>memory_id</code> 与可重建索引解析；同一事件不应在多个 Topic 文件中保存彼此独立的完整副本。</p>
+[^mem_a4c921]: 2023-05-08 · Sources: [Career planning · “I plan to pursue counseling…”](../../sources/thread_caroline.md#msg_31)
+[^mem_3c7120]: 2023-06-02 · Sources: [Application planning · “I started preparing…”](../../sources/thread_caroline.md#msg_52)</code></pre>
+  <p>目标规范是一份文件只使用一个一级标题，二级或三级标题表示不同方面。正文可以保持连贯，事实或事件通过稳定 footnote ID 连接一个或多个 source references。跨 Topic 关系通过共同 ID 与可重建索引解析；同一事件不应在多个 Topic 文件中保存彼此独立的完整副本。</p>
   <div class="callout">当前 V11 已支持目录、文件、章节和事件链接，但仍可能产生一个文件多个一级标题或跨 Topic 重复记录。正式实现需要将上述目标规范加入 Runtime 校验。</div>
 
   <h2 id="construction">§4 Memory Construction</h2>
@@ -163,6 +199,7 @@ Sources: [Career planning · “I plan to pursue counseling…”](../../sources
     <li>检查跨视图 event IDs 与 source coverage；</li>
     <li>原子替换受影响文件，失败时恢复修改前状态。</li>
   </ul>
+  <p>首次写入完成后，Writer 与 Manager 可以直接编辑 Topic Markdown。只改变组织位置的修改由 Runtime 确定性同步；事实正文发生变化时，Runtime 自动执行局部 reconciliation，再统一提交 Topic、Timeline、Recent 与索引。该过程不要求编辑 Agent 使用逐字段更新接口。</p>
   <p>事实变化采用完整时间记录。旧事件和新事件均保留各自的时间与 source references；查询时由 Agent 根据问题时间范围和事件顺序判断，不通过覆盖旧 item 维护单一 current state。</p>
 
   <h2 id="management">§5 Three-Level Memory Management</h2>
