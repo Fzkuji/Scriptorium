@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NativeMem Method — File-Native Multi-View Memory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="../assets/document.css" rel="stylesheet">
+<style>
+.contribs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1.2rem 0}
+.contrib{background:var(--doc-bg);border:1px solid var(--doc-line);border-radius:10px;padding:1rem 1.1rem}
+.contrib .num{color:var(--doc-accent);font:600 .75rem var(--doc-mono)}
+.contrib h3{margin:.35rem 0 .55rem}
+.status-yes{color:var(--doc-success);font-weight:600}
+.status-no{color:var(--doc-danger);font-weight:600}
+</style>
+</head>
+<body>
+<div id="progress-bar"></div>
+<div class="document-shell">
+<aside class="document-sidebar">
+  <p class="document-sidebar-brand">NativeMem Documentation</p>
+  <nav id="toc">
+    <a class="toc-link" href="#overview">§1 Overview</a>
+    <a class="toc-link" href="#state">§2 Memory State</a>
+    <a class="toc-link toc-h3" href="#memory-unit">2.1 Memory Unit</a>
+    <a class="toc-link" href="#topic">§3 Topical View</a>
+    <a class="toc-link" href="#construction">§4 Construction</a>
+    <a class="toc-link" href="#management">§5 Management</a>
+    <a class="toc-link" href="#retrieval">§6 Query-Time Access</a>
+    <a class="toc-link" href="#boundary">§7 Evidence Boundary</a>
+  </nav>
+</aside>
+<main class="document-main">
+<article class="document-content">
+  <nav class="document-breadcrumb" aria-label="当前位置">
+    <span>LLM Agent Memory</span><span class="separator">/</span>
+    <a href="../Model-Aligned-Wiki.html">Agent-Memory-Harness</a><span class="separator">/</span>
+    <span>docs</span><span class="separator">/</span>
+    <span>method</span><span class="separator">/</span>
+    <span aria-current="page">nativemem-method.html</span>
+  </nav>
+  <header class="document-header">
+    <p class="document-eyebrow">Current Method Specification</p>
+    <h1>NativeMem: File-Native, Source-Grounded Multi-View Memory</h1>
+    <p class="document-lead">NativeMem 使用普通文本文件保存外部长期记忆。LLM 负责记忆语义、具体组织位置和查询动作；Runtime 负责引用、日期、路径、链接、预算与文件级原子更新。Git commit 与 session cursor 的在线事务仍属于目标规范。</p>
+    <p class="document-meta">updated 2026-08-01 · V11 benchmark implementation + target online contract</p>
+  </header>
+
+  <figure class="figure architecture-figure">
+    <img src="../../code/figures/nativemem_overview.svg" alt="NativeMem 多视图状态中心架构">
+    <figcaption>Source Memory 位于中心，Topical、Temporal、Recent 与 Core 视图围绕它组织；Agent 负责写入、维护和查询决策。</figcaption>
+  </figure>
+
+  <h2 id="overview">§1 Method Overview and Contributions</h2>
+  <div class="contribs">
+    <section class="contrib">
+      <span class="num">CONTRIBUTION 01</span>
+      <h3>File-native memory substrate</h3>
+      <p>Source Memory 与派生记忆均保存在可读、可版本化的文本文件中；Source 只允许追加，派生记忆可以编辑和重组。<code>grep</code> 直接读取文件；BM25 与 Embedding 只建立可以从文本重建的辅助索引，不保存唯一事实。</p>
+    </section>
+    <section class="contrib">
+      <span class="num">CONTRIBUTION 02</span>
+      <h3>Source-grounded multi-view memory</h3>
+      <p>系统在完整 Source Memory 之上同时维护 Topic、Timeline、Markdown links/backlinks、Recent Memory 和 Core Memory，并使用共同的 source references 回到原始交互。</p>
+    </section>
+  </div>
+  <p>视图类型由系统定义。Agent 决定具体保存内容、topic path、文件、章节、链接和检索动作；Runtime 不替代语义决策，只执行可验证约束。</p>
+
+  <h2 id="state">§2 Memory State</h2>
+  <p>session <em>t</em> 的记忆状态定义为 <code>M_t = (S_t, A_t, R_t, C_t)</code>，其中 <code>A_t = (T_t, D_t, G_t)</code>。</p>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>状态</th><th>文件表示</th><th>职责</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Source Memory S</strong></td><td><code>sources/*.md</code></td><td>追加保存完整原始交互；使用稳定 source IDs；不摘要、不覆盖</td></tr>
+      <tr><td><strong>Topical View T</strong></td><td><code>topics/**/*.md</code></td><td>按实体、项目或主题组织长期派生记忆</td></tr>
+      <tr><td><strong>Temporal View D</strong></td><td><code>timeline/YYYY/MM/DD.md</code> 或 <code>timeline/undated.md</code></td><td>按事件时间提供访问入口；无法确定日期时进入 <code>undated</code></td></tr>
+      <tr><td><strong>Hyperlink Relations G</strong></td><td>嵌入 Topic 与 Timeline 的 Markdown links；指向 Source 的单向 source references</td><td>Topic 与 Timeline 之间显式维护 links/backlinks；Source 保持追加且不可修改，Source 侧反向关系由 Runtime 扫描 references 临时生成</td></tr>
+      <tr><td><strong>Recent Memory R</strong></td><td><code>recent_events.jsonl</code></td><td>保留最近写入的 50 条记录；超过容量时 FIFO 移除最早记录</td></tr>
+      <tr><td><strong>Core Memory C</strong></td><td><code>core.md</code></td><td>保存每次交互都需要提供的稳定信息；当前上限为 2K tokens</td></tr>
+    </tbody>
+  </table></div>
+  <pre><code>memory/
+├── sources/
+├── topics/
+├── timeline/
+├── recent_events.jsonl
+└── core.md</code></pre>
+  <p><code>G_t</code> 没有独立目录。Topic 与 Timeline 文件物化双向 links；它们使用单向 source references 指向不可变的 Source 文件。Source 侧反向关系由 Runtime 扫描 references 临时生成，不回写 Source。BM25 与 Embedding 索引也不属于 <code>M_t</code>：它们是可删除、可重建的查询缓存；session cursor、scheduler 和 Git 运行状态位于 Runtime，而不写入记忆正文。</p>
+  <p>Runtime 在查询开始时从目录路径和 Markdown headings 临时生成 compact structure map。该 map 不持久化，文件变化后重新生成，并计入查询的 memory-visible-token budget。</p>
+
+  <h3 id="memory-unit">2.1 Memory Unit and Fields</h3>
+  <p>一个记忆单元表示一条可以独立定位、更新和引用的事实或事件。LLM 调用写入工具时使用 JSON 提交需要语义判断的字段；Runtime 生成稳定 ID、解析来源并将记录确定性地物化为 Markdown。JSON 是写入接口，不是权威记忆存储；可直接阅读、编辑、检索和由 Git 管理的 Markdown 文件才是权威状态。</p>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>字段</th><th>产生者</th><th>示例</th><th>定义</th></tr></thead>
+    <tbody>
+      <tr><td><code>memory_id</code></td><td>Runtime</td><td><code>mem_7f31c2</code></td><td>记忆单元的稳定唯一标识，与来源 ID 分离；内容、日期或 Topic 位置更新时保持不变。</td></tr>
+      <tr><td><code>content</code></td><td>LLM</td><td>用户于 2026-07-20 搬到上海。</td><td>记忆正文；每个单元只表达一条可以独立引用的事实或事件。</td></tr>
+      <tr><td><code>when</code></td><td>LLM</td><td><code>2026-07-20</code></td><td>事实发生时间，而非写入时间；原文没有足够时间证据时为空。</td></tr>
+      <tr><td><code>source_refs</code></td><td>LLM 选择，Runtime 解析</td><td><code>["src_17", "src_41"]</code></td><td>支持该记忆的一个或多个候选来源 handle。来源可以是消息或文件；handle 只用于本次写入，持久化时转换为稳定定位信息。</td></tr>
+      <tr><td><code>topic_path</code></td><td>LLM</td><td><code>personal/residence.md</code></td><td>该单元在 Topical View 中所属的 Markdown 文件路径。</td></tr>
+      <tr><td><code>heading</code></td><td>LLM</td><td>居住经历</td><td>该单元在 Topic 文件中的章节位置。</td></tr>
+    </tbody>
+  </table></div>
+  <p>Runtime 在调用 Writer 前为当前可用证据建立候选来源表。对话来源保留原系统的 <code>thread_id</code> 与 <code>message_id</code>；文件来源保留路径以及页码、章节或行号等定位信息。来源 handle 只是供 LLM 选择的短引用，不作为长期 ID。</p>
+  <pre><code>{
+  "src_17": {
+    "type": "message",
+    "thread_id": "thread_123",
+    "message_id": "msg_a8f2"
+  },
+  "src_41": {
+    "type": "file",
+    "path": "documents/employment-contract.pdf",
+    "title": "劳动合同",
+    "page": 2
+  }
+}</code></pre>
+  <p><code>title</code>、文件路径和页码均由 Runtime 从文档元数据、正文标题、文件名及解析结果中获取，不由 LLM 编写。标题获取顺序为：文档元数据标题、正文标题、原始文件名。缺少标题时直接显示文件名，不根据内容生成新标题。</p>
+  <p>LLM 的一次写入调用只提交：</p>
+  <pre><code>{
+  "content": "用户于 2026-07-20 搬到上海。",
+  "when": "2026-07-20",
+  "source_refs": ["src_17", "src_41"],
+  "topic_path": "personal/residence.md",
+  "heading": "居住经历"
+}</code></pre>
+  <p>Runtime 校验来源、生成 <code>memory_id</code> 并自动生成可读链接文字。链接文字使用 session title 与消息开头片段，或文档标题与定位信息；链接目标始终使用稳定的原始 ID 或文件路径。上述参数在 Topic 文件中的权威表示为：</p>
+  <pre><code>## 居住经历
+
+[2026-07-20] 用户搬到上海。 `mem_7f31c2`
+
+Sources: [项目迁移讨论 · “我准备下个月搬到上海……”](../../sources/thread_123.md#msg_a8f2) · [劳动合同 · 第 2 页](../../documents/employment-contract.pdf#page=2)</code></pre>
+  <p>如果原系统没有稳定的 message ID，Runtime 才生成 ID；消息顺序由 Source 文件顺序和时间戳表示，不编码进 <code>memory_id</code>。Timeline 路径由 <code>when</code> 计算，Recent 中的位置由写入顺序维护。创建时间、更新时间、Git commit、跨视图位置和可重建检索索引均属于 Runtime 元数据，不是 LLM 写入字段。</p>
+
+  <h2 id="topic">§3 Topical View Structure</h2>
+  <p><code>topics/</code> 是主要语义视图，采用“目录 → Topic 文件 → 章节 → 事件记录”。目录和文件名由 Agent 根据未来检索位置选择，不预设固定 taxonomy。</p>
+  <pre><code>topics/
+├── people/
+│   └── Caroline.md
+├── projects/
+│   └── native-memory.md
+└── themes/
+    └── lgbtq-support.md</code></pre>
+  <pre><code># Caroline
+
+## Education and Career
+
+[2023-05-08] Caroline plans to pursue counseling or mental health work. `mem_a4c921`
+
+Sources: [Career planning · “I plan to pursue counseling…”](../../sources/thread_caroline.md#msg_31)</code></pre>
+  <p>目标规范是一份文件只使用一个一级标题，二级或三级标题表示不同方面。每条事件包含日期或明确的 <code>undated</code> 标记、内容、稳定 <code>memory_id</code> 和一个或多个 source references。跨 Topic 关系通过共同的 <code>memory_id</code> 与可重建索引解析；同一事件不应在多个 Topic 文件中保存彼此独立的完整副本。</p>
+  <div class="callout">当前 V11 已支持目录、文件、章节和事件链接，但仍可能产生一个文件多个一级标题或跨 Topic 重复记录。正式实现需要将上述目标规范加入 Runtime 校验。</div>
+
+  <h2 id="construction">§4 Memory Construction</h2>
+  <p>新交互首先追加到 Source Memory。Writer 读取新增交互、当前 Topic inventory 和必要局部上下文，提出待写入内容、topic path、章节、事件日期、links 与 Core 更新。Runtime 再执行以下确定性操作：</p>
+  <ul>
+    <li>校验 source references、路径和日期；</li>
+    <li>物化 Topical 与 Temporal View，维护两个派生视图之间的 links/backlinks，并添加指向不可变 Source 的单向 references；</li>
+    <li>更新 Recent Memory 的 50 条 FIFO 窗口和 Core token 上限；</li>
+    <li>检查跨视图 event IDs 与 source coverage；</li>
+    <li>原子替换受影响文件，失败时恢复修改前状态。</li>
+  </ul>
+  <p>事实变化采用完整时间记录。旧事件和新事件均保留各自的时间与 source references；查询时由 Agent 根据问题时间范围和事件顺序判断，不通过覆盖旧 item 维护单一 current state。</p>
+
+  <h2 id="management">§5 Three-Level Memory Management</h2>
+  <p>三级管理表示三种触发时机和作用域，不是三种存储层级。下表中的在线触发属于目标 Runtime 规范；当前 V11 benchmark 使用对应的静态映射。</p>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>管理过程</th><th>目标在线触发</th><th>V11 benchmark 映射</th><th>作用域</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Incremental Writing</strong></td><td>未处理内容达到 token/context 阈值，或 session 一小时没有新消息</td><td>逐个读取预先给定的静态 session</td><td>只处理 cursor 后的新增交互及直接相关 Topic</td></tr>
+      <tr><td><strong>Periodic Local Reorganization</strong></td><td>按写入批次或新增 token 阈值</td><td>每累计固定数量 session 调用局部 Manager</td><td>只整理本周期发生新增写入的 Topic</td></tr>
+      <tr><td><strong>Daily Global Management</strong></td><td>每天最多一次，且上次管理后存在新的写入 commit</td><td>全部输入结束且存在新增记忆时调用一次全局 Manager</td><td>跨 Topic 调整目录、文件、章节与链接；没有新增记忆时跳过</td></tr>
+    </tbody>
+  </table></div>
+  <p>局部整理周期只能在 development set 上确定。test set 使用固定参数，不能根据测试问题的检索结果反复修改记忆结构。</p>
+
+  <h2 id="retrieval">§6 Query-Time Access</h2>
+  <p>查询开始时，Agent 获得用户问题、Recent Memory、Core Memory 和 compact structure map，而不是全部记忆正文。</p>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>方法或访问方式</th><th>作用</th><th>是否属于底层匹配</th></tr></thead>
+    <tbody>
+      <tr><td><code>grep</code></td><td>精确字符串或正则匹配；不建立额外索引</td><td>是：Exact Lexical</td></tr>
+      <tr><td><code>bm25_search</code></td><td>从文本构建稀疏索引，返回词法排序候选</td><td>是：Sparse Lexical</td></tr>
+      <tr><td><code>embedding_search</code></td><td>使用额外 Embedding 模型返回语义相似候选</td><td>是：Dense Semantic</td></tr>
+      <tr><td>目录、文件、timeline、links、source resolution</td><td>利用已有组织结构定位、展开和核验证据</td><td>否：Structural Access</td></tr>
+    </tbody>
+  </table></div>
+  <p>LLM 负责理解 query、生成或改写检索词、选择工具、判断候选相关性和停止检索，但不构成第四种底层检索方法。系统不规定固定的 BM25 → Embedding → LLM 流水线。</p>
+  <p>当前默认上限为 8 个 retrieval rounds、5 次工具调用和 10K memory-visible tokens。一个 retrieval round 表示一次 LLM 决策周期：模型可以结束回答，也可以提出一个或多个工具请求；工具返回后进入下一轮。因此，模型决策轮数与工具调用数是两个独立上限。单次 BM25 或 Embedding 最多返回 10 个候选。正式参数需要由 development-set budget sweep 确定。</p>
+
+  <h2 id="boundary">§7 Implementation and Evidence Boundary</h2>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>状态</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td class="status-yes">V11 benchmark 已实现</td><td>不可变 Source、Topic、Timeline、派生视图间 links/backlinks、单向 source references、静态 session Writer、固定周期局部 Manager、结束时全局 Manager、Recent 50、Core 2K、文件级原子恢复、BM25、Embedding 与检索预算</td></tr>
+      <tr><td class="status-no">在线 Runtime 尚未实现</td><td>Git commit + session cursor 事务、按 token 增量触发、一小时空闲触发和按自然日运行的 scheduler</td></tr>
+      <tr><td class="status-no">仍需实验确认</td><td>Recent、Core、周期整理、BM25、Embedding 和 Agent-controlled retrieval 的独立贡献与成本；Topic 规范化对重复和检索效率的影响</td></tr>
+    </tbody>
+  </table></div>
+  <p>已有 LoCoMo 与 LongMemEval 结果只能归属于产生这些结果的既有版本。新增组件必须在相同 memory、answerer、judge 和预算下分别消融，不能由旧结果直接推导效果。</p>
+
+  <footer>
+    <a href="../related-work/related-work.html">Related Work</a> ·
+    <a href="../related-work/survey.html">Survey</a> ·
+    <a href="README.md">Method 文档说明</a> ·
+    <a href="designs/file_native_multiview_design.md">完整设计规范</a> ·
+    <a href="reports/method-evolution-results.html">历史方法演进报告</a> ·
+    <a href="../experiments/experiment.html">Experiments</a>
+  </footer>
+</article>
+</main>
+</div>
+<script>
+const progress=document.getElementById("progress");
+const links=[...document.querySelectorAll(".toc")];
+const sections=[...document.querySelectorAll("h2[id]")];
+function update(){
+  const range=document.documentElement.scrollHeight-window.innerHeight;
+  progress.style.width=(range>0?window.scrollY/range*100:0)+"%";
+  let current=null;
+  for(const section of sections){if(section.getBoundingClientRect().top<=80)current=section}
+  links.forEach(link=>link.classList.toggle("active",current&&link.hash==="#"+current.id));
+}
+window.addEventListener("scroll",update,{passive:true});update();
+</script>
+</body>
+</html>
