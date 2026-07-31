@@ -93,20 +93,30 @@ def parse_topic_file(path: Path, topics_root: Path) -> list[MemoryEvent]:
                 if _HEADING_RE.match(candidate) or _EVENT_RE.search(candidate):
                     break
                 block.append(candidate)
-                if not content_line and _DATE_RE.search(candidate) and not candidate.lstrip().startswith("<!--"):
+                is_footnote_content = re.search(r"\[\^mem_[A-Za-z0-9_-]+\]", candidate)
+                if (
+                    not content_line
+                    and not candidate.lstrip().startswith(("<!--", "[^mem_"))
+                    and (_DATE_RE.search(candidate) or is_footnote_content)
+                ):
                     content_line = candidate
                     content_number = cursor + 1
                 cursor += 1
             joined = "\n".join(block)
             refs = _refs(joined)
-            content = _clean_markdown(content_line)
+            content = _clean_markdown(
+                re.sub(r"\[\^mem_[A-Za-z0-9_-]+\]", "", content_line)
+            )
+            date = _date(joined)
+            if content and date and not content.startswith(f"[{date}]"):
+                content = f"[{date}] {content}"
             if content and refs:
                 events.append(MemoryEvent(
                     event_id=event_id,
                     path=f"topics/{relative}",
                     line=content_number,
                     headings=list(headings),
-                    date=_date(content_line),
+                    date=date,
                     content=content,
                     refs=refs,
                 ))
@@ -137,13 +147,15 @@ def _file_hash(path: Path) -> str:
 class MemoryBM25Index:
     """Incrementally parsed local topic index with in-memory BM25 scoring."""
 
-    def __init__(self, memory_dir: str | Path):
+    def __init__(self, memory_dir: str | Path, *, persist: bool = True):
         self.memory_dir = Path(memory_dir).resolve()
         self.topics_dir = self.memory_dir / "topics"
         self.cache_path = self.memory_dir / _CACHE_NAME
+        self.persist = persist
         self._files: dict[str, dict[str, Any]] = {}
         self.events: list[MemoryEvent] = []
-        self._load_cache()
+        if self.persist:
+            self._load_cache()
         self.refresh()
 
     def _load_cache(self) -> None:
@@ -196,7 +208,7 @@ class MemoryBM25Index:
             for relative in sorted(self._files)
             for row in self._files[relative].get("events", [])
         ]
-        if changed:
+        if changed and self.persist:
             self._write_cache()
 
     @staticmethod

@@ -229,9 +229,9 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>状态</th><th>内容</th></tr></thead>
     <tbody>
-      <tr><td class="status-yes">V11 benchmark 已实现</td><td>不可变 Source、Topic、Timeline、视图链接、source references、静态 session Writer、固定周期局部 Manager、结束时全局 Manager、Recent 50、Core 2K、staged 文件更新与失败恢复、BM25、Embedding 和检索预算</td></tr>
-      <tr><td class="status-no">目标表示尚未实现</td><td>自由 Markdown footnote memory ID、段落级解析、自动 Reconciler、provider ID 适配器和 <code>timeline/undated.md</code></td></tr>
-      <tr><td class="status-no">在线 Runtime 尚未实现</td><td>Git commit + session cursor 完整事务、按 token 增量触发、一小时空闲触发和按自然日运行的 scheduler</td></tr>
+      <tr><td class="status-yes">V11 benchmark 已实现</td><td>不可变 Source、自由 Markdown footnote memory ID、段落级解析、Topic、Timeline、视图链接、source references、静态 session Writer、固定周期局部 Manager、结束时全局 Manager、Recent 50、Core 2K、staged 文件更新与失败恢复、BM25、Embedding 和检索预算</td></tr>
+      <tr><td class="status-yes">目标 Runtime 已实现</td><td>自动 Reconciler 及一次校验重试、结构修改免调用、新事实 ID 物化、显式纠错删除、provider-neutral source IDs、<code>timeline/undated.md</code>、持久化 session cursor、token/一小时空闲触发、局部批次或 token 触发、每日全局管理条件和可选 Git commit</td></tr>
+      <tr><td class="status-no">尚未完成部署验证</td><td>不同 Agent provider 的实际 plugin/adapter 集成、长时间在线 scheduler 进程、Reconciler 在真实自由编辑分布上的准确率与额外成本</td></tr>
       <tr><td class="status-no">仍需实验确认</td><td>Recent、Core、周期整理、BM25、Embedding 和 Agent-controlled retrieval 的独立贡献与成本；Topic 规范化对重复和检索效率的影响</td></tr>
     </tbody>
   </table></div>

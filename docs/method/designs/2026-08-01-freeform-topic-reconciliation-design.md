@@ -232,7 +232,7 @@ Reconciler 不是每次写文件都调用。只改变标题、路径、顺序、
 - 重复 ID、缺失 ID 和 Source 引用校验；
 - 文件级原子替换与失败恢复。
 
-当前 V11 仍使用 HTML comment marker 和固定的单行 `[date] content` 记录，并从 Timeline 中的 JSON comment 恢复事件 catalog。目标实现需要替换为自由 Markdown 引用解析，并新增 diff-based reconciliation、候选来源审计和显式纠错删除。迁移不能同时维护两套权威解析规则；切换时应提供一次性转换并让新版 Runtime 只接受新格式。
+当前 V11 已使用 footnote memory ID 解析自由 Markdown，并从 Topic 重建 catalog；Timeline JSON comment 不再是恢复权威。Runtime 已加入 diff-based reconciliation、候选来源审计、一次无效输出重试和显式纠错删除。为兼容既有 benchmark 解析器，Writer 仍输出 `memory-event` HTML comment，但该 marker 不参与新版 Topic 权威解析，后续可以在旧检索器完成迁移后删除。
 
 ## 10. 最小验证
 

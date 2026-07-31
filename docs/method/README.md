@@ -1,112 +1,94 @@
-# NativeMem 方法设计与版本演进
+# NativeMem 方法文档
 
-> 更新：2026-07-30。本文件是当前方法总入口；历史版本文档保留原貌，不删除。
+> 更新：2026-07-31。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
 
-## 相关文档
+当前实现模块：
 
-| 文档 | 内容 |
-|---|---|
-| 本文件 | 当前方法、检索架构、版本边界与实验状态 |
-| [`memory_management_design.md`](memory_management_design.md) | 写入、整理、检索三个环节的运行逻辑 |
-| [`nativemem_v3_baseline.md`](nativemem_v3_baseline.md) | v3 baseline 的历史固化 |
-| [`versions/`](versions/) | v1–v10 的独立设计与结果记录 |
-| [`../experiment-plan.html`](../experiment-plan.html) | 实验矩阵与统一评测协议 |
+- `code/src/nativemem_versions/v11/memory.py`：Writer、Manager、工作区事务和 benchmark 入口；
+- `topic_markdown.py`：自由 Markdown memory unit 的 footnote 解析与物化；
+- `reconciliation.py`：Topic diff 分类和 Reconciler 输出校验；
+- `derived_views.py`：Timeline、Recent 和 structure map 的确定性重建；
+- `runtime_state.py`：provider source record、cursor、Git 提交和触发条件；
+- `online_runtime.py`：增量写入、局部整理和每日全局管理的在线编排。
 
----
+## 文档职责
 
-## 1. 当前方法
-
-**NativeMem 让 LLM 自主管理可读的 Markdown 长期记忆，并把 LLM 本身作为主检索器。** 文件目录、`grep`、BM25、时间线和原文解析都是确定性工具；它们只返回候选或证据，LLM 在连续上下文中决定调用哪个工具、是否改写查询、是否继续搜索以及何时回答。
-
-方法坚持：
-
-- 不使用 Embedding 模型、向量索引或向量数据库；
-- 不把 BM25 设为固定的“先检索再回答”流水线；
-- 写入、维护和查询共享同一套文件结构；
-- 每条抽象事件绑定稳定 source reference，可按需回到原始轮次核验；
-- 语义决策由 LLM 完成，日期、引用、索引同步和结构不变量由代码保证。
-
-核心思想仍是 **RAM（Retrieval-Aligned Memorization）**：写入时根据“未来会到哪里寻找”选择 topic path，查询时由 LLM 在同一结构上导航。新增的 BM25 不改变这一立论，它只是 LLM 在路径不明确或需要跨文件召回时可调用的词法工具。
-
-## 2. 记忆状态
-
-NativeMem 的逻辑状态包含：
-
-1. **Source Memory**：按稳定轮次 ID 保存完整原始对话；
-2. **Topical View**：LLM 选择 topic path 和 heading 的抽象事件；
-3. **Temporal View**：代码按日期生成 `timeline/YYYY/MM/DD.md`；
-4. **Cross-links**：topic、timeline 和 source 共享 event ID 与 source refs。
-
-抽象视图负责缩小证据范围，`read_original` 负责恢复原词和邻近上下文。通用 shell 不应直接读取 `sources/`，避免查询退化为对原始对话的全文搜索。
-
-## 3. LLM-controlled retrieval
-
-NativeMem 不预设固定检索顺序。LLM 根据问题与每轮 observation 自主组合以下工具：
-
-| 工具 | 适用情况 | 返回内容 |
+| 文档 | 状态 | 内容 |
 |---|---|---|
-| 目录导航与 `cat` | 主题或人物路径明确 | 文件结构与完整 topic 上下文 |
-| `grep` | 专名、原句、编号或精确短语 | 命中行与附近文本 |
-| `bm25_search` | 路径不明确、多概念问题、grep 未命中 | 按词法相关性排序的事件候选 |
-| timeline | 日期、先后、持续时间、状态变化 | 按日期组织的事件 |
-| `read_original` | 已有 refs，需要核验原词、指代或冲突 | 受限的原始轮次与邻近上下文 |
+| 本文件 | 目录说明 | 方法文档关系和证据边界 |
+| [`nativemem-method.html`](nativemem-method.html) | 当前方法正文 | 两个主要贡献、记忆结构、Topic 规范、构建、管理、检索和实现边界 |
+| [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md) | 当前设计 | 记忆状态、写入触发、查询、维护和恢复机制 |
+| [`../internal/analysis/recent_memory_framework_comparison.md`](../internal/analysis/recent_memory_framework_comparison.md) | 内部设计分析 | 近期系统已有而 NativeMem 缺少或尚未定型的组件 |
+| [`designs/memory_management_design.md`](designs/memory_management_design.md) | 历史草案 | 2026-07-04 的运行逻辑，不再作为当前规范 |
+| [`versions/nativemem_v3_baseline.md`](versions/nativemem_v3_baseline.md) | 历史版本 | v3 baseline 固化记录 |
+| [`versions/`](versions/) | 历史版本 | v1–v10 的设计和结果记录 |
+| [`../experiments/experiment.html`](../experiments/experiment.html) | 实验页面 | 实验矩阵、结果与执行状态 |
 
-### BM25 的定位
+出现冲突时，以 `nativemem-method.html` 和 `designs/file_native_multiview_design.md` 为当前设计依据；历史文档只用于追踪方案演变和既有实验。
 
-BM25 是增强版关键词排序，不是语义模型。当前扩展以**记忆事件**为索引单元，只索引 topic 中的规范事件，避免 timeline 重复；正文、topic path、heading 和日期共同参与词法匹配，再用确定性规则对实体、路径、日期和 source grounding 做可解释重排。
+## 当前方法概览
 
-该工具默认关闭，必须通过实验确认增益后才进入正式主配置。Semble 只提供“BM25 + 结构规则重排 + 增量索引”的工程启发；NativeMem 不采用其 Embedding 部分。
+NativeMem 是一个 file-native、multi-view 的外部长期记忆系统。原始交互和派生记忆均保存在可读、可编辑、可版本化的文本文件中；LLM 负责内容抽取、组织和检索决策，Runtime 负责路径、日期、引用、链接、预算和事务边界等确定性约束。
 
-## 4. 写入与维护
+当前设计包含六类状态：
 
-### 写入
+1. `Source Memory`：追加保存完整原始交互，是事实来源；
+2. `Topical View`：按主题组织派生记忆；
+3. `Temporal View`：按事件时间组织派生记忆；
+4. `Hyperlink Relations`：使用 Markdown links 和 backlinks 表示跨文件关系；
+5. `Recent Memory`：始终保留最近写入的 50 条记录，超过容量时按 FIFO 移除最早记录；
+6. `Core Memory`：由 LLM 管理的独立文本文件，保存每次交互都需要提供的信息。
 
-Writer 查看现有结构后提出：
+文本文件是权威状态。BM25 和 Embedding 索引都可以从文件重建，只提供检索能力，不保存唯一事实。
 
-- 自包含事件内容；
-- 日期；
-- source refs；
-- topic path 与 headings。
+事实变化采用完整时间记录：旧事件和新事件都保存在 Topical View 与 Temporal View 中，并绑定各自的 source references；查询时由 LLM 根据时间范围和事件顺序判断。系统不通过覆盖旧事实维护单一 current state，也不增加 `supersedes` 或图边有效期。
 
-代码校验日期、路径和引用，生成 event ID，并同步 topic、timeline 和 source links。没有有效 source reference 的候选不能进入正式记忆。
+## 三级记忆管理
 
-### 维护
+记忆管理只包含三级：
 
-LLM 判断近义事件、topic 合并和章节组织；代码负责：
+1. **增量写入**：cursor 后的内容达到规定 token 或上下文规模时写入记忆；session 空闲一小时后处理剩余内容。写入时由 Agent 自行决定 topic path、文件和章节。
+2. **周期性局部整理**：benchmark 中每累计固定数量的 session，整理本周期发生新增写入的 Topic；实际部署中按累计写入批次或新增 token 阈值触发。基于查询成功率和检索成本的动态触发暂不作为标准方法。
+3. **每日全局管理**：每天最多一次，对跨 Topic 的目录、文件、章节和链接进行整体整理；没有新增 incremental-writing commit 时跳过。
 
-- 精确去重；
-- source refs 并集守恒；
-- topic/timeline 事件集合一致；
-- backlink 重建；
-- staging、原子替换和失败回滚。
+Git commit 是三类修改共同使用的有效状态边界。增量写入必须在 commit 成功后推进 session cursor；不增加 batch ID、`memory_dirty` 或独立写入日志。
 
-当前 V11 还包含写后检索验证与修复，但正式完整实验尚未完成，不能用 v8.8 的结果证明该机制有效。
+Git/cursor、token/空闲触发和每日管理条件已经由 `online_runtime.py` 实现；静态 benchmark harness 仍使用固定 session 写入、每 5 个 session 的局部整理和有新增记忆时的最终全局整理。Writer 外层最多 12 轮，Manager 最多 8 轮。长时间 scheduler 进程和具体 Agent provider plugin 不属于静态 benchmark 入口。
 
-## 5. 版本与证据边界
+## Query-Time Access
+
+查询时，LLM 获得问题、Recent Memory、Core Memory 和 compact structure map。标准配置提供三种检索方法，由 LLM 自主决定调用顺序、检索词和停止条件：
+
+| 检索方法 | 作用 |
+|---|---|
+| `grep` | 查找名称、数字、编号和精确短语 |
+| `bm25_search` | 在路径不明确或需要跨文件召回时提供词法排序候选 |
+| `embedding_search` | 提供语义相似候选 |
+
+目录、文件、timeline、links 和 source references 作为结构化访问方式继续保留。三种检索都只返回候选，不替代 LLM 的相关性判断和后续检索决策。
+
+标准检索预算暂定为最多 8 次 LLM retrieval rounds、5 次工具调用和 10K memory-visible tokens；development set 扫描 `3/5/8` calls 与 `6K/10K/20K` tokens，test set 固定参数。主要策略对标是 ByteRover 的 5-Tier Progressive Retrieval。其他对标包括 Infini Memory-H/A、LightMem，以及作为后续增强参考的 Semble。详细映射见 [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md#34-reference-systems)。
+
+## 当前证据边界
 
 | 状态 | 内容 | 证据边界 |
 |---|---|---|
-| 已完成主结果 | v8.8 风格的双视图、source resolution、连续文件导航 | LoCoMo 1,540 题与 LongMemEval-S 500 题 |
-| 当前实现 | V11 agentic writer/manager、事务同步、写后验证 | 实现与单元测试已有，正式矩阵待完成 |
-| 检索扩展 | 可选事件级 BM25 与结构重排 | 代码原型与测试已有，受控 QA 尚未完成 |
+| 已完成结果 | v8.8 风格的 Topical + Temporal 视图、source resolution 和连续文件导航 | LoCoMo 1,540 题与 LongMemEval-S 500 题 |
+| 当前实现线 | V11 agentic writer/manager、Recent 50 FIFO、Core 2K、周期局部整理、事务回滚、BM25、Embedding 与检索预算 | 已有实现、单元测试和小规模真实 API smoke test；正式实验矩阵尚未完成 |
+| 已实现、待部署验证 | Footnote Topic、自动 Reconciler、provider source IDs、Git/cursor、token/空闲触发和每日管理条件 | 通过单元与集成测试；尚未完成多 provider 长时间在线运行和成本评估 |
 
-现有 90.8% LoCoMo 与 87.0% LongMemEval-S 结果不能自动归因于 V11 或 BM25。新机制必须在同一 memory、同一 answerer、同一 judge 和同一预算下独立消融。
+现有 90.8% LoCoMo 与 87.0% LongMemEval-S 结果不能自动归因于 V11、Recent Memory、Core Memory、Git/cursor 事务、BM25 或 Embedding。新组件需要在相同 memory、answerer、judge 和预算下分别消融。
 
-## 6. 下一步实验
+## 待确定项
 
-固定同一批已构建 memory，比较：
+当前只保留会影响实现或实验定义的未决问题：
 
-1. 当前 LLM 文件导航；
-2. 导航 + 原始 BM25；
-3. 导航 + BM25 + 结构重排；
-4. 固定 BM25 top-k + answerer 诊断基线；
-5. 分别移除路径、实体、时间和 source-grounding 重排。
+1. Topical 与 Temporal 采用同步文本 occurrence，还是规范记录加视图链接；
+2. Writer/Manager 轮数与 Core Memory 2K token 上限是否需要根据 development set 调整；
+3. 实际部署中是否需要加入基于查询成功率和检索成本的动态整理触发；
+4. 是否采用 Semble 风格的 BM25 + Embedding 融合与结构重排。
 
-除最终准确率外，还要报告 gold evidence recall、首次有效证据轮数、各工具调用次数、可见 token、延迟和索引大小。只有受控实验确认增益后，才更新正式论文主方法和主结果。
-
-## 7. 历史演进
-
-历史版本不删除，完整记录保留在 [`versions/`](versions/)：
+## 历史演进
 
 - v1–v3：从自定义工具转向标准文件工具；
 - v4–v6：探索原文保留、事件抽取和代码路径约束；
@@ -114,5 +96,3 @@ LLM 判断近义事件、topic 合并和章节组织；代码负责：
 - v8/v8.8：形成 topic + timeline + source refs 的主结构；
 - v9/v10：研究 writer 粒度、前序信息和整理频率；
 - v11：引入 agentic writer/manager、事务同步和检索验证。
-
-当前统一表述不是“完全没有检索算法”，而是：**没有独立语义向量检索器；LLM 控制一组无学习、可审计的检索工具。**
