@@ -64,12 +64,13 @@
 
 ## 5. 方法总览图
 
-采用“生命周期 + 权威状态”布局，画布按宽幅论文图设计。信息从左到右排列：
+采用“多视图状态中心”布局，画布按宽幅论文图设计。Source Memory 位于图中央，其他视图、Agent 操作和查询流程围绕该状态组织：
 
-1. **Memory Construction**：conversation segments、LLM Memory Writer 和 Runtime validation；
-2. **File-Native Memory State**：Source Memory、Topical View、Temporal View、Recent Memory、Core Memory 和 Hyperlink Relations；
-3. **Query-Time Access**：user query、LLM Query Navigator、检索与结构化访问工具、evidence-grounded answer；
-4. **Three-Level Memory Management**：incremental writing、retrieval-triggered local reorganization 和 daily global management，作为底部独立横带。
+1. **Agent Operations** 位于左侧，包括 Memory Writer、Memory Manager 和 Query Navigator；
+2. **Multi-View Text Memory** 位于中央，以 Source Memory 为中心，Topical View、Temporal View、Recent Memory 和 Core Memory 分布在四周；
+3. **Hyperlink Relations and Source References** 在中央状态区内连接各视图，并指向可核验的 Source Memory；
+4. **Query-Time Retrieval** 位于右侧，包括 `grep`、BM25、Embedding、结构化文件访问、selected evidence 和 evidence-grounded answer；
+5. **Three-Level Memory Management** 作为 Memory Manager 的明确说明，包括 incremental writing、retrieval-triggered local reorganization 和 daily global management。
 
 图中明确表达：
 
