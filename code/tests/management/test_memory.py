@@ -77,6 +77,27 @@ def test_shell_keeps_time_metadata_out_of_natural_topic_prose(tmp_path: Path):
     assert unit.evidence[0].when == "2022"
 
 
+def test_shell_normalizes_an_unquoted_evidence_time(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "Remember this fact.")],
+        "refs": ["D1:1"],
+    }])
+
+    workspace.shell(
+        "mkdir -p topics/calibration && "
+        "printf '%s\\n' '# Calibration' '' "
+        "'Remember this fact.[^new-evidence-fact] ^new-block-fact' '' "
+        "'[^new-evidence-fact]: Time: 2026-01-01; Sources: D1:1' "
+        "> topics/calibration/facts.md"
+    )
+
+    topic = (tmp_path / "topics/calibration/facts.md").read_text()
+    assert "Time: `2026-01-01`; Sources:" in topic
+    assert parse_topic_tree(tmp_path / "topics")[0].evidence[0].when == "2026-01-01"
+
+
 def test_shell_rejects_model_invented_block_id(tmp_path: Path):
     workspace = MemoryWorkspace(tmp_path)
     workspace.archive_sessions([{
@@ -1386,6 +1407,47 @@ def test_json_response_satisfies_provider_json_mode_prompt_contract():
     )
 
     assert result == {"supported": True}
+
+
+def test_verification_retrieval_accepts_a_plain_nonempty_answer(
+    tmp_path: Path, monkeypatch
+):
+    from src.management import verification
+
+    def run_agent(*_args, final_output, **_kwargs):
+        final_output.append("6:30 AM")
+        return []
+
+    monkeypatch.setattr(verification, "_run_agent", run_agent)
+
+    result = verification._verification_retrieve(
+        tmp_path,
+        client=object(),
+        model="test",
+        question="When?",
+        usage_logger=None,
+        config=memory.MemoryConfig(),
+    )
+
+    assert result == {"question": "When?", "answer": "6:30 AM", "trace": []}
+
+
+def test_verification_retrieval_records_an_empty_answer(tmp_path: Path, monkeypatch):
+    from src.management import verification
+
+    stopped = [{"tool": "agent", "status": "stopped", "reason": "round_limit"}]
+    monkeypatch.setattr(verification, "_run_agent", lambda *_args, **_kwargs: stopped)
+
+    result = verification._verification_retrieve(
+        tmp_path,
+        client=object(),
+        model="test",
+        question="When?",
+        usage_logger=None,
+        config=memory.MemoryConfig(),
+    )
+
+    assert result == {"question": "When?", "answer": "", "trace": stopped}
 
 
 def test_verify_session_repairs_then_retries_same_question(tmp_path):

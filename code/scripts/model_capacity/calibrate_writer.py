@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import statistics
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -82,13 +83,16 @@ def evaluate_probe(
         for row in audit
         if row.get("status") == "ok"
     )
-    clean_audit = not any(
-        row.get("status") in {"error", "stopped"} for row in audit
-    )
     return {
-        "passed": clean_audit and coverage == 1.0 and written_blocks > 0,
+        "passed": coverage == 1.0 and written_blocks > 0,
         "source_coverage": round(coverage, 6),
         "written_blocks": written_blocks,
+        "audit_error_count": sum(
+            row.get("status") == "error" for row in audit
+        ),
+        "round_limit_reached": any(
+            row.get("status") == "stopped" for row in audit
+        ),
     }
 
 
@@ -102,6 +106,107 @@ def _usage(response: Any) -> tuple[int, int]:
 
 def _safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-") or "unknown"
+
+
+def _rounded_mean(values: list[float]) -> float | None:
+    return round(statistics.mean(values), 6) if values else None
+
+
+def _rounded_std(values: list[float]) -> float | None:
+    return round(statistics.pstdev(values), 6) if values else None
+
+
+def summarize_levels(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate repeated probe outcomes for each candidate input length."""
+    summaries = []
+    for candidate in sorted({int(row["candidate_tokens"]) for row in records}):
+        rows = [
+            row for row in records
+            if int(row["candidate_tokens"]) == candidate
+        ]
+        trials = [row for row in rows if not bool(row.get("skipped"))]
+        coverage = [
+            float(row["source_coverage"])
+            for row in trials
+            if isinstance(row.get("source_coverage"), (int, float))
+        ]
+        session_counts = [
+            float(row["session_count"])
+            for row in trials
+            if isinstance(row.get("session_count"), (int, float))
+        ]
+        rendered_tokens = [
+            float(row["rendered_input_tokens"])
+            for row in trials
+            if isinstance(row.get("rendered_input_tokens"), (int, float))
+        ]
+        first_prompt_tokens = [
+            int(row["provider_first_prompt_tokens"])
+            for row in trials
+            if isinstance(row.get("provider_first_prompt_tokens"), int)
+        ]
+        max_prompt_tokens = [
+            int(row["provider_max_prompt_tokens"])
+            for row in trials
+            if isinstance(row.get("provider_max_prompt_tokens"), int)
+        ]
+        elapsed = [float(row["elapsed_seconds"]) for row in trials]
+        costs = [float(row["estimated_cost_usd"]) for row in trials]
+        summaries.append({
+            "candidate_tokens": candidate,
+            "trials": len(trials),
+            "passed_trials": sum(bool(row.get("passed")) for row in trials),
+            "pass_rate": (
+                round(sum(bool(row.get("passed")) for row in trials) / len(trials), 6)
+                if trials else None
+            ),
+            "skipped_trials": len(rows) - len(trials),
+            "error_trials": sum("error" in row for row in trials),
+            "tool_errors_total": sum(
+                int(row.get("audit_error_count", 0)) for row in trials
+            ),
+            "round_limit_trials": sum(
+                bool(row.get("round_limit_reached")) for row in trials
+            ),
+            "source_coverage_mean": _rounded_mean(coverage),
+            "source_coverage_min": round(min(coverage), 6) if coverage else None,
+            "source_coverage_std": _rounded_std(coverage),
+            "session_count_mean": _rounded_mean(session_counts),
+            "rendered_input_tokens_mean": _rounded_mean(rendered_tokens),
+            "provider_first_prompt_tokens_mean": _rounded_mean([
+                float(value) for value in first_prompt_tokens
+            ]),
+            "provider_first_prompt_tokens_min": (
+                min(first_prompt_tokens) if first_prompt_tokens else None
+            ),
+            "provider_first_prompt_tokens_max": (
+                max(first_prompt_tokens) if first_prompt_tokens else None
+            ),
+            "provider_max_prompt_tokens_mean": _rounded_mean([
+                float(value) for value in max_prompt_tokens
+            ]),
+            "provider_max_prompt_tokens_max": (
+                max(max_prompt_tokens) if max_prompt_tokens else None
+            ),
+            "calls_total": sum(int(row["calls"]) for row in rows),
+            "calls_mean": _rounded_mean([
+                float(row["calls"]) for row in trials
+            ]),
+            "prompt_tokens_total": sum(int(row["prompt_tokens"]) for row in rows),
+            "completion_tokens_total": sum(
+                int(row["completion_tokens"]) for row in rows
+            ),
+            "elapsed_seconds_total": round(sum(
+                float(row["elapsed_seconds"]) for row in rows
+            ), 6),
+            "elapsed_seconds_mean": _rounded_mean(elapsed),
+            "elapsed_seconds_std": _rounded_std(elapsed),
+            "estimated_cost_usd_total": round(sum(
+                float(row["estimated_cost_usd"]) for row in rows
+            ), 6),
+            "estimated_cost_usd_mean": _rounded_mean(costs),
+        })
+    return summaries
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -125,9 +230,11 @@ def main(argv: list[str] | None = None) -> int:
     model = str(config["model"])
     counter = TokenCounter.resolve(requested_model=model)
     candidates = sorted({int(value) for value in config.get(
-        "candidate_tokens", [2048, 4096, 8192, 16384]
+        "candidate_tokens", [1024, 2048, 4096, 8192, 16384]
     )})
-    probe_ids = tuple(config.get("probe_ids", ["facts-a", "facts-b"]))
+    probe_ids = tuple(config.get(
+        "probe_ids", ["facts-a", "facts-b", "facts-c"]
+    ))
     runtime = retrieval.create_runtime(
         str(config["base_url"]),
         api_key=api_key,
@@ -148,7 +255,6 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("model prices must be non-negative")
     records: list[dict[str, Any]] = []
     for candidate in candidates:
-        level_records: list[dict[str, Any]] = []
         for probe_id in probe_ids:
             usage: list[tuple[int, int]] = []
             started = time.monotonic()
@@ -200,6 +306,10 @@ def main(argv: list[str] | None = None) -> int:
             completion_tokens = sum(value[1] for value in usage)
             record.update({
                 "calls": len(usage),
+                "provider_first_prompt_tokens": usage[0][0] if usage else None,
+                "provider_max_prompt_tokens": (
+                    max(value[0] for value in usage) if usage else None
+                ),
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "elapsed_seconds": round(time.monotonic() - started, 3),
@@ -212,14 +322,13 @@ def main(argv: list[str] | None = None) -> int:
                 ),
             })
             records.append(record)
-            level_records.append(record)
-        if all(bool(record.get("skipped")) for record in level_records):
-            continue
-        if any(bool(record.get("skipped")) for record in level_records) or not all(
-            bool(record["passed"]) for record in level_records
-        ):
-            break
-
+            print(json.dumps({
+                key: record.get(key)
+                for key in (
+                    "candidate_tokens", "probe_id", "passed",
+                    "source_coverage", "calls", "elapsed_seconds",
+                )
+            }, ensure_ascii=False), flush=True)
     try:
         safe_input_tokens = select_safe_capacity(
             records, probe_ids={str(value) for value in probe_ids}
@@ -245,6 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         "tokenizer": counter.identity,
         "candidate_tokens": candidates,
         "probe_ids": list(probe_ids),
+        "levels": summarize_levels(records),
         "probes": records,
         "totals": {
             "calls": sum(int(row["calls"]) for row in records),

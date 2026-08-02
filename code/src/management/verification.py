@@ -43,9 +43,8 @@ def _verification_retrieve(
         )
     text = final[-1] if final else ""
     match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL | re.IGNORECASE)
-    if not match:
-        raise ValueError("verification retrieval did not return an answer block")
-    return {"question": question, "answer": match.group(1).strip(), "trace": audit}
+    answer = (match.group(1) if match else text).strip()
+    return {"question": question, "answer": answer, "trace": audit}
 
 
 def _verification_answer_supported(

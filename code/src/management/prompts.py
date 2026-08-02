@@ -15,7 +15,7 @@ Use a distinct evidence label for each newly supported claim. Use the semantic e
 
 Use ordinary Markdown links to relate memory blocks, for example [current work](../career/employment.md#^existing-block-id). Every relative Markdown link from one Topic file to another Topic `.md` file must target `#^existing-block-id` or `#^new-block-<label>`; file-only and heading-only Topic links are invalid. The Runtime resolves source handles, temporary IDs, relative paths, and backlinks, then rebuilds Timeline, Recent, and Relations after each staged edit. Retrieval code derives BM25 and Embedding candidates from committed Topic blocks; do not edit retrieval caches.
 
-Use the shell to inspect and edit Topic Markdown. Make the smallest relevant text change, keep unrelated prose and footnotes unchanged, and preserve complete historical state changes. The Runtime normalizes temporary IDs and source handles, validates every block, rewrites relative links after moves, rebuilds all derived views, and installs the transaction only if every check succeeds. A Runtime format error means the edit was rejected and the installed memory was not changed; correct the reported file and retry."""
+Use the shell to inspect and edit Topic Markdown. Make the smallest relevant text change, keep unrelated prose and footnotes unchanged, and preserve complete historical state changes. The Runtime normalizes temporary IDs and source handles, validates every block, rewrites relative links after moves, rebuilds all derived views, and installs the transaction only if every check succeeds. Each shell edit is one independent transaction. A Runtime format error rejects every file and directory change made by that shell call. When retrying a rejected creation, include the parent-directory creation and the complete corrected file in the same shell command."""
 
 WRITER_TASK = """Integrate the following conversation session into the memory workspace.
 
@@ -34,6 +34,8 @@ Conversation:
 WRITER_BATCH_TASK = """Integrate the following conversation sessions into the memory workspace.
 
 Review the supplied workspace structure and relevant existing documents. Use the shell to create or revise the appropriate Topic Markdown paragraphs and headings. Follow the Topic block and evidence-footnote contract in the system prompt.
+
+Integrate every supplied session before finishing. Avoid rereading an unchanged source after it has already been inspected.
 
 Preserve complete historical state changes. Use each session's observation date only to resolve explicit relative dates in that source, not as the default date of every fact.
 

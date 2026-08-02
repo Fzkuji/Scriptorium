@@ -16,7 +16,7 @@ CITATION_GROUP = re.compile(rf"(?:\[\^(?P<id>{FOOTNOTE_ID})\])+")
 SINGLE_CITATION = re.compile(rf"\[\^(?P<id>{FOOTNOTE_ID})\]")
 DEFINITION = re.compile(
     rf"^\[\^(?P<id>{FOOTNOTE_ID})\]:\s*"
-    rf"Time:\s*`(?P<when>{TEMPORAL_VALUE_PATTERN}|undated)`"
+    rf"Time:\s*(?P<tick>`)?(?P<when>{TEMPORAL_VALUE_PATTERN}|undated)(?(tick)`)"
     r"\s*;\s*Sources:\s*(?P<sources>.+?)\s*$"
 )
 LEGACY_DEFINITION = re.compile(
