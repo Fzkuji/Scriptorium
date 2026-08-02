@@ -55,14 +55,17 @@ code/
 │   ├── adapters/
 │   ├── evaluation/
 │   └── providers/
-├── scripts/                     # 可执行命令、实验和分析
+├── scripts/                     # 运行命令、benchmark 配置和分析代码
+│   ├── analysis/
+│   ├── configs/
 │   ├── model_capacity/
 │   │   └── calibrate_writer.py
 │   └── nativemem/
 ├── tests/                       # 与 src 并列
 ├── results/                     # 所有运行产物
+│   ├── analysis/
+│   └── model_capacity/
 ├── benchmarks/
-├── experiments/
 └── third_party/
 ```
 
@@ -77,7 +80,7 @@ evaluation 和 provider clients 保持独立。
 `MemoryConfig`、`MemoryWorkspace`、`QueryConfig` 和 `collect_answer`。调用方不再
 使用 `load_version()`、`nativemem_versions.v11` 或任何版本环境变量。
 
-NativeMem 实验脚本统一放入：
+NativeMem 运行脚本统一放入：
 
 ```text
 code/scripts/nativemem/
@@ -117,6 +120,22 @@ code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json
 校准只输出 Writer 容量结果，不输出 LoCoMo benchmark 分数；任何 LoCoMo 对比仍然
 只能使用仓库锁定的 `scripts/eval_full.py`。
 
+## 取消 `experiments/` 目录
+
+`code/experiments/` 不再保留。该目录现有内容按职责处理：
+
+- 可执行分析代码移入 `code/scripts/analysis/`。
+- `experiment_manifest.json` 和 `run_matrix.jsonl` 移入
+  `code/scripts/configs/<study-name>/`。
+- CSV、JSON、TeX、分析产物和结果说明移入
+  `code/results/analysis/<study-name>/`。
+- `code/experiments/*/code/` 中的冻结代码副本删除。
+- `__pycache__`、`.pyc` 和 `.DS_Store` 删除。
+- 仓库根目录的 `experiments -> code/experiments` 链接删除。
+
+`docs/experiments/` 保存论文实验设计、协议和结果说明，不是可执行代码目录，因此
+本次不改名。
+
 ## 删除范围
 
 - `code/src/nativemem.py`
@@ -126,7 +145,7 @@ code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json
 - `code/src/legacy/`
 - `code/src/adapters/run_nativemem.py`
 - 仅服务旧 NativeMem 版本的脚本、审计脚本和测试
-- `code/experiments/*/code/` 中的冻结代码副本
+- 完成内容迁移后的 `code/experiments/` 目录
 - `docs/method/versions/` 中的旧版本说明
 
 已有 `code/results/`、`code/benchmarks/`、`code/third_party/`、`paper/` 和任何
@@ -135,7 +154,8 @@ code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json
 ## 兼容边界
 
 仓库根目录的 `src -> code/src`、`scripts -> code/scripts`、`tests -> code/tests`
-等相对链接继续保留。它们只解决仓库路径兼容，不再承担 NativeMem 版本兼容。
+等仍有实际目标的相对链接继续保留；`experiments` 链接随目录删除。保留的链接只
+解决仓库路径兼容，不再承担 NativeMem 版本兼容。
 历史结果中的代码哈希和旧路径不重写；需要复现旧版本时使用 Git 提交
 `31cc34c` 或更早提交。
 
