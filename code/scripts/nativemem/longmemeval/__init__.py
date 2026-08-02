@@ -4,7 +4,6 @@ from scripts.nativemem.common import atomic_json, read_json, stop_on_signal
 from .execution import (
     answer_one,
     collect_answer,
-    install_trace_hooks,
     lme,
     run_pending,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "answer_one",
     "atomic_json",
     "collect_answer",
-    "install_trace_hooks",
     "lme",
     "load_completed_results",
     "main",

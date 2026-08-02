@@ -36,10 +36,8 @@ def main(argv: list[str] | None = None) -> int:
     memory_config = memory.MemoryConfig(
         core_max_tokens=args.core_max_tokens,
         recent_limit=args.recent_limit,
-        agent_max_rounds=args.agent_max_rounds,
-        manager_max_rounds=args.manager_max_rounds,
-        thinking=args.thinking,
-        retry_log=args.retry_log,
+        max_turns=args.max_turns,
+        max_budget_usd=args.max_budget_usd,
     )
     build_config = adapter.BuildConfig(
         session_batch=args.session_batch,
@@ -54,19 +52,15 @@ def main(argv: list[str] | None = None) -> int:
         memory_config=memory_config,
     )
     query_config = retrieval.QueryConfig(
-        max_rounds=args.retrieval_max_rounds,
-        max_tool_calls=args.retrieval_max_tool_calls,
-        visible_token_limit=args.memory_visible_tokens,
-        max_output_tokens=args.answer_max_tokens,
+        max_turns=args.max_turns,
+        max_budget_usd=args.max_budget_usd,
         verify_sources=args.verify_sources,
     )
     backend = retrieval.create_runtime(
         args.base_url,
-        api_format=args.api_format,
         model=args.model,
         api_key=args.api_key,
-        max_retries=args.max_retries,
-        timeout_seconds=args.timeout_seconds,
+        cli_path=args.claude_cli,
         build_config=build_config,
         query_config=query_config,
     )

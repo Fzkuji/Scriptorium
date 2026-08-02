@@ -16,7 +16,7 @@ from .conversation import (
     session_content,
 )
 from .management.api import render_writer_input, writer_protocol_sha256
-from .runtime.capacity import WriterCapacity, pack_complete_sessions
+from .runtime.capacity import WriterCapacity, pack_complete_messages
 from .runtime.tokenization import TokenCounter
 
 
@@ -57,7 +57,7 @@ def build_memory(
     memory_dir: str | Path,
     max_sessions: int | None = None,
     *,
-    client: Any,
+    agent: Any,
     model: str,
     usage_logger=None,
     config: BuildConfig | None = None,
@@ -94,7 +94,7 @@ def build_memory(
             model=model,
             writer_protocol_sha256=writer_protocol_sha256(),
         )
-        batches = pack_complete_sessions(
+        batches = pack_complete_messages(
             sessions,
             max_input_tokens=capacity.safe_input_tokens,
             render_batch=render_writer_input,
@@ -107,11 +107,13 @@ def build_memory(
         ]
 
     completed_sessions = 0
+    session_by_last_ref = {
+        session["refs"][-1]: session for session in sessions if session["refs"]
+    }
     for batch in batches:
         audit = memory.write_sessions(
             memory_dir,
-            client=client,
-            model=model,
+            agent=agent,
             sessions=batch,
             usage_logger=usage_logger,
             config=config.memory_config,
@@ -121,6 +123,9 @@ def build_memory(
             if record.get("status") == "ok":
                 touched_topics.update(record.get("topic_paths", []))
         for session in batch:
+            complete_session = session_by_last_ref.get(session["refs"][-1])
+            if complete_session is None:
+                continue
             completed_sessions += 1
             should_verify = verify_writes and (
                 completed_sessions % verify_every == 0
@@ -129,11 +134,10 @@ def build_memory(
             if should_verify:
                 verification = memory.verify_session(
                     memory_dir,
-                    client=client,
-                    model=model,
-                    observation_date=session["observation_date"],
-                    turns=session["turns"],
-                    refs=session["refs"],
+                    agent=agent,
+                    observation_date=complete_session["observation_date"],
+                    turns=complete_session["turns"],
+                    refs=complete_session["refs"],
                     usage_logger=usage_logger,
                     config=config.memory_config,
                 )
@@ -157,8 +161,7 @@ def build_memory(
             ):
                 memory.organize_topics(
                     memory_dir,
-                    client=client,
-                    model=model,
+                    agent=agent,
                     touched=touched_topics,
                     usage_logger=usage_logger,
                     config=config.memory_config,
@@ -168,8 +171,7 @@ def build_memory(
     if event_count and config.final_manage:
         memory.manage_memory(
             memory_dir,
-            client=client,
-            model=model,
+            agent=agent,
             usage_logger=usage_logger,
             config=config.memory_config,
         )

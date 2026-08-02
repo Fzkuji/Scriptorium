@@ -31,11 +31,15 @@ def build_record(
         "config": asdict(build_config),
         "event_count": event_count,
         "wall_time_s": round(time.monotonic() - started, 3),
-        "calls": len(build_calls),
+        "calls": sum(int(record.get("calls", 1) or 0) for record in build_calls),
         "input_tokens": sum(record["prompt_tokens"] for record in build_calls),
         "output_tokens": sum(
             record["completion_tokens"] for record in build_calls
         ),
+        "reported_cost_usd": round(sum(
+            float(record.get("total_cost_usd", 0) or 0)
+            for record in build_calls
+        ), 8),
         "memory_dir": str(memory_dir),
         "memory_sha256": tree_sha256(memory_dir),
         "memory": memory_inventory(memory_dir),

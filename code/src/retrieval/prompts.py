@@ -29,6 +29,10 @@ tool or the specialized memory tools and the actual inventory below. Search
 wording may differ from the question, so inspect semantically relevant files
 and use several literal queries when needed.
 
+When useful, first locate likely files, inspect their headings, and read only
+the relevant sections. This is a recommendation, not a required tool order.
+read_memory_file supports optional 1-based offset and limit parameters.
+
 For temporal, update, counting, comparison, and multi-session questions,
 inspect all relevant events. Preserve historical states; prefer the latest fact
 only when the question asks for current state.
@@ -59,9 +63,3 @@ Question: {question}
 
 After tool use, output exactly one <answer>...</answer> block and no reasoning.
 """
-
-FINAL_PROMPT = (
-    "Retrieval has ended. Do not call tools. Answer the original question "
-    "using only the evidence above. If it is insufficient, answer "
-    "Insufficient information. Output exactly one <answer>...</answer> block."
-)

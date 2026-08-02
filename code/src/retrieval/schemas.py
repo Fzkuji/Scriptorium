@@ -6,7 +6,7 @@ TOOL_DEFINITIONS = [
         "description": (
             "Run a read-only command in the visible memory workspace. Supported "
             "commands: find, rg, grep, cat, sed -n, ls, head, tail, wc, sort, "
-            "uniq, cut, and pwd."
+            "uniq, cut, and pwd. Claude Code manages tool-result context."
         ),
         "parameters": {"type": "object", "properties": {
             "command": {"type": "string"},
@@ -21,9 +21,14 @@ TOOL_DEFINITIONS = [
     }},
     {"type": "function", "function": {
         "name": "read_memory_file",
-        "description": "Read one visible memory file.",
+        "description": (
+            "Read one visible memory file. Optional offset and limit select a "
+            "1-based line window."
+        ),
         "parameters": {"type": "object", "properties": {
             "path": {"type": "string"},
+            "offset": {"type": "integer", "minimum": 1},
+            "limit": {"type": "integer", "minimum": 1},
         }, "required": ["path"]},
     }},
     {"type": "function", "function": {

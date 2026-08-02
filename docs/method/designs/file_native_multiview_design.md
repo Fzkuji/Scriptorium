@@ -1,8 +1,8 @@
-# NativeMem File-Native Multi-View 设计
+# Agent Memory Harness File-Native Multi-View 设计
 
 > 状态：当前设计规范，updated 2026-08-02。Topic Markdown 的逐字段规则以 [`../nativemem-method.html`](../nativemem-method.html) 为准。
 
-NativeMem 使用文本文件保存外部记忆。LLM 负责 Topic/Core 的语义内容、组织路径、证据日期和检索动作；Runtime 负责稳定 ID、来源解析、相对路径、派生视图和事务一致性。本文只定义方法结构，不固定 benchmark、模型或实验参数。
+Agent Memory Harness 使用文本文件保存外部记忆。LLM 负责 Topic/Core 的语义内容、组织路径、证据日期和检索动作；Runtime 负责稳定 ID、来源解析、相对路径、派生视图和事务一致性。本文只定义方法结构，不固定 benchmark、模型或实验参数。
 
 ## 1. Memory State
 
@@ -66,17 +66,29 @@ NativeMem 只采用三级记忆管理。
 
 触发条件是 cursor 后未处理内容达到规定 token 或上下文规模，或者 session 一小时没有新消息。作用域仅限本批新增消息及其直接涉及的局部记忆。
 
-每个 session 使用一个 `memory_cursor` 表示已处理到的最后一条消息。Writer 读取本批原始消息、compact structure map 和相关局部文件，通过 shell 直接形成完整 Topic Markdown，并在需要时更新 Core。Runtime 解析本次新增 block IDs，按首次创建顺序刷新 Recent；超过 50 条时只从 Recent 窗口移除最早记录。执行期间新到达的消息留到下一批处理，不建立额外 buffer。
+每个 session 使用一个 `memory_cursor` 表示已处理到的最后一条消息。Writer 获得本批原始消息，以及只包含 Topic/Core 路径的 compact structure map；它使用的 staged workspace 只暴露可编辑的 Topic/Core tree，不暴露完整 Source、Timeline、Recent、Relations 或检索索引。Runtime 解析本次新增 block IDs，按首次创建顺序刷新 Recent；超过 50 条时只从 Recent 窗口移除最早记录。执行期间新到达的消息留到下一批处理，不建立额外 buffer。
 
 写入 Topical View 时，LLM 根据未来检索位置复用或创建路径、文件、章节和链接，并把语义时间按实际精度写在对应 evidence footnote 中。无法确定任何年份时写 `undated`。Runtime 按年份、月份或完整日期的原始精度生成 Temporal View，不从正文、文件时间或 commit 时间重新推断。
 
 #### 2.1.1 Writer Capacity Calibration
 
-一次 Writer 调用包含多少个 session，由目标模型在当前 Writer protocol 下的校准结果决定，而不是直接使用模型声明的上下文窗口。校准脚本使用两组合成事实 probe，按递增 token 容量运行 Writer；输入 token 包含固定 system prompt、批量写入提示和全部完整 session。连一个完整 Writer 输入都容不下的候选档位只记录为 skipped。其余容量只有在两个 probe 都无 tool error/round limit、产生有效 Topic/Core blocks 且覆盖全部预期 source references 时才通过。扫描在首个实际执行失败容量后停止，取此前最大的通过容量作为 `safe_input_tokens`。
+一次 Writer 调用包含多少输入，由目标模型在当前 Writer protocol 下的校准结果决定，而不是直接使用模型声明的上下文窗口。校准脚本先构造一份固定的 20-session 工作负载，再让每个候选 token 上限处理这份工作负载的全部内容。容量较小时，Runtime 将同一份内容分成更多批次；容量较大时批次更少。因此各档位比较的是相同总输入上的完整成本、耗时和质量，不是不同长度样本的单次调用。
 
-校准结果保存 model、Writer protocol hash、tokenizer identity、候选容量以及逐 probe 的 session 数、实际输入 token、调用次数、输入/输出 token、耗时和来源覆盖率。构建入口通过 `BuildConfig.calibration_path` 显式读取结果，并验证 model 与 protocol hash。Runtime 按原顺序贪心组合完整 session；候选 session 使批次超过上限时，从该 session 开始下一批。单个完整 session 本身超过上限时返回错误，不截断。未提供校准文件时，`session_batch` 仍作为固定回退参数。
+分批保持原始消息顺序，并且只在完整 message 边界切分。若加入下一条 message 后超过上限，该 message 整体留到下一批；不截断 message 正文。session 可以跨批次，Runtime 只在其最后一条 message 写入完成后执行该 session 的验证与管理计数。单条完整 message 本身超过上限时明确失败。
+
+每个档位运行两组内容等价但标识不同的 probe。内容通过要求最终权威 Topic/Core 状态覆盖全部预期事实及 source references；tool error 数和是否达到 agent round limit 单独记录，用于分析格式稳定性与停止行为，不覆盖最终内容判定。推荐输入预算在内容全部通过的档位中按整份工作负载的平均成本最低者选择，成本相同时再比较平均耗时；同时单独保存本次测试的最大通过档位。校准结果保存 model、Writer protocol hash、tokenizer identity、固定工作负载 hash、候选容量、批次数、调用次数、输入/输出 token、耗时、成本、内容覆盖率和 completion rate。构建入口通过 `BuildConfig.calibration_path` 显式读取结果，并验证 model 与 protocol hash；未提供校准文件时，`session_batch` 仍作为固定回退参数。
+
+当前 PackyAPI DeepSeek V4 Flash 校准使用两组相同规模的 20-session 工作负载，每组完整输入为 16,261 个本地计数 token。测试档位为 2K、4K、8K、10K、12K、14K 和 16K。16K 的四次内容通过率为 100%，平均每组 1 个批次、10 次模型调用、53.20 秒和 $0.03143，因而推荐为当前 Writer 输入预算；其 completion rate 为 75%，说明停止行为仍有波动。这里的 16K 只是当前 protocol 和工作负载下的推荐值及最大已测试通过值，不表示模型声明或实测的最大上下文长度。
 
 该校准只控制增量写入批量，不增加记忆状态、运行时字段或检索方法。脚本位于 `code/scripts/model_capacity/calibrate_writer.py`，输出位于 `code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json`。
+
+#### 2.1.2 Agent Context and Tool Output
+
+Writer prompt 只提供一条非强制建议：“建议先根据文件结构定位可能相关的文件，再查看其章节结构并读取必要内容；具体检索与编辑方式由模型决定。”Prompt 不规定命令名、固定步骤或必须依次执行的工具调用。
+
+Writer、Manager、verification 和查询均作为 Claude Agent SDK trajectory 执行。工具调用解析、provider 重试、工具错误返回和上下文管理由该框架负责；Harness 不再维护独立的 OpenAI chat-completions 循环、DSML 兼容解析、工具输出缓存或逐轮压缩策略。BM25 与 Embedding 继续使用 `top_k`，`read_memory_file` 使用可选的 1-based `offset` / `limit` 行窗口。
+
+每条 trajectory 使用临时 `CLAUDE_CONFIG_DIR`、`--bare`、`--no-session-persistence` 和严格 MCP 配置，不读取用户的 Claude Code 设置、插件或订阅登录态。入口通过函数参数接收 endpoint、API key、model、轮次与成本上限；适配器只在子进程环境中传递 Claude Code 所需的 Anthropic 配置，不修改父进程环境。
 
 ### 2.2 Periodic Local Reorganization
 
@@ -92,7 +104,7 @@ NativeMem 只采用三级记忆管理。
 
 如果没有新的 incremental-writing commit，本次管理直接结束。全局管理不重新处理 Source Memory，也不改变 session cursor。
 
-当前 benchmark 实现将 Writer/verification agent 的外层上限设为 12 个模型轮次，将局部与全局 Manager 设为 8 个模型轮次；达到上限时在 audit 中记录 `round_limit`。这些上限用于限制异常循环，不替代后续的构建成本消融。
+Writer、verification、局部 Manager、全局 Manager 和查询统一默认最多执行 20 个模型轮次，并可设置单条 trajectory 的 `max_budget_usd`。停止原因、实际轮次、token、耗时和框架报告成本写入 audit 或调用日志。20 轮是安全上限，不要求 Agent 使用完，也不替代构建成本统计。
 
 ## 3. Query-Time Access
 
@@ -127,12 +139,16 @@ BM25 与 Embedding 的索引单元是 evidence 支持的事实片段，不是给
 
 | 工具 | 作用 |
 |---|---|
-| `list` / `read` | 浏览目录、文件、章节和局部上下文 |
-| `timeline` | 按日期范围读取事件 |
-| `follow_link` | 读取正向链接和 backlinks |
+| 只读 `bash` 文件访问 | 浏览目录、文件、章节和局部上下文 |
+| Timeline 文件 | 按日期目录和文件读取事件 |
+| Topic Markdown links 与 Relations 文件 | 读取正向链接和 backlinks |
 | `grep` / `BM25` / `Embedding` | 直接在 Source 文件中检索原始交互 |
 
-工具没有固定调用顺序。Agent 根据每轮返回结果决定继续检索、切换视图、核验原文或回答。
+工具没有固定调用顺序。Prompt 只建议先根据文件结构定位相关文件，再查看章节结构并读取必要内容；Agent 自主决定实际命令、检索顺序、是否切换视图以及何时回答。
+
+`read_memory_file` 是当前代码中暴露给模型的受限文件读取工具：它校验相对路径，并只允许读取当前检索条件可见的记忆文件。它不是一种检索方法。Native 条件同时提供只读 shell，因此两者在读取能力上有重叠；但不提供 shell 的检索消融条件依赖 `read_memory_file` 获得统一、受控的文件访问。该工具不能直接删除，否则会同时改变消融条件的可用信息和工具协议。
+
+当前实现保留 `read_memory_file`，并提供可选的 1-based `offset` / `limit`。省略两者时读取全文；提供参数时只返回相应行窗口。所有检索条件使用同一 schema。Native 条件额外保留只读 shell，Agent 自主决定使用文件窗口、`grep` / `rg`，还是 BM25 / Embedding。
 
 Source Memory 是普通、可检索的 Markdown 文件。`grep`、BM25、Embedding、目录浏览和文件读取始终可以访问 Source，不要求 Agent 先从 Topic 获得 source ID，也不使用单独的 `resolve_sources` 工具。
 
@@ -140,25 +156,16 @@ Source Memory 是普通、可检索的 Markdown 文件。`grep`、BM25、Embeddi
 
 ### 3.3 Retrieval Budget and Stopping
 
-标准配置为每个 query 设置三个同时生效的上限：
+标准配置将停止控制交给 Claude Agent SDK，只保留两个 trajectory 级参数：
 
 | 约束 | 默认值 | 定义 |
 |---|---:|---|
-| LLM retrieval rounds | 8 | Agent 判断是否调用工具或结束检索的次数 |
-| Tool calls | 5 | `grep`、BM25、Embedding、文件读取、timeline 和 links 的调用总数 |
-| Memory-visible tokens | 10K | Recent Memory、Core Memory、structure map 及全部工具返回给 Agent 的记忆内容总量 |
+| LLM retrieval rounds | 20 | Claude Code trajectory 的最大模型轮次 |
+| Cost budget | 未设置 | 可选的单条 trajectory 美元成本上限 |
 
-单次 BM25 或 Embedding 默认最多返回 10 个候选。文件读取优先返回一个完整 heading block 或有限行范围，不默认读取整个文件。工具结果超过剩余 token 预算时由 Runtime 截断，并保留路径、日期和 source references。
+单次 BM25 或 Embedding 默认最多返回 10 个候选，`read_memory_file` 可按行窗口读取。Prompt 仅建议先定位相关文件、查看章节结构并读取必要内容，不强制命令或工具顺序。
 
-Agent 满足以下任一条件时停止检索：
-
-1. 已获得足以支持答案的证据，并能给出相应 source references；
-2. 连续两次工具调用没有增加新的 source references 或新的规范化证据行；
-3. 任一硬上限耗尽。
-
-正常停止时，Agent 根据已有证据回答。达到硬上限但证据不足时，Agent明确返回信息不足，不继续调用工具。wall-clock time 只记录为评测指标，不作为 benchmark 的停止条件，避免不同 API 延迟改变检索行为。
-
-默认值不是方法结论。development set 比较 `3/5/8` 次 tool-call limits 和 `6K/10K/20K` memory-visible-token budgets，在不降低任务成功率的配置中选择成本最低者；test set 固定所选参数，只运行一次。8 个 retrieval rounds 作为防止异常循环的外层上限，不单独调参。
+Agent 自主判断证据是否足够并结束；达到框架轮次或可选成本上限时由 Claude Agent SDK 终止。Harness 不再实现“连续两次无新增证据”、固定工具调用次数或 memory-visible-token 停止条件。wall-clock time、实际模型轮次、工具调用次数和可见记忆 token 只作为评测指标记录。
 
 ### 3.4 Reference Systems
 
@@ -187,7 +194,7 @@ ByteRover 的完整 agentic fallback 允许最多 50 次迭代；LightMem 的粗
 - 校验检索 Agent 提供的可选 `date_from` / `date_to`，使用区间重叠完成 BM25 与 Embedding 的候选过滤；
 - 原子替换 Topic、Timeline、Recent、Relations、Core 与创建顺序，并在失败时恢复上一版本；
 - 对局部整理、全局整理和查询循环执行独立轮数或 token 预算。
-- 校验 Writer capacity artifact 的 model、protocol hash 与 tokenizer identity，并只按安全上限组合完整 session。
+- 校验 Writer capacity artifact 的 model、protocol hash 与 tokenizer identity，并只按推荐上限在完整 message 边界分批。
 
 Git commit、session cursor、按 token 增量触发、一小时空闲触发和每日管理条件已在在线 Runtime 中实现。当前静态 benchmark harness 不启动长时间 scheduler 进程；构建批量可以由固定 `session_batch` 或冻结的 Writer capacity artifact 决定，局部/最终管理映射仍需在 development set 固定，因此在线触发保证不能归属于既有 benchmark 结果。
 
@@ -222,13 +229,13 @@ Git commit、session cursor、按 token 增量触发、一小时空闲触发和�
 | File-only | Agent 使用目录、文件和 grep |
 | BM25-only | 每个 query 固定执行 BM25，再由 LLM回答 |
 | Embedding-only | 每个 query 固定执行 Embedding search，再由 LLM回答 |
-| NativeMem Retrieval | Agent 自主选择 grep、BM25、Embedding 和结构化访问工具 |
+| Agent Memory Harness Retrieval | Agent 自主选择 grep、BM25、Embedding 和结构化访问工具 |
 | ByteRover-style | exact/fuzzy cache、BM25、single LLM、full agentic search 的固定五级路由 |
 | Semble-style | BM25 + Embedding + RRF + 记忆结构重排 |
 
-主要比较 NativeMem Retrieval 与 ByteRover-style；其余配置用于判断增益来自具体检索器、Agent控制还是混合重排。
+主要比较 Agent Memory Harness Retrieval 与 ByteRover-style；其余配置用于判断增益来自具体检索器、Agent控制还是混合重排。
 
-所有配置必须记录逐题 retrieval rounds、tool calls、memory-visible tokens、最终证据 tokens、端到端时间和模型调用成本。除方法本身具有固定预算外，主比较统一使用 development set 选定的 NativeMem 预算；另报告 `3/5/8` tool calls 与 `6K/10K/20K` visible tokens 的预算曲线。
+所有配置必须记录逐题模型轮次、tool calls、memory-visible tokens、最终证据 tokens、端到端时间和模型调用成本。主比较统一使用 development set 选定的模型轮次、可选成本上限和检索器 `top_k`。
 
 现有 LoCoMo 和 LongMemEval-S 结果只能证明已经完成实验的版本。Recent Memory、Core Memory、周期性局部整理、BM25、Embedding、Git/cursor 事务与在线触发均已进入代码，但仍需要分别验证；新增实现不能由既有结果直接证明。
 
@@ -237,7 +244,7 @@ Git commit、session cursor、按 token 增量触发、一小时空闲触发和�
 当前只保留会影响实现或实验定义的问题：
 
 1. memory block 的理想语义粒度是否需要在 development set 上进一步约束；
-2. Writer 12 轮、Manager 8 轮和 Core Memory 2K token 上限是否需要根据 development set 调整；
+2. 统一的 20 轮安全上限、可选成本上限和 Core Memory 2K token 上限是否需要根据 development set 调整；
 3. 实际部署中是否需要加入基于查询成功率与检索成本的动态整理触发；
 4. 是否采用 Semble 风格的 BM25 + Embedding 融合与结构重排。
 

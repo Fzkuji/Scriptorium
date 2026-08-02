@@ -37,19 +37,18 @@ def main() -> int:
     parser.add_argument("--model", default="gpt-5.6-sol")
     parser.add_argument("--provider-name", required=True)
     parser.add_argument("--workers", type=int, default=8)
-    parser.add_argument("--max-tokens", type=int, default=4096)
-    parser.add_argument("--question-retries", type=int, default=3)
+    parser.add_argument("--claude-cli")
+    parser.add_argument("--max-turns", type=int, default=20)
+    parser.add_argument("--max-budget-usd", type=float)
     parser.add_argument("--benchmarks", default="locomo,beam-100k")
     parser.add_argument("--unit-ids", default="")
     parser.add_argument("--conditions", default=",".join(CONDITIONS))
     parser.add_argument("--exclude-recent", action="store_true")
     args = parser.parse_args()
-    if (
-        args.workers < 1
-        or args.max_tokens < 1
-        or args.question_retries < 1
-    ):
-        parser.error("workers, max-tokens, and question-retries must be positive")
+    if args.workers < 1 or args.max_turns < 1:
+        parser.error("workers and max-turns must be positive")
+    if args.max_budget_usd is not None and args.max_budget_usd <= 0:
+        parser.error("max-budget-usd must be positive")
     conditions = tuple(filter(None, args.conditions.split(",")))
     if not conditions or any(
         condition not in CONDITIONS for condition in conditions
@@ -66,12 +65,14 @@ def main() -> int:
         validate_build(build_dir(build_root, row), row)
 
     query_config = retrieval.QueryConfig(
-        max_output_tokens=args.max_tokens,
+        max_turns=args.max_turns,
+        max_budget_usd=args.max_budget_usd,
     )
     backend = retrieval.create_runtime(
         args.base_url,
         model=args.model,
         api_key=args.api_key,
+        cli_path=args.claude_cli,
         query_config=query_config,
     )
     jobs: list[Job] = []
@@ -153,7 +154,6 @@ def main() -> int:
     pool = ThreadPoolExecutor(max_workers=min(args.workers, len(jobs) or 1))
     active: dict[Any, Job] = {}
     pending = deque(jobs)
-    attempts: dict[tuple[str, str, str], int] = {}
     interrupted = False
     try:
         for _ in range(min(args.workers, len(jobs))):
@@ -167,24 +167,11 @@ def main() -> int:
                 try:
                     record = future.result()
                 except Exception as exc:  # noqa: BLE001
-                    key = (
-                        condition,
-                        row["run_id"],
-                        str(question["question_id"]),
-                    )
-                    count = attempts.get(key, 0) + 1
-                    attempts[key] = count
-                    if count >= args.question_retries:
-                        raise RuntimeError(
-                            f"question failed after {count} attempts: {key}"
-                        ) from exc
-                    pending.append(job)
-                    print(
-                        f"retry={count}/{args.question_retries} {condition} "
-                        f"{row['unit_id']} {question['question_id']} "
-                        f"error={type(exc).__name__}: {exc}",
-                        flush=True,
-                    )
+                    raise RuntimeError(
+                        "question failed: "
+                        f"{condition}/{row['run_id']}/"
+                        f"{question['question_id']}"
+                    ) from exc
                 else:
                     atomic_json(
                         item_path(output_root, condition, row, question),

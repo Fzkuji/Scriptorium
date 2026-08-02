@@ -32,7 +32,10 @@ def execute_tool_call(
             return f"Command rejected: {reason}", False, False
         output = runtime.execute_tool(
             "bash",
-            {**args, "command": command},
+            {
+                **args,
+                "command": command,
+            },
             str(memory_dir),
             hide_raw=True,
         )
@@ -50,6 +53,8 @@ def execute_tool_call(
             args.get("path"),
             condition,
             include_recent=include_recent,
+            offset=args.get("offset", 1),
+            limit=args.get("limit"),
         ), True, None
     if name in {"bm25_search", "embedding_search"}:
         query = str(args.get("query", "")).strip()

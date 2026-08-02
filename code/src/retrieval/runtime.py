@@ -1,4 +1,4 @@
-"""Explicit API client and usage accounting for NativeMem."""
+"""Claude Code agent and usage accounting for Agent Memory Harness."""
 
 from __future__ import annotations
 
@@ -6,10 +6,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
-import httpx
-from openai import OpenAI
-
 from .. import build as adapter
+from ..agent_runtime import ClaudeCodeAgent, ClaudeCodeConfig
 from .config import QueryConfig
 from .shell import execute_workspace_bash
 
@@ -30,16 +28,24 @@ class UsageTracker:
                 "llm_time_s": 0.0,
             }
 
-    def record(self, tokens_in: int, tokens_out: int) -> None:
+    def record(
+        self,
+        tokens_in: int,
+        tokens_out: int,
+        *,
+        calls: int = 1,
+        llm_time_s: float = 0.0,
+    ) -> None:
         phase = getattr(self._local, "phase", None)
         if phase is None:
             return
         with self._lock:
             value = self._values.get(phase)
             if value is not None:
-                value["calls"] += 1
+                value["calls"] += calls
                 value["tokens_in"] += tokens_in
                 value["tokens_out"] += tokens_out
+                value["llm_time_s"] += llm_time_s
 
     def snapshot(self, phase: str) -> dict[str, float | int]:
         with self._lock:
@@ -57,13 +63,13 @@ class UsageTracker:
 class Runtime:
     def __init__(
         self,
-        client: Any,
+        agent: Any,
         model: str,
         *,
         build_config: adapter.BuildConfig | None = None,
         query_config: QueryConfig | None = None,
     ) -> None:
-        self.client = client
+        self.agent = agent
         self.model = model
         self.build_config = build_config
         self.query_config = query_config or QueryConfig()
@@ -71,17 +77,33 @@ class Runtime:
         self._usage_lock = threading.Lock()
         self.tracker = UsageTracker()
 
-    def log_usage(self, response: Any, phase: str = "unknown") -> None:
-        usage = getattr(response, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+    def log_agent_result(
+        self, result: Any, phase: str = "unknown"
+    ) -> None:
+        prompt_tokens = int(getattr(result, "input_tokens", 0) or 0)
+        completion_tokens = int(getattr(result, "output_tokens", 0) or 0)
+        calls = int(getattr(result, "num_turns", 0) or 0)
+        duration_ms = int(getattr(result, "duration_ms", 0) or 0)
         with self._usage_lock:
             self.call_log.append({
                 "phase": phase,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
+                "calls": calls,
+                "total_cost_usd": getattr(result, "total_cost_usd", None),
+                "duration_ms": duration_ms,
+                "duration_api_ms": int(
+                    getattr(result, "duration_api_ms", 0) or 0
+                ),
+                "stop_reason": getattr(result, "stop_reason", None),
+                "session_id": getattr(result, "session_id", ""),
             })
-        self.tracker.record(prompt_tokens, completion_tokens)
+        self.tracker.record(
+            prompt_tokens,
+            completion_tokens,
+            calls=calls,
+            llm_time_s=duration_ms / 1000,
+        )
 
     @staticmethod
     def build_turn_index(conv: dict[str, Any]) -> dict[str, Any]:
@@ -103,7 +125,10 @@ class Runtime:
         del hide_raw
         if tool_name != "bash":
             return f"Unknown tool: {tool_name}"
-        return execute_workspace_bash(args.get("command", ""), Path(base_dir))
+        return execute_workspace_bash(
+            args.get("command", ""),
+            Path(base_dir),
+        )
 
     def build_memory(self, conv: dict[str, Any], memory_dir: str):
         if self.build_config is None:
@@ -111,9 +136,11 @@ class Runtime:
         return adapter.build_memory(
             conv,
             memory_dir,
-            client=self.client,
+            agent=self.agent,
             model=self.model,
-            usage_logger=lambda response: self.log_usage(response, "writer"),
+            usage_logger=lambda result: self.log_agent_result(
+                result, "writer"
+            ),
             config=self.build_config,
         )
 
@@ -134,12 +161,9 @@ def create_runtime(
     base_url: str,
     *,
     api_key: str,
-    api_format: str = "openai",
     model: str = "openai/gpt-4o-mini",
-    max_retries: int = 2,
-    timeout_seconds: float = 180.0,
-    trust_proxy: bool = False,
-    client: Any | None = None,
+    cli_path: str | None = None,
+    agent: Any | None = None,
     build_config: adapter.BuildConfig | None = None,
     query_config: QueryConfig | None = None,
 ) -> Runtime:
@@ -147,28 +171,17 @@ def create_runtime(
         raise ValueError("base_url is required")
     if not api_key:
         raise ValueError("api_key is required")
-    if api_format not in {"openai", "anthropic"}:
-        raise ValueError("api_format must be 'openai' or 'anthropic'")
-    if max_retries < 0:
-        raise ValueError("max_retries must be non-negative")
-    if timeout_seconds <= 0:
-        raise ValueError("timeout_seconds must be positive")
-    if client is None and api_format == "anthropic":
-        from scripts.gateways.anthropic_openai_compat import AnthropicOpenAICompat
-
-        client = AnthropicOpenAICompat(api_key, base_url)
-    elif client is None:
-        client = OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            max_retries=max_retries,
-            http_client=httpx.Client(
-                trust_env=trust_proxy,
-                timeout=timeout_seconds,
-            ),
+    if agent is None:
+        agent = ClaudeCodeAgent(
+            ClaudeCodeConfig(
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                cli_path=cli_path,
+            )
         )
     return Runtime(
-        client,
+        agent,
         model,
         build_config=build_config,
         query_config=query_config,

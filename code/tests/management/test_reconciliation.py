@@ -1,4 +1,5 @@
 import shlex
+from pathlib import Path
 
 import pytest
 
@@ -177,16 +178,25 @@ def test_workspace_rejects_source_edits_and_restores_stage(tmp_path):
 
 
 def test_llm_reconciler_parses_the_runtime_contract():
-    response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-        content='{"matches":{"mem_a":"updated"},"creates":['
-        '{"content":"new","when":null,"source_refs":["D1:2"]}],'
-        '"deleted_ids":[],"organizational_quotes":[]}'
-    ))])
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
-        create=lambda **_kwargs: response
-    )))
+    agent = SimpleNamespace(run=lambda **_kwargs: SimpleNamespace(
+        structured_output={
+            "matches": {"mem_a": "updated"},
+            "creates": [{
+                "content": "new",
+                "when": None,
+                "source_refs": ["D1:2"],
+            }],
+            "deleted_ids": [],
+            "organizational_quotes": [],
+        }
+    ))
 
-    result = _make_reconciler(client, "test", None, MemoryConfig())(
+    result = _make_reconciler(
+        agent,
+        usage_logger=None,
+        config=MemoryConfig(),
+        cwd=Path.cwd(),
+    )(
         "updated new", [unit()], {"D1:1", "D1:2"}
     )
 

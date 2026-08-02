@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="zh-CN"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Model-Aligned Wiki</title>
+<title>Agent Memory Harness</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;900&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
 <body>
 <div id="progress-bar"></div>
 <div class="document-shell">
-  <aside class="document-sidebar"><p class="document-sidebar-brand">NativeMem Documentation</p><nav id="toc"><a class="toc-link" href="#1-核心思路">1. 核心思路</a>
+  <aside class="document-sidebar"><p class="document-sidebar-brand">Agent Memory Harness</p><nav id="toc"><a class="toc-link" href="#1-核心思路">1. 核心思路</a>
 <a class="toc-link" href="#2-要解决的问题">2. 要解决的问题</a>
 <a class="toc-link" href="#3-方法">3. 方法</a>
 <a class="toc-link toc-h3" href="#3-1-problem">3.1 问题定义</a>
@@ -32,7 +32,7 @@
   <span aria-current="page">Model-Aligned-Wiki.html</span>
 </nav>
 <!-- wah:meta
-title: NativeMem
+title: Agent Memory Harness
 status: 方法与实验持续迭代
 last_updated: '2026-07-30'
 template: proposal
@@ -41,13 +41,13 @@ updated: '2026-07-31'
 
 <header class="document-header">
   <p class="document-eyebrow">Research Overview</p>
-  <h1>NativeMem：由 LLM 控制的文件式记忆</h1>
+  <h1>Agent Memory Harness：由 LLM 控制的文件式记忆</h1>
   <p class="document-lead">LLM-Controlled File-Native Memory</p>
-  <p class="document-meta">方法与实验持续迭代 · updated 2026-07-31</p>
+  <p class="document-meta">方法与实验持续迭代 · updated 2026-08-03</p>
 </header>
 
   <!-- wah:slot id="body" -->
-<p>NativeMem 的核心想法是让 LLM 同时承担记忆组织者和主检索器。记忆保存在可读的 Markdown 文件中；grep、BM25 和 Embedding 是三个并列的检索工具，目录、时间线、链接和原文解析提供结构化访问。LLM 根据问题和每轮检索结果决定下一步。</p>
+<p>Agent Memory Harness 的核心想法是让 LLM 同时承担记忆组织者和主检索器。记忆保存在可读的 Markdown 文件中；grep、BM25 和 Embedding 是三个并列的检索工具，目录、时间线、链接和原文解析提供结构化访问。Writer、Manager、verification 与查询使用 Claude Agent SDK 运行，LLM 根据问题和每轮检索结果决定下一步。</p>
 
 <h2 id="1-核心思路">1. 核心思路</h2>
 
@@ -58,8 +58,8 @@ updated: '2026-07-31'
 </div>
 
 <figure class="architecture-figure">
-  <img src="../code/figures/nativemem_overview.svg" alt="NativeMem state-centered multi-view memory architecture">
-  <figcaption>NativeMem 多视图状态：Source Memory 是权威原始记录，Topic、Timeline、Recent 与 Core 围绕它组织，并由 Agent 按需检索。</figcaption>
+  <img src="../code/figures/nativemem_overview.svg" alt="Agent Memory Harness state-centered multi-view memory architecture">
+  <figcaption>Agent Memory Harness 多视图状态：Source Memory 是权威原始记录，Topic、Timeline、Recent 与 Core 围绕它组织，并由 Agent 按需检索。</figcaption>
 </figure>
 
 <h2 id="2-要解决的问题">2. 要解决的问题</h2>
@@ -216,7 +216,7 @@ updated: '2026-07-31'
 <ul>
 <li><a href="related-work/related-work.html">Related Work</a> — 论文正文式相关工作</li>
 <li><a href="related-work/survey.html">Survey</a> — Agent Memory 的分类、系统对比、评测与资源</li>
-<li><a href="method/nativemem-method.html">Method</a> — NativeMem 的记忆状态、构建、管理、检索与实现边界</li>
+<li><a href="method/nativemem-method.html">Method</a> — Agent Memory Harness 的记忆状态、构建、管理、检索与实现边界</li>
 <li><a href="experiments/experiment.html">Experiments</a> — Benchmark、实验设置、结果、消融与执行状态</li>
 <li><a href="experiments/results/our_results.md">Results Evidence</a> — 可追溯的结果表与实验产物</li>
 <li><a href="research/research-plan.html">Research Plan</a> — 当前进度、剩余研究任务、依赖关系和执行顺序</li>

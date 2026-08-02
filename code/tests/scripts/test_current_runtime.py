@@ -23,7 +23,7 @@ def test_nativemem_adapter_owns_session_conversion(tmp_path: Path, monkeypatch):
     adapter.build_memory(
         conversation,
         tmp_path,
-        client=object(),
+        agent=object(),
         model="test-model",
         config=adapter.BuildConfig(verify_writes=False, final_manage=False),
     )
@@ -76,8 +76,20 @@ def test_nativemem_locomo_usage_summary_reports_phase_and_cost():
     from scripts.nativemem import run_locomo
 
     records = [
-        {"phase": "build", "prompt_tokens": 1_000_000, "completion_tokens": 2_000_000},
-        {"phase": "query", "prompt_tokens": 500_000, "completion_tokens": 250_000},
+        {
+            "phase": "build",
+            "calls": 3,
+            "prompt_tokens": 1_000_000,
+            "completion_tokens": 2_000_000,
+            "total_cost_usd": 0.75,
+        },
+        {
+            "phase": "query",
+            "calls": 2,
+            "prompt_tokens": 500_000,
+            "completion_tokens": 250_000,
+            "total_cost_usd": 0.25,
+        },
     ]
 
     summary = run_locomo.summarize_usage(
@@ -87,12 +99,13 @@ def test_nativemem_locomo_usage_summary_reports_phase_and_cost():
     )
 
     assert summary["totals"] == {
-        "calls": 2,
+        "calls": 5,
         "input_tokens": 1_500_000,
         "output_tokens": 2_250_000,
         "estimated_cost_usd": 6.0,
+        "reported_cost_usd": 1.0,
     }
-    assert summary["by_phase"]["build"]["calls"] == 1
+    assert summary["by_phase"]["build"]["calls"] == 3
 
 
 def test_nativemem_locomo_cli_uses_explicit_credentials(tmp_path: Path):
@@ -106,19 +119,17 @@ def test_nativemem_locomo_cli_uses_explicit_credentials(tmp_path: Path):
         "--input-usd-per-million", "1.0",
         "--output-usd-per-million", "2.0",
         "--writer-calibration", str(tmp_path / "calibration.json"),
-        "--thinking", "disabled",
-        "--retry-log",
-        "--timeout-seconds", "600",
-        "--max-retries", "0",
+        "--claude-cli", "/opt/claude",
+        "--max-turns", "20",
+        "--max-budget-usd", "1.5",
     ])
 
     assert args.sample_id == "conv-50"
     assert args.api_key == "builder-key"
     assert args.judge_api_key == "judge-key"
-    assert args.thinking == "disabled"
-    assert args.retry_log is True
-    assert args.timeout_seconds == 600
-    assert args.max_retries == 0
+    assert args.claude_cli == "/opt/claude"
+    assert args.max_turns == 20
+    assert args.max_budget_usd == 1.5
     assert args.writer_calibration == tmp_path / "calibration.json"
     assert not hasattr(args, "api_key_env")
 
@@ -128,6 +139,25 @@ def test_nativemem_runtime_exports_the_current_retrieval_api():
 
     assert callable(retrieval.create_runtime)
     assert callable(retrieval.collect_answer)
+
+
+def test_longmemeval_cli_uses_one_framework_limit(tmp_path: Path):
+    from scripts.nativemem.run_longmemeval import parser
+
+    args = parser().parse_args([
+        "--output-dir", str(tmp_path),
+        "--start", "0",
+        "--limit", "1",
+        "--api-key", "test-key",
+        "--claude-cli", "/opt/claude",
+        "--max-turns", "20",
+        "--max-budget-usd", "2.0",
+    ])
+
+    assert args.claude_cli == "/opt/claude"
+    assert args.max_turns == 20
+    assert args.max_budget_usd == 2.0
+    assert not hasattr(args, "retrieval_max_tool_calls")
 
 
 def test_nativemem_management_exports_the_current_writing_api():

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1000" viewBox="0 0 2400 1000" role="img" aria-labelledby="title desc">
-  <title id="title">NativeMem multi-view state-centered architecture</title>
+  <title id="title">Agent Memory Harness multi-view state-centered architecture</title>
   <desc id="desc">Agent operations maintain authoritative Source Memory and derived text-memory views. Query-time retrieval selects evidence that is resolved to sources before producing an answer.</desc>
   <defs>
     <style>
@@ -54,7 +54,7 @@
   <rect class="card decision purple-fill" x="85" y="392" width="420" height="244" rx="16"/>
   <text class="label accent-purple center" x="295" y="440">Memory Manager</text>
   <text class="body center" x="295" y="480">Incremental writing</text>
-  <text class="body center" x="295" y="518">Retrieval-triggered local reorganization</text>
+  <text class="body center" x="295" y="518">Periodic local reorganization</text>
   <text class="body center" x="295" y="556">Daily global management</text>
   <text class="small center" x="295" y="600">organize Topic/Core; preserve evidence</text>
 

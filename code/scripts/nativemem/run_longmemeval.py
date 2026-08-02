@@ -40,9 +40,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--model", default="gpt-5.5")
     result.add_argument("--provider-name", default="frontier-intelligence")
     result.add_argument("--api-key", required=True)
-    result.add_argument(
-        "--api-format", choices=("openai", "anthropic"), default="openai"
-    )
+    result.add_argument("--claude-cli")
+    result.add_argument("--max-turns", type=int, default=20)
+    result.add_argument("--max-budget-usd", type=float)
     result.add_argument("--resume", action="store_true")
     order = result.add_mutually_exclusive_group()
     order.add_argument("--round-robin-types", action="store_true")
@@ -61,15 +61,6 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("--recent-limit", type=int, default=50)
     result.add_argument("--core-max-tokens", type=int, default=2_000)
-    result.add_argument("--agent-max-rounds", type=int, default=12)
-    result.add_argument("--manager-max-rounds", type=int, default=8)
-    result.add_argument("--reasoning-effort")
-    result.add_argument("--thinking")
-    result.add_argument("--retry-log", action="store_true")
-    result.add_argument("--retrieval-max-rounds", type=int, default=8)
-    result.add_argument("--retrieval-max-tool-calls", type=int, default=5)
-    result.add_argument("--memory-visible-tokens", type=int, default=10_000)
-    result.add_argument("--answer-max-tokens", type=int, default=16_384)
     result.add_argument(
         "--verify-sources", action=argparse.BooleanOptionalAction, default=True
     )
@@ -100,11 +91,8 @@ def main() -> int:
     memory_config = memory.MemoryConfig(
         core_max_tokens=args.core_max_tokens,
         recent_limit=args.recent_limit,
-        agent_max_rounds=args.agent_max_rounds,
-        manager_max_rounds=args.manager_max_rounds,
-        reasoning_effort=args.reasoning_effort,
-        thinking=args.thinking,
-        retry_log=args.retry_log,
+        max_turns=args.max_turns,
+        max_budget_usd=args.max_budget_usd,
     )
     build_config = adapter.BuildConfig(
         session_batch=args.session_batch,
@@ -119,18 +107,16 @@ def main() -> int:
         memory_config=memory_config,
     )
     query_config = retrieval.QueryConfig(
-        max_rounds=args.retrieval_max_rounds,
-        max_tool_calls=args.retrieval_max_tool_calls,
-        visible_token_limit=args.memory_visible_tokens,
-        max_output_tokens=args.answer_max_tokens,
+        max_turns=args.max_turns,
+        max_budget_usd=args.max_budget_usd,
         verify_sources=args.verify_sources,
     )
     common.LME_SINGLE_PROMPT = retrieval.ANSWER_PROMPT
     backend = retrieval.create_runtime(
         args.base_url,
-        api_format=args.api_format,
         model=args.model,
         api_key=args.api_key,
+        cli_path=args.claude_cli,
         build_config=build_config,
         query_config=query_config,
     )
@@ -159,7 +145,7 @@ def main() -> int:
             "build_sha256": common.sha256_file(ROOT / "src" / "build.py"),
             "retrieval_sha256": source_tree_sha256(ROOT / "src" / "retrieval"),
         },
-        "request_audit": {"mode": "direct_frontier_api"},
+        "request_audit": {"mode": "claude_agent_sdk"},
     }
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest = common.create_or_resume_manifest(

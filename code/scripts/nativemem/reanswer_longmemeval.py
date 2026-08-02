@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Re-answer frozen LongMemEval items from existing NativeMem libraries."""
 
-import os
 import sys
 from pathlib import Path
 
@@ -14,7 +13,6 @@ from scripts.nativemem.longmemeval import (  # noqa: E402
     answer_one,
     atomic_json,
     collect_answer,
-    install_trace_hooks,
     lme,
     load_completed_results,
     main,
@@ -29,7 +27,6 @@ __all__ = [
     "answer_one",
     "atomic_json",
     "collect_answer",
-    "install_trace_hooks",
     "lme",
     "load_completed_results",
     "main",

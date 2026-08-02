@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NativeMem Method — File-Native Multi-View Memory</title>
+<title>Agent Memory Harness — File-Native Multi-View Memory</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
@@ -21,7 +21,7 @@
 <div id="progress-bar"></div>
 <div class="document-shell">
 <aside class="document-sidebar">
-  <p class="document-sidebar-brand">NativeMem Documentation</p>
+  <p class="document-sidebar-brand">Agent Memory Harness</p>
   <nav id="toc">
     <a class="toc-link" href="#overview">§1 Method Overview</a>
     <a class="toc-link" href="#architecture">§2 Memory Architecture</a>
@@ -31,6 +31,7 @@
     <a class="toc-link toc-h3" href="#core-memory">2.4 Core Memory</a>
     <a class="toc-link" href="#construction">§3 Memory Construction</a>
     <a class="toc-link toc-h3" href="#writer-capacity">3.1 Writer Capacity Calibration</a>
+    <a class="toc-link toc-h3" href="#agent-context">3.2 Agent Context and Tool Output</a>
     <a class="toc-link" href="#management">§4 Memory Management</a>
     <a class="toc-link toc-h3" href="#direct-editing">4.1 Direct Editing</a>
     <a class="toc-link toc-h3" href="#management-levels">4.2 Management Levels</a>
@@ -51,13 +52,13 @@
   </nav>
   <header class="document-header">
     <p class="document-eyebrow">Current Method Specification</p>
-    <h1>NativeMem: File-Native, Source-Grounded Multi-View Memory</h1>
-    <p class="document-lead">NativeMem 将 Source、Topic、Timeline、Recent、Core 和索引关系组织为一个文件式记忆状态。Topic 是可编辑的主要语义状态；Timeline、Recent 与索引由 Runtime 从 Topic 确定性生成。LLM 负责语义选择和组织，Runtime 负责身份、校验、同步与事务。</p>
-    <p class="document-meta">updated 2026-08-02 · current implementation and online contract</p>
+    <h1>Agent Memory Harness: File-Native, Source-Grounded Multi-View Memory</h1>
+    <p class="document-lead">Agent Memory Harness 将 Source、Topic、Timeline、Recent、Core 和索引关系组织为一个文件式记忆状态。Topic 是可编辑的主要语义状态；Timeline、Recent 与索引由 Runtime 从 Topic 确定性生成。LLM 负责语义选择和组织，Runtime 负责身份、校验、同步与事务。</p>
+    <p class="document-meta">updated 2026-08-03 · current implementation and online contract</p>
   </header>
 
   <figure class="figure architecture-figure">
-    <img src="../../code/figures/nativemem_overview.svg" alt="NativeMem 多视图状态中心架构">
+    <img src="../../code/figures/nativemem_overview.svg" alt="Agent Memory Harness 多视图状态中心架构">
     <figcaption>Source 提供原始证据，Topic 保存主要语义状态，Runtime 从 Topic 同步 Timeline、Recent 和关系索引；Core 由 LLM 独立维护。</figcaption>
   </figure>
 
@@ -187,18 +188,26 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
   <p>如果证据只能确定年份或月份，Writer 分别在 footnote 中写 <code>YYYY</code> 或 <code>YYYY-MM</code>；只有无法确定任何日历年份时才写 <code>undated</code>。如果同一事实由多个来源支持，则在 <code>Sources:</code> 后写多个完整 handle，并用逗号分隔。Runtime 不从正文时间字符串自动补充精度，而是直接按 <code>Time</code> 字段的原始精度生成 Timeline。</p>
 
   <h3 id="writer-capacity">3.1 Writer Capacity Calibration</h3>
-  <p>不同模型即使声明相同的上下文窗口，也可能在多 session 记忆写入中表现出不同的来源覆盖率、格式稳定性和工具调用完成率。因此，NativeMem 在正式构建前对每个 <strong>model + Writer protocol</strong> 组合执行一次轻量校准。该过程测量当前 Writer 系统提示、批量写入提示和工具契约共同作用下的有效输入容量，不把模型声明的最大上下文长度直接作为写入批量。</p>
+  <p>不同模型即使声明相同的上下文窗口，也可能在多 session 记忆写入中表现出不同的来源覆盖率、格式稳定性和工具调用完成率。因此，Agent Memory Harness 在正式构建前对每个 <strong>model + Writer protocol</strong> 组合执行一次轻量校准。该过程测量当前 Writer 系统提示、批量写入提示、Claude Agent SDK 和工具契约共同作用下的有效输入容量，不把模型声明的最大上下文长度直接作为写入批量。</p>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>步骤</th><th>处理</th><th>判定</th></tr></thead>
     <tbody>
-      <tr><td>Probe construction</td><td>使用两组与 benchmark 无关的合成事实 session；每个 session 保持完整，不截断消息，也不跨 session 重排</td><td>候选批次包含可独立核验的 source references</td></tr>
-      <tr><td>Capacity sweep</td><td>按 <code>2K / 4K / 8K / 16K</code> 等递增候选容量，将完整 Writer system prompt 与完整 session batch 一起计数</td><td>只加入仍能完整落在候选 token 上限内的 session；连一个完整 Writer 输入都容不下的档位只记录为 skipped，不视为模型失败</td></tr>
-      <tr><td>Writer execution</td><td>每个候选容量分别运行两组 probe，记录 API 调用、输入/输出 token、耗时、写入 blocks 和格式错误</td><td>事务无 tool error 或 round limit，且全部预期 source references 出现在权威 Topic/Core 状态中</td></tr>
-      <tr><td>Safe limit</td><td>两个 probe 都通过后才接受该容量；第一个失败容量之后不再继续扩大</td><td>选择失败前的最大通过容量</td></tr>
-      <tr><td>Build integration</td><td>构建入口读取 <code>calibration.json</code>，校验 model、Writer protocol hash 和 tokenizer identity，再按 token 上限依次组合完整 session</td><td>单个完整 session 已超限时明确失败，不进行静默截断</td></tr>
+      <tr><td>Fixed workload</td><td>构造两组与 benchmark 无关、规模相同的合成事实 workload；每组包含固定的 20 个 session</td><td>所有候选容量处理完全相同的全部消息和 source references</td></tr>
+      <tr><td>Capacity sweep</td><td>按 <code>2K / 4K / 8K / 10K / 12K / 14K / 16K</code> 等候选容量，将 Writer system prompt、批量写入提示和消息一起计数</td><td>容量只改变完成整份 workload 所需的批次数，不改变总任务</td></tr>
+      <tr><td>Message-boundary packing</td><td>按原顺序贪心加入完整 message；下一条 message 导致超限时，将其整体放入下一批</td><td>不截断 message 正文；session 可以跨批次；单条完整 message 超限时明确失败</td></tr>
+      <tr><td>Writer execution</td><td>每个候选容量分别运行两组 probe，统计整份 workload 的 API 调用、输入/输出 token、耗时、成本、写入 blocks 和格式错误</td><td>最终状态须覆盖全部预期事实和 source references；tool error 与 round limit 作为独立诊断项</td></tr>
+      <tr><td>Budget selection</td><td>只比较两组 probe 内容均完整的档位</td><td>以平均总成本最低者作为推荐预算，成本相同时比较平均总耗时；最大已测试通过档位另行记录</td></tr>
+      <tr><td>Build integration</td><td>构建入口读取 <code>calibration.json</code>，校验 model、Writer protocol hash 和 tokenizer identity，再按推荐 token 上限分批</td><td>只在原 session 的最后一条 message 完成后执行该 session 的验证与管理计数</td></tr>
     </tbody>
   </table></div>
-  <p>校准产物保存 provider、model、Writer protocol hash、tokenizer、候选容量、逐 probe 的 session 数、实际输入 token、调用次数、输入/输出 token、耗时、来源覆盖率和最终 <code>safe_input_tokens</code>。<code>BuildConfig.calibration_path</code> 指向该文件；未提供时保留显式 <code>session_batch</code> 作为可复现实验的固定回退。校准只决定一次 Writer 调用包含多少个完整 session，不改变 Source、Topic、Timeline、Recent、Core 或 Relations，也不构成新的检索方法。</p>
+  <p>校准产物保存 provider、model、Writer protocol hash、tokenizer、固定 workload hash、候选容量、批次数、调用次数、输入/输出 token、耗时、成本、事实与来源覆盖率、completion rate、推荐预算 <code>safe_input_tokens</code> 以及最大已测试通过档位。<code>BuildConfig.calibration_path</code> 指向该文件；未提供时保留显式 <code>session_batch</code> 作为可复现实验的固定回退。校准只决定 Writer 的增量输入预算，不改变 Source、Topic、Timeline、Recent、Core 或 Relations，也不构成新的检索方法。</p>
+  <p>此前 PackyAPI DeepSeek V4 Flash 的 16K 结果由旧的直接 API tool loop 产生，只保留为历史结果。迁移到 Claude Agent SDK 后，Writer protocol hash 已改变，旧校准产物会被拒绝；正式 benchmark 前必须按新协议重新校准，不能继续把 16K 作为当前推荐预算。</p>
+
+  <h3 id="agent-context">3.2 Agent Context and Tool Output</h3>
+  <p>Writer 获得本批原始消息和当前 workspace structure。staged workspace 中的 Source 与派生视图可以读取，但只有 Topic 与 Core 可以修改；派生视图仍由 Runtime 在 Topic 修改通过校验后生成。</p>
+  <p>Writer prompt 只给出一条非强制建议：“建议先根据文件结构定位可能相关的文件，再查看其章节结构并读取必要内容；具体检索与编辑方式由模型决定。”系统不规定命令名、固定步骤或工具顺序。</p>
+  <p>Writer、Manager、verification 和查询都通过 Claude Agent SDK 执行。框架负责工具调用解析、provider 重试、工具错误返回和上下文管理；Harness 不再维护独立的 OpenAI chat-completions 循环、DSML 解析、工具输出缓存、固定工具调用次数或“无新增证据”停止逻辑。BM25 与 Embedding 仍使用 <code>top_k</code>，<code>read_memory_file</code> 仍支持 1-based <code>offset</code> / <code>limit</code> 行窗口。</p>
+  <p>每条 trajectory 使用临时 Claude 配置目录、bare 模式、禁用 session persistence，并只加载本次传入的 MCP 工具。它不读取用户的 <code>~/.claude</code> 设置、插件或订阅登录态。endpoint、API key、model、轮次与成本上限均由入口参数传入；适配器只为子进程设置 Claude Code 所需配置，不修改父进程环境。</p>
 
   <h2 id="management">§4 Memory Management</h2>
   <p>管理以 Topic 修改为中心。LLM 对完整 Markdown 负责，包括正文边界、已有 ID 的保留、来源脚注和关系链接；Runtime 不重新判断段落语义，只执行可确定的规范化、校验、派生与事务操作。</p>
@@ -236,7 +245,7 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>过程</th><th>在线触发</th><th>Benchmark 映射</th><th>LLM 操作</th><th>Runtime 操作</th><th>影响范围</th></tr></thead>
     <tbody>
-      <tr><td><strong>Incremental writing</strong></td><td>未处理内容接近已校准 Writer 容量，或 session 空闲一小时</td><td>按校准上限组合完整 session；未校准时使用固定 <code>session_batch</code></td><td>提取新记忆、选择 Topic，必要时更新 Core</td><td>按 cursor 取增量、完整 session 打包、物化并提交</td><td>新增 Source、相关 Topic 及派生视图</td></tr>
+      <tr><td><strong>Incremental writing</strong></td><td>未处理内容接近已校准 Writer 容量，或 session 空闲一小时</td><td>按校准上限在完整 message 边界分批；未校准时使用固定 <code>session_batch</code></td><td>提取新记忆、选择 Topic，必要时更新 Core</td><td>按 cursor 取增量、完整 message 打包、物化并提交</td><td>新增 Source、相关 Topic 及派生视图</td></tr>
       <tr><td><strong>Local reorganization</strong></td><td>累计固定写入批次或新增 token 阈值</td><td>每固定数量 session 执行一次</td><td>整理本周期被修改的 Topic</td><td>限定作用域并重建局部派生视图</td><td>被修改 Topic、对应 Timeline 与 Relations</td></tr>
       <tr><td><strong>Global management</strong></td><td>每天最多一次，且上次管理后存在新写入 commit</td><td>全部输入结束后执行一次</td><td>跨 Topic 调整结构并审查 Core</td><td>全局校验、重建派生视图并提交</td><td>全部 Topic、Timeline、Core 与 Relations</td></tr>
     </tbody>
@@ -267,7 +276,7 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
     </tbody>
   </table></div>
   <p>LLM 负责理解 query、生成或改写检索词、选择工具、判断候选相关性和停止检索，但不构成第四种底层检索方法。系统不规定固定的 BM25 → Embedding → LLM 流水线。</p>
-  <p>Source Memory 是普通、可检索的 Markdown 文件。目录浏览、文件读取、<code>grep</code>、BM25 和 Embedding 始终可以直接访问 Source，不要求 Agent 先从 Topic 获得 source ID，也不使用单独的 <code>resolve_sources</code> 工具。函数参数 <code>retrieval.QueryConfig(verify_sources=True|False)</code> 只控制 prompt 是否要求查询 Agent 在回答前核验相关 Source；设为 <code>False</code> 时核验变为可选，不改变 Source 可见性或工具集合。每题 termination trace 保存实际参数值。NativeMem 的运行配置由入口显式构造并作为函数参数传递，不从进程环境读取。</p>
+  <p>Source Memory 是普通、可检索的 Markdown 文件。目录浏览、文件读取、<code>grep</code>、BM25 和 Embedding 始终可以直接访问 Source，不要求 Agent 先从 Topic 获得 source ID，也不使用单独的 <code>resolve_sources</code> 工具。函数参数 <code>retrieval.QueryConfig(verify_sources=True|False)</code> 只控制 prompt 是否要求查询 Agent 在回答前核验相关 Source；设为 <code>False</code> 时核验变为可选，不改变 Source 可见性或工具集合。每题 termination trace 保存实际参数值。运行配置由入口显式构造并作为函数参数传递，不从父进程环境读取。</p>
   <p>当问题明确给出日历时间范围，或者 Agent 已经从证据中解析出日历范围时，Agent 可以在同一次 <code>bm25_search</code> 或 <code>embedding_search</code> 调用中附加可选的 <code>date_from</code> 和 <code>date_to</code>。两个参数均接受 <code>YYYY</code>、<code>YYYY-MM</code> 或 <code>YYYY-MM-DD</code>，不需要额外的时间抽取模型调用。没有明确时间约束时省略参数；“搬到上海之前”一类尚未确定锚点日期的表达不能直接用于硬过滤。</p>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>输入或状态</th><th>LLM 操作</th><th>Runtime 操作</th></tr></thead>
@@ -280,15 +289,16 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
     </tbody>
   </table></div>
   <p>Runtime 将 <code>2022</code> 展开为 <code>[2022-01-01, 2023-01-01)</code>，将 <code>2022-07</code> 展开为 <code>[2022-07-01, 2022-08-01)</code>，将 <code>2022-07-20</code> 展开为 <code>[2022-07-20, 2022-07-21)</code>。<code>date_to</code> 包含其指定精度的完整年份、月份或日期。候选过滤使用区间重叠，之后才执行 BM25 词法排序或 Embedding 相似度排序。同一段落分别具有 2019 年和 2023 年 evidence 时，这两个时间保持离散，不能合成为连续的 2019–2023 范围。</p>
-  <p>当前默认上限为 8 个 retrieval rounds、5 次工具调用和 10K memory-visible tokens。一个 retrieval round 表示一次 LLM 决策周期：模型可以结束回答，也可以提出一个或多个工具请求；工具返回后进入下一轮。因此，模型决策轮数与工具调用数是两个独立上限。单次 BM25 或 Embedding 最多返回 10 个候选。正式参数需要由 development-set budget sweep 确定。</p>
+  <p><code>read_memory_file</code> 是代码暴露给模型的受限文件读取工具：它校验相对路径，并只允许读取当前检索条件可见的文件。Native 条件同时提供只读 shell；不提供 shell 的检索消融条件依赖该工具。它支持可选的 1-based <code>offset</code> / <code>limit</code>；省略时读取全文，提供时只返回相应行窗口。Prompt 只建议先定位相关文件与章节，不规定命令或工具顺序。</p>
+  <p>Writer、verification、局部 Manager、全局 Manager 和查询统一由 Claude Agent SDK 管理，默认每条 trajectory 最多 20 个模型轮次，并可设置 <code>max_budget_usd</code>。Harness 不设置独立工具调用上限或 memory-visible-token 停止条件。实际轮次、工具调用数、可见 token、停止原因、耗时和框架报告成本保留为评测记录。</p>
 
   <h2 id="boundary">§6 Implementation and Evidence Boundary</h2>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>状态</th><th>内容</th></tr></thead>
     <tbody>
-      <tr><td class="status-yes">当前 Runtime 已实现</td><td>Source 只追加、Topic 段落 block、claim-adjacent evidence footnotes、临时 ID 物化、source handle 解析、marker 间距规范化、Topic-to-Topic block links 校验、移动后路径改写、Timeline/Recent/Relations 全量重建、Recent 50 与完整创建顺序、Core 2K、staged 原子安装与失败恢复、shell-only Writer/Manager、Writer 容量校准与完整 session 打包、BM25 与 Embedding 的 evidence 级解析和可选时间区间过滤</td></tr>
+      <tr><td class="status-yes">当前 Runtime 已实现</td><td>Source 只追加、Topic 段落 block、claim-adjacent evidence footnotes、临时 ID 物化、source handle 解析、marker 间距规范化、Topic-to-Topic block links 校验、移动后路径改写、Timeline/Recent/Relations 全量重建、Recent 50 与完整创建顺序、Core 2K、staged 原子安装与失败恢复、Claude Agent SDK 驱动的 shell-only Writer/Manager/verification/retrieval、固定 workload Writer 容量校准与完整 message 打包、BM25 与 Embedding 的 evidence 级解析和可选时间区间过滤，以及 <code>read_memory_file</code> 行窗口</td></tr>
       <tr><td class="status-yes">在线调度代码已实现</td><td>provider-neutral source IDs、持久化 session cursor、token/一小时空闲触发、局部批次或 token 触发、每天最多一次全局管理和可选 Git commit</td></tr>
-      <tr><td class="status-no">尚未完成部署验证</td><td>不同 Agent provider 的实际 plugin/adapter 集成、各目标模型的 Writer 容量校准结果、长时间在线 scheduler 进程、Core 引用自动校验，以及新 Markdown 契约在真实长会话中的格式错误率</td></tr>
+      <tr><td class="status-no">尚未完成部署验证</td><td>不同 Anthropic-compatible endpoint 与目标模型的 SDK 实测、新协议下的 Writer 容量校准结果、长时间在线 scheduler 进程、Core 引用自动校验，以及新 Markdown 契约在真实长会话中的格式错误率</td></tr>
       <tr><td class="status-no">仍需实验确认</td><td>Recent、Core、周期整理、BM25、Embedding 和 Agent-controlled retrieval 的独立贡献与成本；Topic 规范化对重复和检索效率的影响</td></tr>
     </tbody>
   </table></div>
@@ -299,14 +309,14 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
     <thead><tr><th>路径</th><th>职责</th></tr></thead>
     <tbody>
       <tr><td><code>code/scripts/model_capacity/calibrate_writer.py</code></td><td>运行两组通用 probe、逐档执行 Writer，并生成包含质量、token、调用次数、成本与耗时的 <code>calibration.json</code></td></tr>
-      <tr><td><code>code/src/runtime/capacity.py</code></td><td>校验校准产物、选择安全容量，并按 token 上限组合完整 session</td></tr>
+      <tr><td><code>code/src/runtime/capacity.py</code></td><td>校验校准产物、按完整 workload 的质量与成本选择预算，并在完整 message 边界分批</td></tr>
       <tr><td><code>code/src/runtime/tokenization.py</code></td><td>解析可复现的 tokenizer identity，并为校准和正式构建使用同一计数实现</td></tr>
       <tr><td><code>code/src/build.py</code></td><td>通过 <code>BuildConfig.calibration_path</code> 接入安全容量；未提供时使用显式 <code>session_batch</code></td></tr>
-      <tr><td><code>code/scripts/configs/model_capacity.example.json</code></td><td>提供 provider、model、API key 文件、候选档位、重试、超时与价格的显式配置示例</td></tr>
+      <tr><td><code>code/scripts/configs/model_capacity.example.json</code></td><td>提供 provider、Anthropic-compatible endpoint、model、API key 文件、Claude CLI 路径、候选档位、轮次、成本上限与价格的显式配置示例</td></tr>
       <tr><td><code>code/results/model_capacity/</code></td><td>保存按 provider、model 和 run ID 分组的校准产物，不保存 API key</td></tr>
     </tbody>
   </table></div>
-  <p>当前 NativeMem core、容量校准脚本和 benchmark runners 均通过函数参数或命令行参数接收配置，不读取 NativeMem 环境变量。模型名、Writer prompt 或 tool schema 变化后，旧产物会因 model 或 protocol hash 不匹配而被拒绝，需要重新校准。</p>
+  <p>当前 core、容量校准脚本和 benchmark runners 均通过函数参数或命令行参数接收配置，不读取应用级环境变量。Claude Agent SDK 适配器只把 endpoint 与凭证传给隔离的子进程。模型名、Writer prompt、runtime 或 tool schema 变化后，旧产物会因 model 或 protocol hash 不匹配而被拒绝，需要重新校准。</p>
 
   <footer>
     <a href="../related-work/related-work.html">Related Work</a> ·

@@ -1,14 +1,17 @@
 {
   "provider": "provider-name",
   "base_url": "https://provider.example/v1",
-  "api_format": "openai",
   "model": "provider/model-name",
   "api_key_file": "/absolute/path/to/api-key.txt",
-  "candidate_tokens": [1024, 2048, 4096, 8192, 16384],
-  "probe_ids": ["facts-a", "facts-b", "facts-c"],
-  "agent_max_rounds": 12,
-  "max_retries": 2,
-  "timeout_seconds": 180,
+  "claude_cli": null,
+  "candidate_tokens": [4096, 8192, 12288, 16384, 20480, 24576],
+  "probe_ids": ["facts-a", "facts-b"],
+  "workload_sessions": 20,
+  "messages_per_session": 20,
+  "facts_per_session": 1,
+  "context_sentences": 2,
+  "max_turns": 20,
+  "max_budget_usd": null,
   "input_usd_per_million": 0.0,
   "output_usd_per_million": 0.0
 }

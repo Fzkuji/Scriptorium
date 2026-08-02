@@ -46,6 +46,8 @@ def read_memory_file(
     condition: str = "native",
     *,
     include_recent: bool = True,
+    offset: object = 1,
+    limit: object | None = None,
 ) -> str:
     root = memory_dir.resolve()
     relative = Path(str(raw_path or ""))
@@ -58,7 +60,12 @@ def read_memory_file(
     )
     if path.is_symlink() or not path.is_file() or not allowed:
         raise ValueError("memory path is not an allowed memory file")
-    return path.read_text(encoding="utf-8")
+    start = int(offset) - 1
+    count = None if limit is None else int(limit)
+    if start < 0 or (count is not None and count < 1):
+        raise ValueError("offset and limit must be positive")
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    return "".join(lines[start:] if count is None else lines[start:start + count])
 
 
 def tools_for(condition: str) -> list[dict[str, Any]]:

@@ -1,4 +1,4 @@
-# NativeMem 方法文档
+# Agent Memory Harness 方法文档
 
 > 更新：2026-08-02。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
 
@@ -9,7 +9,7 @@
 - `code/src/markdown/`：段落 block、claim-adjacent evidence 与关系链接解析；
 - `code/src/runtime/`：派生视图、在线状态、tokenizer 和 Writer capacity artifact；
 - `code/src/retrieval/`：文件、grep、BM25、Embedding 和 Agent-controlled retrieval；
-- `code/scripts/model_capacity/calibrate_writer.py`：按模型校准完整 session 写入容量；
+- `code/scripts/model_capacity/calibrate_writer.py`：在固定工作负载上校准 Writer 输入预算；
 - `code/scripts/nativemem/`：LoCoMo、LongMemEval 和消融入口。
 
 ## 文档职责
@@ -19,14 +19,14 @@
 | 本文件 | 目录说明 | 方法文档关系和证据边界 |
 | [`nativemem-method.html`](nativemem-method.html) | 当前方法正文 | 两个主要贡献、记忆结构、Topic 规范、构建、管理、检索和实现边界 |
 | [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md) | 当前设计 | 记忆状态、写入触发、查询、维护和恢复机制 |
-| [`../internal/analysis/recent_memory_framework_comparison.md`](../internal/analysis/recent_memory_framework_comparison.md) | 内部设计分析 | 近期系统已有而 NativeMem 缺少或尚未定型的组件 |
+| [`../internal/analysis/recent_memory_framework_comparison.md`](../internal/analysis/recent_memory_framework_comparison.md) | 内部设计分析 | 近期系统已有而本方法缺少或尚未定型的组件 |
 | [`../experiments/experiment.html`](../experiments/experiment.html) | 实验页面 | 实验矩阵、结果与执行状态 |
 
 出现冲突时，以 `nativemem-method.html` 和 `designs/file_native_multiview_design.md` 为当前设计依据。
 
 ## 当前方法概览
 
-NativeMem 是一个 file-native、multi-view 的外部记忆系统。Source、Topic 和 Core 是需要保存的权威文本；Timeline、Recent、Relations 与检索索引从这些状态重建。LLM 负责 Topic/Core 的语义内容、组织、证据日期和检索决策，Runtime 负责 ID、来源解析、路径、派生视图、预算和事务边界。
+Agent Memory Harness 是一个 file-native、multi-view 的外部记忆系统。Source、Topic 和 Core 是需要保存的权威文本；Timeline、Recent、Relations 与检索索引从这些状态重建。LLM 负责 Topic/Core 的语义内容、组织、证据日期和检索决策，Runtime 负责 ID、来源解析、路径、派生视图、预算和事务边界。
 
 当前设计包含六类状态：
 
@@ -51,9 +51,9 @@ NativeMem 是一个 file-native、multi-view 的外部记忆系统。Source、To
 
 Git commit 是三类修改共同使用的有效状态边界。增量写入必须在 commit 成功后推进 session cursor；不增加 batch ID、`memory_dirty` 或独立写入日志。
 
-Git/cursor、token/空闲触发和每日管理条件已经由 `code/src/runtime/online.py` 实现；静态 benchmark harness 使用冻结的 Writer capacity artifact 或显式 `session_batch`，并按固定 session 周期执行局部整理。Writer 外层最多 12 轮，Manager 最多 8 轮。长时间 scheduler 进程和具体 Agent provider plugin 不属于静态 benchmark 入口。
+Git/cursor、token/空闲触发和每日管理条件已经由 `code/src/runtime/online.py` 实现；静态 benchmark harness 使用冻结的 Writer capacity artifact 或显式 `session_batch`，并按固定 session 周期执行局部整理。Writer、Manager、verification 与查询统一由 Claude Agent SDK 执行；默认每条 trajectory 最多 20 个模型轮次，也可通过同一个可选成本上限提前停止。长时间 scheduler 进程不属于静态 benchmark 入口。
 
-Writer 批量可以由 `BuildConfig.calibration_path` 指向的校准产物控制。校准使用两组通用合成 session 扫描递增 token 上限，只有在事务完成且全部 source references 被写入权威记忆时才通过；首个失败容量之前的最大通过值成为安全上限。Runtime 验证 model、Writer protocol hash 和 tokenizer identity，随后只组合完整 session。未提供校准产物时使用显式 `session_batch`。
+Writer 批量可以由 `BuildConfig.calibration_path` 指向的校准产物控制。校准让每个候选 token 上限处理相同的完整工作负载，比较最终事实与来源覆盖率、总调用、成本和耗时。Runtime 验证 model、Writer protocol hash 和 tokenizer identity，随后按原顺序在完整 message 边界分批；session 可以跨批次，message 正文不截断。推荐预算取内容全部通过档位中的最低平均总成本，最大已测试通过档位另行记录。未提供校准产物时使用显式 `session_batch`。
 
 ## Query-Time Access
 
@@ -67,7 +67,9 @@ Writer 批量可以由 `BuildConfig.calibration_path` 指向的校准产物控�
 
 目录、文件、timeline、links 和 source references 作为结构化访问方式继续保留。Topic 和 Source 都是三种检索方法的可访问文本；Source 不需要通过专用工具间接读取。三种检索都只返回候选，不替代 LLM 的相关性判断和后续检索决策。
 
-Source 始终可以通过目录浏览、文件读取、`grep`、BM25 和 Embedding 直接访问。函数参数 `retrieval.QueryConfig(verify_sources=True|False)` 只控制 prompt 是否要求查询 Agent 在回答前核验相关原始对话；设为 `False` 时核验变为可选，不改变 Source 可见性或工具集合。实际参数值记录在每题 `tool_trace` 的 termination 条目中。NativeMem 的运行参数均由入口显式构造后逐层传入，不从进程环境读取。
+Source 始终可以通过目录浏览、文件读取、`grep`、BM25 和 Embedding 直接访问。函数参数 `retrieval.QueryConfig(verify_sources=True|False)` 只控制 prompt 是否要求查询 Agent 在回答前核验相关原始对话；设为 `False` 时核验变为可选，不改变 Source 可见性或工具集合。实际参数值记录在每题 `tool_trace` 的 termination 条目中。运行参数均由入口显式构造后逐层传入，不从父进程环境读取。
+
+工具调用、工具错误、provider 重试和上下文管理由 Claude Agent SDK 处理。Harness 不再实现独立的 OpenAI tool loop、DSML 解析、固定工具调用次数、无新增证据停止条件或工具输出缓存。`read_memory_file` 仍支持 1-based `offset` / `limit` 行窗口，BM25 与 Embedding 仍使用 `top_k` 控制单次候选数量。
 
 标准检索预算暂定为最多 8 次 LLM retrieval rounds、5 次工具调用和 10K memory-visible tokens；development set 扫描 `3/5/8` calls 与 `6K/10K/20K` tokens，test set 固定参数。主要策略对标是 ByteRover 的 5-Tier Progressive Retrieval。其他对标包括 Infini Memory-H/A、LightMem，以及作为后续增强参考的 Semble。详细映射见 [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md#34-reference-systems)。
 
@@ -76,7 +78,7 @@ Source 始终可以通过目录浏览、文件读取、`grep`、BM25 和 Embeddi
 | 状态 | 内容 | 证据边界 |
 |---|---|---|
 | 已完成结果 | v8.8 风格的 Topical + Temporal 视图、source resolution 和连续文件导航 | LoCoMo 1,540 题与 LongMemEval-S 500 题 |
-| 当前实现线 | shell-only Writer/Manager、Topic paragraph blocks、evidence footnotes、Timeline/Recent/Relations 派生、Recent 50 FIFO、Core 2K、事务回滚、Writer 容量校准、BM25、Embedding 与检索预算 | 已有实现与单元/集成测试；正式实验矩阵尚未完成 |
+| 当前实现线 | Claude Agent SDK 驱动的 shell-only Writer/Manager、Topic paragraph blocks、evidence footnotes、Timeline/Recent/Relations 派生、Recent 50 FIFO、Core 2K、事务回滚、Writer 容量校准、BM25 与 Embedding | 已有实现与单元/集成测试；正式实验矩阵尚未完成 |
 | 已实现、待部署验证 | provider source IDs、Git/cursor、token/空闲触发和每日管理条件 | 通过单元与集成测试；尚未完成多 provider 长时间在线运行和成本评估 |
 
 现有 90.8% LoCoMo 与 87.0% LongMemEval-S 结果来自此前实现，不能自动归因于当前 Writer/Manager、Recent Memory、Core Memory、Git/cursor 事务、容量校准、BM25 或 Embedding。新组件需要在相同 memory、answerer、judge 和预算下分别消融。

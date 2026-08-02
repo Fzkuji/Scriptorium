@@ -1,6 +1,5 @@
 """Concurrent retrieval and answering over frozen LongMemEval memories."""
 
-import threading
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any, Callable
@@ -60,50 +59,14 @@ def run_pending(
     return completed, interrupted
 
 
-def install_trace_hooks(backend: Any) -> threading.local:
-    state = threading.local()
-    original_execute = backend.execute_tool
-    original_read = backend.read_turns
-
-    def execute(
-        tool_name: str, args: object, base_dir: str, hide_raw: bool = False
-    ) -> str:
-        output = original_execute(tool_name, args, base_dir, hide_raw=hide_raw)
-        if (trace := getattr(state, "trace", None)) is not None:
-            trace.append({
-                "type": tool_name,
-                "args": args,
-                "accepted": not str(output).startswith("Rejected"),
-            })
-        return output
-
-    def read(
-        turn_index: dict[str, Any], dia_ids: object, context: int = 1
-    ) -> str:
-        output = original_read(turn_index, dia_ids, context=context)
-        if (trace := getattr(state, "trace", None)) is not None:
-            trace.append({
-                "type": "read_original",
-                "dia_ids": dia_ids,
-                "context": context,
-            })
-        return output
-
-    backend.execute_tool = execute
-    backend.read_turns = read
-    return state
-
-
 def collect_answer(
     backend: Any,
     item: dict[str, Any],
     memory_dir: Path,
     turn_index: dict[str, Any],
-    trace_state: threading.local | None = None,
     condition: str = "native",
     query_config: retrieval.QueryConfig | None = None,
 ) -> tuple[list[dict[str, str]], int, str, list[dict[str, Any]]]:
-    del trace_state
     return retrieval.collect_answer(
         backend,
         item,
@@ -116,7 +79,6 @@ def collect_answer(
 
 def answer_one(
     backend: Any,
-    trace_state: threading.local,
     dataset: list[dict[str, Any]],
     source: dict[str, Any],
     output_dir: Path,
@@ -148,7 +110,6 @@ def answer_one(
         item,
         memory_dir,
         turn_index,
-        trace_state,
         condition=condition,
         query_config=query_config,
     )

@@ -1,14 +1,16 @@
-"""Memory writer and organizer agent loop."""
+"""Memory Writer and Manager execution through Claude Code."""
 
-import json
+from __future__ import annotations
+
 import shutil
 from pathlib import Path
 from typing import Any
 
+from ..agent_runtime import ClaudeCodeAgent
 from .config import MemoryConfig
 from .model_reconciliation import _make_reconciler
-from .prompts import SYSTEM_PROMPT, TOOLS
-from .provider import _chat_completion_with_retry, _provider_options
+from .prompts import SYSTEM_PROMPT
+from .tools import management_tools
 from .workspace import MemoryWorkspace
 
 
@@ -21,146 +23,51 @@ def render_conversation(
     )
 
 
-def _compact_tool_history(messages: list[Any]) -> None:
-    """Retain full output for only the latest tool-call round."""
-    def role(message: Any) -> object:
-        return (
-            message.get("role")
-            if isinstance(message, dict)
-            else getattr(message, "role", None)
-        )
-
-    last_assistant = max(
-        (
-            index
-            for index, message in enumerate(messages)
-            if role(message) == "assistant"
-        ),
-        default=-1,
-    )
-    for message in messages[:last_assistant]:
-        if role(message) == "tool" and len(message.get("content", "")) > 1000:
-            message["content"] = "[previous tool output omitted]"
-
-
 def _run_agent(
     memory_dir: str | Path,
     *,
-    client: Any,
-    model: str,
+    agent: ClaudeCodeAgent,
     task: str,
     source_sessions: list[dict[str, Any]] | None = None,
     usage_logger: Any | None = None,
     final_output: list[str] | None = None,
-    max_rounds: int | None = None,
-    tools: list[dict[str, Any]] | None = None,
     config: MemoryConfig | None = None,
 ) -> list[dict[str, Any]]:
     config = config or MemoryConfig()
-    if max_rounds is None:
-        max_rounds = config.agent_max_rounds
-    if max_rounds < 1:
-        raise ValueError("NativeMem agent max rounds must be positive")
-    available_tools = TOOLS if tools is None else tools
-    allowed_tools = {tool["function"]["name"] for tool in available_tools}
-    workspace = MemoryWorkspace(
-        memory_dir,
-        reconciler=_make_reconciler(client, model, usage_logger, config),
+    workspace = MemoryWorkspace(memory_dir, config=config)
+    workspace.reconciler = _make_reconciler(
+        agent,
+        usage_logger=usage_logger,
         config=config,
+        cwd=workspace.stage_dir,
     )
-    if source_sessions:
-        workspace.archive_sessions(source_sessions)
-        workspace._refresh_stage()
-    task = f"{task}\n\nCurrent workspace structure:\n{workspace.structure()}"
-    messages: list[Any] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": task},
-    ]
-    audit: list[dict[str, Any]] = []
-    completed = False
-    for round_no in range(max_rounds):
-        _compact_tool_history(messages)
-        request = {
-            "model": model,
-            "messages": messages,
-            "tools": available_tools,
-            "temperature": 0.1,
-        }
-        request.update(_provider_options(config))
-        response = _chat_completion_with_retry(
-            client.chat.completions.create,
-            retry_log=config.retry_log,
-            **request,
+    try:
+        if source_sessions:
+            workspace.archive_sessions(source_sessions)
+            workspace._refresh_stage()
+        task = f"{task}\n\nCurrent workspace structure:\n{workspace.structure()}"
+        audit: list[dict[str, Any]] = []
+        result = agent.run(
+            prompt=task,
+            system_prompt=SYSTEM_PROMPT,
+            cwd=workspace.stage_dir,
+            tools=management_tools(workspace, audit),
+            max_turns=config.max_turns,
+            max_budget_usd=config.max_budget_usd,
         )
         if usage_logger is not None:
-            usage_logger(response)
-        message = response.choices[0].message
-        messages.append(message)
-        calls = message.tool_calls or []
-        if not calls:
-            if final_output is not None:
-                final_output.append(message.content or "")
-            completed = True
-            break
-        for call in calls:
-            try:
-                try:
-                    args = json.loads(call.function.arguments or "{}")
-                except json.JSONDecodeError as exc:
-                    raise ValueError("invalid JSON arguments") from exc
-                if call.function.name not in allowed_tools:
-                    raise ValueError(
-                        f"tool is not allowed in this phase: "
-                        f"{call.function.name}"
-                    )
-                if call.function.name == "shell":
-                    result = workspace.shell(args["command"])
-                    output = result.stdout + result.stderr
-                    record = {
-                        "round": round_no,
-                        "tool": "shell",
-                        "command": args["command"],
-                        "returncode": result.returncode,
-                        "output": output,
-                        "count": workspace.last_created_blocks,
-                        "topic_paths": workspace.last_changed_topics,
-                    }
-                elif call.function.name == "save_memory":
-                    output = workspace.save_memory(args["events"])
-                    record = {
-                        "round": round_no,
-                        "tool": "save_memory",
-                        "count": len(args["events"]),
-                        "output": output,
-                        "topic_paths": sorted({
-                            "topics/"
-                            + MemoryWorkspace._validate_event(event)["topic_path"]
-                            for event in args["events"]
-                        }),
-                    }
-                else:
-                    raise ValueError(f"unknown tool: {call.function.name}")
-                record["status"] = "ok"
-            except Exception as exc:  # noqa: BLE001
-                output = f"Tool error: {exc}"
-                record = {
-                    "round": round_no,
-                    "tool": call.function.name,
-                    "status": "error",
-                    "output": output,
-                }
-            audit.append(record)
-            messages.append({
-                "role": "tool",
-                "tool_call_id": call.id,
-                "content": output[-100_000:],
-            })
-    if not completed:
+            usage_logger(result)
+        if final_output is not None:
+            final_output.append(result.text)
         audit.append({
             "tool": "agent",
-            "status": "stopped",
-            "reason": "round_limit",
-            "rounds": max_rounds,
+            "status": "ok",
+            "reason": result.stop_reason or "complete",
+            "rounds": result.num_turns,
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "cost_usd": result.total_cost_usd,
         })
-    shutil.rmtree(workspace.stage_dir, ignore_errors=True)
-    return audit
+        return audit
+    finally:
+        shutil.rmtree(workspace.stage_dir, ignore_errors=True)

@@ -94,7 +94,10 @@ def normalize_workspace_command(command: object, memory_dir: Path) -> object:
     return command.replace(f"{root}/", "./").replace(root, ".")
 
 
-def execute_workspace_bash(command: object, memory_dir: Path) -> str:
+def execute_workspace_bash(
+    command: object,
+    memory_dir: Path,
+) -> str:
     command = normalize_workspace_command(command, memory_dir)
     allowed, reason = validate_read_only_command(command)
     if not allowed:

@@ -1,16 +1,14 @@
+import asyncio
 import json
 import os
 import re
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
+from src.agent_runtime import AgentResult
 from src.management import (
     MemoryWorkspace,
-    _chat_completion_with_retry,
-    _compact_tool_history,
-    _json_response,
     _run_agent,
     manage_memory,
     organize_topics,
@@ -19,6 +17,58 @@ from src.management import (
 from src import build as adapter
 from src import management as memory
 from src.markdown import parse_topic_tree
+
+
+class ScriptedAgent:
+    def __init__(self, tool_calls=(), *, text="done", structured_output=None):
+        self.tool_calls = list(tool_calls)
+        self.text = text
+        self.structured_output = structured_output
+        self.calls = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        tools = {definition.name: definition for definition in kwargs["tools"]}
+        for name, arguments in self.tool_calls:
+            asyncio.run(tools[name].handler(arguments))
+        return AgentResult(
+            text=self.text,
+            structured_output=self.structured_output,
+            num_turns=max(1, len(self.tool_calls) + 1),
+            input_tokens=10,
+            output_tokens=5,
+            total_cost_usd=0.001,
+            duration_ms=20,
+            duration_api_ms=15,
+            stop_reason="end_turn",
+            session_id="test-session",
+        )
+
+
+class QueuedAgent:
+    def __init__(self, responses):
+        self.responses = iter(responses)
+        self.calls = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        response = next(self.responses)
+        tools = {definition.name: definition for definition in kwargs["tools"]}
+        tool_calls = response.get("tool_calls", [])
+        for name, arguments in tool_calls:
+            asyncio.run(tools[name].handler(arguments))
+        return AgentResult(
+            text=response.get("text", ""),
+            structured_output=response.get("structured_output"),
+            num_turns=max(1, len(tool_calls) + 1),
+            input_tokens=10,
+            output_tokens=5,
+            total_cost_usd=0.001,
+            duration_ms=20,
+            duration_api_ms=15,
+            stop_reason="end_turn",
+            session_id="test-session",
+        )
 
 
 def test_memory_workspace_runs_normal_shell_commands_from_memory_dir(tmp_path: Path):
@@ -45,6 +95,38 @@ def test_memory_workspace_runs_normal_shell_commands_from_memory_dir(tmp_path: P
         workspace.stage_dir / "topics/aquarium/tanks.md"
     ).read_text()
     assert (tmp_path / "topics/aquarium/tanks.md").exists()
+
+
+def test_writer_delegates_tool_protocol_and_errors_to_agent(tmp_path: Path):
+    invalid = (
+        "mkdir -p topics && printf '%s\\n' '# Pets' '' "
+        "'The user bought a tank.[^new-evidence-tank] ^new-block-tank' '' "
+        "'[^new-evidence-tank]: Time: `2023-05-23`; Sources: Session 1' "
+        "> topics/pets.md"
+    )
+    valid = invalid.replace("Session 1", "D1:1")
+    agent = ScriptedAgent([
+        ("shell", {"command": invalid}),
+        ("shell", {"command": valid}),
+    ])
+
+    audit = memory.write_session(
+        tmp_path,
+        agent=agent,
+        observation_date="2023-05-23",
+        turns=[("user", "I bought a tank")],
+        refs=["D1:1"],
+    )
+
+    assert len(agent.calls) == 1
+    assert [definition.name for definition in agent.calls[0]["tools"]] == [
+        "shell"
+    ]
+    assert [record["status"] for record in audit[:-1]] == ["error", "ok"]
+    assert audit[-1]["tool"] == "agent"
+    assert audit[-1]["status"] == "ok"
+    assert audit[-1]["rounds"] == 3
+    assert (tmp_path / "topics/pets.md").is_file()
 
 
 def test_shell_keeps_time_metadata_out_of_natural_topic_prose(tmp_path: Path):
@@ -258,106 +340,47 @@ def test_append_event_reuses_existing_heading_prefix(tmp_path: Path):
     assert text.count("## Application modules\n") == 1
 
 
-def test_manager_keeps_general_memory_tools(tmp_path):
-    captured = {}
-    message = SimpleNamespace(content="done", tool_calls=[])
+def test_manager_exposes_only_shell_and_uses_twenty_turn_limit(tmp_path):
+    agent = ScriptedAgent()
 
-    def create(**kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    audit = manage_memory(tmp_path, agent=agent)
 
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
-
-    manage_memory(tmp_path, client=client, model="test")
-
-    names = [tool["function"]["name"] for tool in captured["tools"]]
-    assert names == ["shell"]
-
-
-def test_manager_stops_after_eight_model_rounds_by_default(tmp_path):
-    calls = []
-
-    def create(**_kwargs):
-        index = len(calls)
-        calls.append(index)
-        tool_call = SimpleNamespace(
-            id=f"call-{index}",
-            function=SimpleNamespace(name="shell", arguments='{"command":"pwd"}'),
-        )
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-            content=None, tool_calls=[tool_call]
-        ))], usage=None)
-
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
-
-    audit = manage_memory(tmp_path, client=client, model="test")
-
-    assert len(calls) == 8
-    assert audit[-1] == {
-        "tool": "agent",
-        "status": "stopped",
-        "reason": "round_limit",
-        "rounds": 8,
-    }
+    assert [definition.name for definition in agent.calls[0]["tools"]] == [
+        "shell"
+    ]
+    assert agent.calls[0]["max_turns"] == 20
+    assert audit[-1]["status"] == "ok"
 
 
 def test_local_organizer_receives_only_touched_topic_scope(tmp_path):
-    captured = {}
-    response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-        content="done", tool_calls=[]
-    ))], usage=None)
-
-    def create(**kwargs):
-        captured.update(kwargs)
-        return response
-
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
+    agent = ScriptedAgent()
 
     organize_topics(
         tmp_path,
-        client=client,
-        model="test",
+        agent=agent,
         touched={"topics/projects/a.md", "topics/projects/b.md"},
     )
 
-    task = captured["messages"][1]["content"]
+    task = agent.calls[0]["prompt"]
     assert "Limit this maintenance pass to these topic files" in task
     assert "topics/projects/a.md" in task
     assert "topics/projects/b.md" in task
 
 
-def test_writer_exposes_only_the_shared_shell_editor(tmp_path):
-    captured = {}
-    response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-        content="done", tool_calls=[]
-    ))], usage=None)
+def test_writer_may_read_but_must_not_modify_archived_sources():
+    from src.management.prompts import SYSTEM_PROMPT, WRITER_BATCH_TASK, WRITER_TASK
 
-    def create(**kwargs):
-        captured.update(kwargs)
-        return response
-
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
-
-    from src.management import write_session
-
-    write_session(
-        tmp_path,
-        client=client,
-        model="test",
-        observation_date="2026-08-01",
-        turns=[("user", "I moved to Shanghai")],
-        refs=["D1:1"],
+    for prompt in (WRITER_TASK, WRITER_BATCH_TASK):
+        assert (
+            "Inspect whichever existing Topic, Core, or Source files are useful."
+            in prompt
+        )
+        assert "Do not modify files under sources/." in prompt
+    assert "[^new-evidence-example] ^new-block-example" in SYSTEM_PROMPT
+    assert (
+        "Time: `<time>`; Sources: <complete-source-handle-from-input>"
+        in SYSTEM_PROMPT
     )
-
-    assert [tool["function"]["name"] for tool in captured["tools"]] == ["shell"]
 
 
 def test_workspace_structure_lists_all_shell_visible_memory_views(tmp_path):
@@ -397,37 +420,15 @@ def test_shell_can_read_all_memory_views(tmp_path):
 
 
 def test_agent_needs_no_final_persistence_action_when_model_finishes(tmp_path):
-    message = SimpleNamespace(content="done", tool_calls=[])
-    response = SimpleNamespace(
-        choices=[SimpleNamespace(message=message)], usage=None
+    audit = _run_agent(
+        tmp_path,
+        agent=ScriptedAgent(),
+        task="organize",
     )
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
-        create=lambda **_kwargs: response
-    )))
 
-    audit = _run_agent(tmp_path, client=client, model="test", task="organize")
-
-    assert audit == []
-
-
-def test_agent_keeps_successful_tool_changes_when_round_limit_is_reached(tmp_path):
-    call = SimpleNamespace(
-        id="shell",
-        function=SimpleNamespace(name="shell", arguments='{"command":"true"}'),
-    )
-    message = SimpleNamespace(content=None, tool_calls=[call])
-    response = SimpleNamespace(
-        choices=[SimpleNamespace(message=message)], usage=None
-    )
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
-        create=lambda **_kwargs: response
-    )))
-
-    audit = _run_agent(tmp_path, client=client, model="test", task="organize")
-
-    assert len(audit) == 13
-    assert all(record["status"] == "ok" for record in audit[:-1])
-    assert audit[-1]["reason"] == "round_limit"
+    assert len(audit) == 1
+    assert audit[0]["tool"] == "agent"
+    assert audit[0]["status"] == "ok"
 
 
 def test_save_memory_commits_linked_views(tmp_path: Path):
@@ -812,98 +813,6 @@ def test_shell_revision_synchronizes_event_content_to_all_views(tmp_path: Path):
     )
 
 
-def test_chat_completion_retries_rate_limit_and_honors_retry_after(monkeypatch):
-    waits = []
-
-    class RateLimited(Exception):
-        status_code = 429
-
-        def __init__(self):
-            self.response = type(
-                "Response", (), {"headers": {"retry-after": "3"}}
-            )()
-
-    attempts = iter([RateLimited(), "ok"])
-
-    def create(**_kwargs):
-        result = next(attempts)
-        if isinstance(result, Exception):
-            raise result
-        return result
-
-    monkeypatch.setattr(
-        "src.management.provider.time.sleep", waits.append
-    )
-
-    result = _chat_completion_with_retry(create, model="gpt-5.5")
-
-    assert result == "ok"
-    assert waits == [3.0]
-
-
-def test_chat_completion_keeps_retrying_transient_connection_errors(monkeypatch):
-    waits = []
-    attempts = 0
-
-    def create(**_kwargs):
-        nonlocal attempts
-        attempts += 1
-        if attempts < 10:
-            raise ConnectionError("network unavailable")
-        return "ok"
-
-    monkeypatch.setattr(
-        "src.management.provider.time.sleep", waits.append
-    )
-
-    assert _chat_completion_with_retry(create, model="gpt-5.5") == "ok"
-    assert attempts == 10
-    assert waits
-
-
-def test_chat_completion_does_not_retry_permanent_http_error(monkeypatch):
-    attempts = 0
-
-    class BadRequest(Exception):
-        status_code = 400
-
-    def create(**_kwargs):
-        nonlocal attempts
-        attempts += 1
-        raise BadRequest("invalid request")
-
-    monkeypatch.setattr(
-        "src.management.provider.time.sleep",
-        lambda _delay: pytest.fail("permanent error must not sleep"),
-    )
-
-    with pytest.raises(BadRequest):
-        _chat_completion_with_retry(create, model="gpt-5.5")
-    assert attempts == 1
-
-
-def test_chat_completion_retries_frontier_temporary_quota_error(monkeypatch):
-    waits = []
-    attempts = 0
-
-    class TemporaryQuota(Exception):
-        status_code = 403
-
-    def create(**_kwargs):
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise TemporaryQuota("insufficient_user_quota: 用户额度不足")
-        return "ok"
-
-    monkeypatch.setattr(
-        "src.management.provider.time.sleep", waits.append
-    )
-
-    assert _chat_completion_with_retry(create, model="gpt-5.5") == "ok"
-    assert waits == [30]
-
-
 def test_nativemem_build_verifies_each_session_before_next_write(
     tmp_path: Path, monkeypatch
 ):
@@ -936,7 +845,7 @@ def test_nativemem_build_verifies_each_session_before_next_write(
     )
 
     _, events = adapter.build_memory(
-        conv, tmp_path, client=object(), model="test"
+        conv, tmp_path, agent=object(), model="test"
     )
 
     assert events == 2
@@ -970,7 +879,7 @@ def test_nativemem_build_replaces_locomo_sequence_refs_with_opaque_source_ids(
     adapter.build_memory(
         conv,
         tmp_path,
-        client=object(),
+        agent=object(),
         model="test",
         config=adapter.BuildConfig(verify_writes=False, final_manage=False),
     )
@@ -1022,7 +931,7 @@ def test_nativemem_build_runs_local_reorganization_at_fixed_session_intervals(
     adapter.build_memory(
         conv,
         tmp_path,
-        client=object(),
+        agent=object(),
         model="test",
         config=adapter.BuildConfig(local_reorg_every_sessions=2),
     )
@@ -1074,7 +983,7 @@ def test_nativemem_final_management_requires_new_memory_and_can_be_disabled(
     adapter.build_memory(
         conv,
         tmp_path,
-        client=object(),
+        agent=object(),
         model="test",
         config=adapter.BuildConfig(final_manage=final_manage),
     )
@@ -1103,7 +1012,7 @@ def test_nativemem_build_can_disable_write_verification(tmp_path: Path, monkeypa
     _seconds, events = adapter.build_memory(
         conv,
         tmp_path,
-        client=object(),
+        agent=object(),
         model="test",
         config=adapter.BuildConfig(verify_writes=False, final_manage=False),
     )
@@ -1140,7 +1049,7 @@ def test_nativemem_build_batches_writes_and_samples_verification(
     adapter.build_memory(
         conv,
         tmp_path,
-        client=object(),
+        agent=object(),
         model="test",
         config=adapter.BuildConfig(
             session_batch=2,
@@ -1157,297 +1066,44 @@ def test_nativemem_build_batches_writes_and_samples_verification(
     assert verifications == ["2023-05-02", "2023-05-04", "2023-05-05"]
 
 
-def test_compact_tool_history_keeps_latest_outputs_only():
-    messages = [
-        {"role": "user", "content": "task"},
-        {"role": "assistant", "content": None},
-        {"role": "tool", "tool_call_id": "old", "content": "x" * 5000},
-        {"role": "assistant", "content": None},
-        {"role": "tool", "tool_call_id": "new", "content": "y" * 5000},
-    ]
-
-    _compact_tool_history(messages)
-
-    assert messages[2]["content"] == "[previous tool output omitted]"
-    assert messages[4]["content"] == "y" * 5000
-
-
-def test_compact_tool_history_accepts_sdk_message_objects():
-    messages = [
-        {"role": "user", "content": "task"},
-        SimpleNamespace(role="assistant", content=None),
-        {"role": "tool", "tool_call_id": "old", "content": "x" * 5000},
-        SimpleNamespace(role="assistant", content=None),
-        {"role": "tool", "tool_call_id": "new", "content": "y" * 5000},
-    ]
-
-    _compact_tool_history(messages)
-
-    assert messages[2]["content"] == "[previous tool output omitted]"
-    assert messages[4]["content"] == "y" * 5000
-
-
-def test_nativemem_agent_passes_configured_reasoning_effort(tmp_path):
-    captured = {}
-    responses = iter([
-        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-            content="done", tool_calls=[]
-        ))]),
-    ])
-
-    def create(**kwargs):
-        captured.update(kwargs)
-        return next(responses)
-
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
-
-    from src.management import write_session
-
-    write_session(
-        tmp_path,
-        client=client,
-        model="gpt-5.5",
-        observation_date="2023-05-23",
-        turns=[("user", "hello")],
-        refs=["D1:1"],
-        config=memory.MemoryConfig(reasoning_effort="none"),
-    )
-
-    assert captured["reasoning_effort"] == "none"
-
-
-def test_nativemem_agent_can_disable_provider_thinking(tmp_path):
-    captured = {}
-    response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-        content="done", tool_calls=[]
-    ))], usage=None)
-
-    def create(**kwargs):
-        captured.update(kwargs)
-        return response
-
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
-
-    _run_agent(
-        tmp_path,
-        client=client,
-        model="test",
-        task="organize",
-        config=memory.MemoryConfig(thinking="disabled"),
-    )
-
-    assert captured["extra_body"] == {"thinking": {"type": "disabled"}}
-
-
-def test_nativemem_agent_can_correct_invalid_topic_source_handles(tmp_path):
-    invalid_command = (
-        "mkdir -p topics && printf '%s\\n' '# Pets' '' "
-        "'On 2023-05-23, the user bought a tank."
-        "[^new-evidence-tank] ^new-block-tank' '' "
-        "'[^new-evidence-tank]: Time: `2023-05-23`; Sources: Session 1' > topics/pets.md"
-    )
-    invalid = SimpleNamespace(
-        id="invalid",
-        function=SimpleNamespace(
-            name="shell",
-            arguments=json.dumps({"command": invalid_command}),
-        ),
-    )
-    valid_command = invalid_command.replace("Session 1", "D1:1")
-    valid = SimpleNamespace(
-        id="valid",
-        function=SimpleNamespace(
-            name="shell",
-            arguments=json.dumps({"command": valid_command}),
-        ),
-    )
-    responses = iter([
-        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-            content=None, tool_calls=[invalid]
-        ))]),
-        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-            content=None, tool_calls=[valid]
-        ))]),
-        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-            content="done", tool_calls=[]
-        ))]),
-    ])
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
-        create=lambda **_kwargs: next(responses)
-    )))
-
-    from src.management import write_session
-
-    audit = write_session(
-        tmp_path,
-        client=client,
-        model="gpt-5.5",
-        observation_date="2023-05-23",
-        turns=[("user", "I bought a tank")],
-        refs=["D1:1"],
-    )
-
-    assert [record["status"] for record in audit] == ["error", "ok"]
-    assert audit[-1]["tool"] == "shell"
-    assert audit[-1]["count"] == 1
-    assert audit[-1]["topic_paths"] == ["topics/pets.md"]
-    assert json.loads((tmp_path / "recent_events.jsonl").read_text())["refs"] == ["D1:1"]
-
-
-def test_nativemem_agent_recovers_from_malformed_tool_arguments(tmp_path):
-    malformed = SimpleNamespace(
-        id="bad-json",
-        function=SimpleNamespace(name="shell", arguments='{"command":"ls'),
-    )
-    responses = iter([
-        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-            content=None, tool_calls=[malformed]
-        ))]),
-        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-            content="done", tool_calls=[]
-        ))]),
-    ])
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
-        create=lambda **_kwargs: next(responses)
-    )))
-
-    audit = _run_agent(tmp_path, client=client, model="test", task="organize")
-
-    assert audit == [{
-        "round": 0,
-        "tool": "shell",
-        "status": "error",
-        "output": "Tool error: invalid JSON arguments",
-    }]
-
-
 def test_verify_session_does_not_repair_when_memory_answers_probe(
     tmp_path, monkeypatch
 ):
+    del monkeypatch
     source_workspace = MemoryWorkspace(tmp_path)
     source_workspace.archive_sessions([{
         "observation_date": "2023-05-23",
         "turns": [("user", "I wake up at 6:30 AM.")],
         "refs": ["D1:1"],
     }])
-    calls = []
-    responses = iter([
-        '{"question":"What time does the user wake up?",'
-        '"expected_answer":"6:30 AM","refs":["D1:1"]}',
-        "<answer>6:30 AM</answer>",
-        '{"supported":true}',
+    agent = QueuedAgent([
+        {"structured_output": {
+            "question": "What time does the user wake up?",
+            "expected_answer": "6:30 AM",
+            "refs": ["D1:1"],
+        }},
+        {"text": "<answer>6:30 AM</answer>"},
+        {"structured_output": {"supported": True}},
     ])
-
-    def create(**kwargs):
-        calls.append(kwargs)
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(
-                content=next(responses), tool_calls=[]
-            ))],
-            usage=None,
-        )
-
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
     before = list(tmp_path.rglob("*"))
 
     result = verify_session(
         tmp_path,
-        client=client,
-        model="test",
+        agent=agent,
         observation_date="2023-05-23",
         turns=[("user", "I wake up at 6:30 AM.")],
         refs=["D1:1"],
-        config=memory.MemoryConfig(
-            reasoning_effort="none", thinking="disabled"
-        ),
     )
 
     assert result["repaired"] is False
     assert result["initial"]["answer"] == "6:30 AM"
     assert result["post_repair"] is None
     assert list(tmp_path.rglob("*")) == before
-    assert "6:30 AM" not in calls[1]["messages"][1]["content"]
-    assert all(call["reasoning_effort"] == "none" for call in calls)
-    assert all(
-        call["extra_body"] == {"thinking": {"type": "disabled"}}
-        for call in calls
-    )
-    assert calls[0]["response_format"] == {"type": "json_object"}
-    assert "response_format" not in calls[1]
-    assert calls[2]["response_format"] == {"type": "json_object"}
-
-
-def test_json_response_satisfies_provider_json_mode_prompt_contract():
-    def create(**kwargs):
-        prompt = "\n".join(message["content"] for message in kwargs["messages"])
-        assert "json" in prompt.lower()
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(
-                content='{"supported":true}'
-            ))],
-            usage=None,
-        )
-
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
-
-    result = _json_response(
-        client=client,
-        model="test",
-        messages=[{"role": "user", "content": "Return supported=true."}],
-        usage_logger=None,
-        config=memory.MemoryConfig(),
-    )
-
-    assert result == {"supported": True}
-
-
-def test_verification_retrieval_accepts_a_plain_nonempty_answer(
-    tmp_path: Path, monkeypatch
-):
-    from src.management import verification
-
-    def run_agent(*_args, final_output, **_kwargs):
-        final_output.append("6:30 AM")
-        return []
-
-    monkeypatch.setattr(verification, "_run_agent", run_agent)
-
-    result = verification._verification_retrieve(
-        tmp_path,
-        client=object(),
-        model="test",
-        question="When?",
-        usage_logger=None,
-        config=memory.MemoryConfig(),
-    )
-
-    assert result == {"question": "When?", "answer": "6:30 AM", "trace": []}
-
-
-def test_verification_retrieval_records_an_empty_answer(tmp_path: Path, monkeypatch):
-    from src.management import verification
-
-    stopped = [{"tool": "agent", "status": "stopped", "reason": "round_limit"}]
-    monkeypatch.setattr(verification, "_run_agent", lambda *_args, **_kwargs: stopped)
-
-    result = verification._verification_retrieve(
-        tmp_path,
-        client=object(),
-        model="test",
-        question="When?",
-        usage_logger=None,
-        config=memory.MemoryConfig(),
-    )
-
-    assert result == {"question": "When?", "answer": "", "trace": stopped}
+    assert agent.calls[0]["output_schema"]["required"] == [
+        "question", "expected_answer", "refs"
+    ]
+    assert agent.calls[1].get("output_schema") is None
+    assert agent.calls[2]["output_schema"]["required"] == ["supported"]
 
 
 def test_verify_session_repairs_then_retries_same_question(tmp_path):
@@ -1457,49 +1113,29 @@ def test_verify_session_repairs_then_retries_same_question(tmp_path):
         "turns": [("user", "I wake up at 6:30 AM.")],
         "refs": ["D1:1"],
     }])
-    repair = SimpleNamespace(
-        id="repair",
-        function=SimpleNamespace(
-            name="shell",
-            arguments=json.dumps({"command": (
-                "mkdir -p topics/routines && printf '%s\\n' '# Daily routine' "
-                "'## Morning' '' 'On 2023-05-23, the user wakes up at 6:30 AM."
-                "[^new-evidence-wake] ^new-block-wake' '' "
-                "'[^new-evidence-wake]: Time: `2023-05-23`; Sources: D1:1' "
-                "> topics/routines/daily.md"
-            )}),
-        ),
+    repair_command = (
+        "mkdir -p topics/routines && printf '%s\\n' '# Daily routine' "
+        "'## Morning' '' 'On 2023-05-23, the user wakes up at 6:30 AM."
+        "[^new-evidence-wake] ^new-block-wake' '' "
+        "'[^new-evidence-wake]: Time: `2023-05-23`; Sources: D1:1' "
+        "> topics/routines/daily.md"
     )
-    responses = iter([
-        '{"question":"What time does the user wake up?",'
-        '"expected_answer":"6:30 AM","refs":["D1:1"]}',
-        "<answer>No information available.</answer>",
-        '{"supported":false}',
-        SimpleNamespace(content=None, tool_calls=[repair]),
-        SimpleNamespace(content="done", tool_calls=[]),
-        "<answer>6:30 AM</answer>",
-        '{"supported":true}',
+    agent = QueuedAgent([
+        {"structured_output": {
+            "question": "What time does the user wake up?",
+            "expected_answer": "6:30 AM",
+            "refs": ["D1:1"],
+        }},
+        {"text": "<answer>No information available.</answer>"},
+        {"structured_output": {"supported": False}},
+        {"tool_calls": [("shell", {"command": repair_command})]},
+        {"text": "<answer>6:30 AM</answer>"},
+        {"structured_output": {"supported": True}},
     ])
-
-    def create(**_kwargs):
-        value = next(responses)
-        message = (
-            value if isinstance(value, SimpleNamespace)
-            else SimpleNamespace(content=value, tool_calls=[])
-        )
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=message)],
-            usage=None,
-        )
-
-    client = SimpleNamespace(chat=SimpleNamespace(
-        completions=SimpleNamespace(create=create)
-    ))
 
     result = verify_session(
         tmp_path,
-        client=client,
-        model="test",
+        agent=agent,
         observation_date="2023-05-23",
         turns=[("user", "I wake up at 6:30 AM.")],
         refs=["D1:1"],

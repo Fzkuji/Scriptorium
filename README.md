@@ -1,6 +1,6 @@
-# NativeMem
+# Agent Memory Harness
 
-NativeMem uses model-managed Markdown files as external memory. The repository
+Agent Memory Harness uses model-managed Markdown files as external memory. The repository
 contains the current implementation, benchmark runners, evaluation code,
 stored results, paper source, and third-party reproduction metadata.
 
@@ -9,18 +9,24 @@ stored results, paper source, and third-party reproduction metadata.
 Python 3.12 is the supported runtime.
 
 ```bash
-git clone <repository-url> model-aligned-wiki
-cd model-aligned-wiki
+git clone <repository-url> Agent-Memory-Harness
+cd Agent-Memory-Harness
 ./setup.sh
 source .venv/bin/activate
 ```
 
 `setup.sh` creates a local virtual environment, installs
 `requirements-dev.txt`, and checks the repository layout. API credentials are
-not stored in this repository. Current NativeMem commands receive credentials,
-models, endpoints and budgets through explicit CLI or function parameters. The
+not stored in this repository. Current commands receive credentials, models,
+Anthropic-compatible endpoints and budgets through explicit CLI or function parameters. The
 capacity calibration command reads its credential from the file named by
 `api_key_file` in its local config.
+
+Writer, Manager, verification and query trajectories run through the Claude
+Agent SDK. Each trajectory uses an isolated temporary Claude configuration,
+does not read the user's `~/.claude` settings or subscription session, and does
+not persist an SDK session. The adapter passes credentials only to the child
+Claude Code process; it does not modify the parent process environment.
 
 The complete local research directory also contains benchmark data, stored
 results, and third-party checkouts that are intentionally not committed to the
@@ -32,7 +38,7 @@ or `.venv-*`; run `./setup.sh` on the destination computer instead.
 
 ```text
 code/
-  src/                        reusable NativeMem implementation
+  src/                        reusable Agent Memory Harness implementation
   scripts/                    runners, adapters, evaluation and analysis
     configs/                  frozen command inputs
     model_capacity/           Writer capacity calibration
@@ -70,7 +76,7 @@ Run commands from the repository root:
 # Layout and transfer check
 python scripts/verify_portable_layout.py
 
-# Current NativeMem tests
+# Current Agent Memory Harness tests
 pytest -q \
   tests/management \
   tests/markdown \

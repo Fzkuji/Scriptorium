@@ -8,7 +8,7 @@ from typing import Any
 from scripts.nativemem.common import stop_on_signal
 from src import retrieval
 
-from .execution import answer_one, install_trace_hooks, lme, run_pending
+from .execution import answer_one, lme, run_pending
 from .results import load_completed_results, source_records, write_results
 
 
@@ -20,14 +20,10 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--gateway-base-url", required=True)
     parser.add_argument("--model", default="openai/gpt-4o-mini")
-    parser.add_argument(
-        "--api-format", choices=("openai", "anthropic"), default="openai"
-    )
     parser.add_argument("--api-key", required=True)
-    parser.add_argument("--max-tokens", type=int, default=1200)
-    parser.add_argument("--max-rounds", type=int, default=8)
-    parser.add_argument("--max-tool-calls", type=int, default=5)
-    parser.add_argument("--visible-token-limit", type=int, default=10_000)
+    parser.add_argument("--claude-cli")
+    parser.add_argument("--max-turns", type=int, default=20)
+    parser.add_argument("--max-budget-usd", type=float)
     parser.add_argument(
         "--verify-sources", action=argparse.BooleanOptionalAction, default=True
     )
@@ -40,14 +36,10 @@ def main() -> int:
     args = parser.parse_args()
     if args.workers < 1:
         parser.error("--workers must be positive")
-    if args.max_tokens < 1:
-        parser.error("--max-tokens must be positive")
-    if args.max_rounds < 0:
-        parser.error("--max-rounds must be non-negative")
-    if args.max_tool_calls < 0:
-        parser.error("--max-tool-calls must be non-negative")
-    if args.visible_token_limit < 0:
-        parser.error("--visible-token-limit must be non-negative")
+    if args.max_turns < 1:
+        parser.error("--max-turns must be positive")
+    if args.max_budget_usd is not None and args.max_budget_usd <= 0:
+        parser.error("--max-budget-usd must be positive")
 
     dataset = lme.load_dataset(
         args.data.resolve(), lme.EXPECTED_LONGMEMEVAL_SIZE
@@ -57,18 +49,15 @@ def main() -> int:
     output_dir = args.output_dir.resolve()
     backend = retrieval.create_runtime(
         args.gateway_base_url,
-        api_format=args.api_format,
         model=args.model,
         api_key=args.api_key,
+        cli_path=args.claude_cli,
     )
     query_config = retrieval.QueryConfig(
-        max_rounds=args.max_rounds,
-        max_tool_calls=args.max_tool_calls,
-        visible_token_limit=args.visible_token_limit,
-        max_output_tokens=args.max_tokens,
+        max_turns=args.max_turns,
+        max_budget_usd=args.max_budget_usd,
         verify_sources=args.verify_sources,
     )
-    trace_state = install_trace_hooks(backend)
     completed = load_completed_results(output_dir, dataset, sources)
     write_results(output_dir, completed)
     pending = [
@@ -84,7 +73,6 @@ def main() -> int:
     def work(source: dict[str, Any]) -> dict[str, Any]:
         return answer_one(
             backend,
-            trace_state,
             dataset,
             source,
             output_dir,

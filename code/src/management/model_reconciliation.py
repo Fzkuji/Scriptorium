@@ -1,19 +1,60 @@
-"""LLM-backed reconciliation for free-form Topic edits."""
+"""Claude Code structured reconciliation for free-form Topic edits."""
+
+from __future__ import annotations
 
 import json
-import re
+from pathlib import Path
 from typing import Any
 
-from .reconciliation import ReconciliationError, ReconciliationResult
 from .config import MemoryConfig
-from .provider import _chat_completion_with_retry, _provider_options
+from .reconciliation import ReconciliationError, ReconciliationResult
+
+
+_RECONCILIATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "matches": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+        },
+        "creates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string"},
+                    "when": {"type": ["string", "null"]},
+                    "source_refs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["content", "when", "source_refs"],
+                "additionalProperties": False,
+            },
+        },
+        "deleted_ids": {"type": "array", "items": {"type": "string"}},
+        "organizational_quotes": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": [
+        "matches",
+        "creates",
+        "deleted_ids",
+        "organizational_quotes",
+    ],
+    "additionalProperties": False,
+}
 
 
 def _make_reconciler(
-    client: Any,
-    model: str,
+    agent: Any,
+    *,
     usage_logger: Any | None,
     config: MemoryConfig,
+    cwd: str | Path,
 ):
     def reconcile(edited_text, old_units, candidate_sources):
         payload = {
@@ -29,34 +70,26 @@ def _make_reconciler(
             ],
             "candidate_sources": sorted(candidate_sources),
         }
-        response = _chat_completion_with_retry(
-            client.chat.completions.create,
-            retry_log=config.retry_log,
-            model=model,
-            messages=[{
-                "role": "system",
-                "content": (
-                    "Reconcile edited Topic Markdown with existing memory IDs. "
-                    "Every returned text value must be an exact quote from "
-                    "edited_topic_text. Use only candidate_sources. Output JSON "
-                    "with matches, creates, deleted_ids, and "
-                    "organizational_quotes. creates contains objects with "
-                    "content, when (YYYY-MM-DD or null), and source_refs."
-                ),
-            }, {
-                "role": "user",
-                "content": json.dumps(payload, ensure_ascii=False),
-            }],
-            temperature=0.0,
-            **_provider_options(config),
+        result = agent.run(
+            prompt=json.dumps(payload, ensure_ascii=False),
+            system_prompt=(
+                "Reconcile edited Topic Markdown with existing memory IDs. "
+                "Every returned text value must be an exact quote from "
+                "edited_topic_text. Use only candidate_sources."
+            ),
+            cwd=cwd,
+            tools=[],
+            max_turns=config.max_turns,
+            max_budget_usd=config.max_budget_usd,
+            output_schema=_RECONCILIATION_SCHEMA,
         )
         if usage_logger is not None:
-            usage_logger(response)
-        content = response.choices[0].message.content or ""
-        match = re.search(r"\{.*\}", content, re.DOTALL)
-        if not match:
-            raise ReconciliationError("Reconciler did not return JSON")
-        value = json.loads(match.group(0))
+            usage_logger(result)
+        value = result.structured_output
+        if not isinstance(value, dict):
+            raise ReconciliationError(
+                "Reconciler did not return structured output"
+            )
         creates = tuple(
             (
                 str(row["content"]),
@@ -72,11 +105,11 @@ def _make_reconciler(
             },
             creates=creates,
             deleted_ids=tuple(
-                str(value) for value in value.get("deleted_ids", [])
+                str(item) for item in value.get("deleted_ids", [])
             ),
             organizational_quotes=tuple(
-                str(value)
-                for value in value.get("organizational_quotes", [])
+                str(item)
+                for item in value.get("organizational_quotes", [])
             ),
         )
 

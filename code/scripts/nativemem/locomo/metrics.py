@@ -16,16 +16,27 @@ def summarize_usage(
         phase = str(record.get("phase", "unknown"))
         value = by_phase.setdefault(
             phase,
-            {"calls": 0, "input_tokens": 0, "output_tokens": 0},
+            {
+                "calls": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "reported_cost_usd": 0.0,
+            },
         )
-        value["calls"] += 1
+        value["calls"] += int(record.get("calls", 1) or 0)
         value["input_tokens"] += int(record.get("prompt_tokens", 0) or 0)
         value["output_tokens"] += int(record.get("completion_tokens", 0) or 0)
+        value["reported_cost_usd"] += float(
+            record.get("total_cost_usd", 0) or 0
+        )
     for value in by_phase.values():
         value["estimated_cost_usd"] = round(
             value["input_tokens"] / 1_000_000 * input_usd_per_million
             + value["output_tokens"] / 1_000_000 * output_usd_per_million,
             8,
+        )
+        value["reported_cost_usd"] = round(
+            value["reported_cost_usd"], 8
         )
     return {
         "totals": {
@@ -35,6 +46,7 @@ def summarize_usage(
                 "input_tokens",
                 "output_tokens",
                 "estimated_cost_usd",
+                "reported_cost_usd",
             )
         },
         "by_phase": by_phase,

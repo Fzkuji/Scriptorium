@@ -13,13 +13,20 @@ Place an evidence footnote immediately after the fact it supports. Preserve exis
 Replace <time> with exactly one YYYY, YYYY-MM, YYYY-MM-DD, or undated value.
 Use a distinct evidence label for each newly supported claim. Use the semantic event time stated or entailed by the evidence, not merely the write time or session observation date. Resolve explicit relative expressions with the Source observation date at the available precision: for example, "yesterday" becomes YYYY-MM-DD and "last year" becomes YYYY. The observation date must not be copied onto unrelated facts. Time belongs in the footnote metadata. Do not append the resolved time to the fact merely to mirror the Time field. Preserve a date in the prose only when it is naturally part of the fact. Use undated only when no calendar year can be determined. All resolved YYYY, YYYY-MM, and YYYY-MM-DD evidence is materialized in Timeline at its original precision; undated evidence is omitted. When the same fact has evidence at different semantic times, attach consecutive footnotes with one time value per footnote. Multiple complete source handles may follow Sources, separated by `, `. Do not invent source handles.
 
+A valid new Topic paragraph and evidence definition have this form (replace every placeholder with current content):
+<complete fact>.[^new-evidence-example] ^new-block-example
+
+[^new-evidence-example]: Time: `<time>`; Sources: <complete-source-handle-from-input>
+
 Use ordinary Markdown links to relate memory blocks, for example [current work](../career/employment.md#^existing-block-id). Every relative Markdown link from one Topic file to another Topic `.md` file must target `#^existing-block-id` or `#^new-block-<label>`; file-only and heading-only Topic links are invalid. The Runtime resolves source handles, temporary IDs, relative paths, and backlinks, then rebuilds Timeline, Recent, and Relations after each staged edit. Retrieval code derives BM25 and Embedding candidates from committed Topic blocks; do not edit retrieval caches.
 
-Use the shell to inspect and edit Topic Markdown. Make the smallest relevant text change, keep unrelated prose and footnotes unchanged, and preserve complete historical state changes. The Runtime normalizes temporary IDs and source handles, validates every block, rewrites relative links after moves, rebuilds all derived views, and installs the transaction only if every check succeeds. Each shell edit is one independent transaction. A Runtime format error rejects every file and directory change made by that shell call. When retrying a rejected creation, include the parent-directory creation and the complete corrected file in the same shell command."""
+Use the shell to inspect and edit Topic Markdown. Make the smallest relevant text change, keep unrelated prose and footnotes unchanged, and preserve complete historical state changes. The Runtime normalizes temporary IDs and source handles, validates every block, rewrites relative links after moves, rebuilds all derived views, and installs the transaction only if every check succeeds. Each shell edit is one independent transaction. A Runtime format error rejects every file and directory change made by that shell call."""
 
 WRITER_TASK = """Integrate the following conversation session into the memory workspace.
 
 Review the supplied workspace structure and relevant existing documents. Use the shell to create or revise the appropriate Topic Markdown paragraphs and headings. Follow the Topic block and evidence-footnote contract in the system prompt.
+
+The complete source conversation is already included below. Inspect whichever existing Topic, Core, or Source files are useful. Do not modify files under sources/.
 
 Preserve complete historical state changes. Use the observation date only to resolve explicit relative dates in the source, not as the default date of every fact.
 
@@ -35,7 +42,7 @@ WRITER_BATCH_TASK = """Integrate the following conversation sessions into the me
 
 Review the supplied workspace structure and relevant existing documents. Use the shell to create or revise the appropriate Topic Markdown paragraphs and headings. Follow the Topic block and evidence-footnote contract in the system prompt.
 
-Integrate every supplied session before finishing. Avoid rereading an unchanged source after it has already been inspected.
+The complete source conversations are already included below. Inspect whichever existing Topic, Core, or Source files are useful. Do not modify files under sources/. Integrate every supplied session before finishing.
 
 Preserve complete historical state changes. Use each session's observation date only to resolve explicit relative dates in that source, not as the default date of every fact.
 
@@ -100,47 +107,6 @@ TOOLS = [
                 "type": "object",
                 "properties": {"command": {"type": "string"}},
                 "required": ["command"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "save_memory",
-            "description": "Save events into topic files; code synchronizes the other memory views.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "events": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "when": {"type": "string"},
-                                "content": {"type": "string"},
-                                "topic_path": {
-                                    "type": "string",
-                                    "description": (
-                                        "Markdown path relative to the topics root; "
-                                        "do not include a leading topics/ directory"
-                                    ),
-                                },
-                                "headings": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "minItems": 1,
-                                    "maxItems": 6,
-                                },
-                                "refs": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                },
-                            },
-                            "required": ["when", "content", "refs", "topic_path", "headings"],
-                        },
-                    }
-                },
-                "required": ["events"],
             },
         },
     },

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Calibrate NativeMem Writer input capacity with complete synthetic sessions."""
+"""Calibrate Writer input capacity on one fixed synthetic workload."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import statistics
@@ -16,48 +17,75 @@ from typing import Any
 from scripts.nativemem.common import atomic_json
 from src import management, retrieval
 from src.management.api import render_writer_input, writer_protocol_sha256
-from src.runtime.capacity import SCHEMA, select_safe_capacity
+from src.runtime.capacity import (
+    SCHEMA,
+    MessageTooLargeError,
+    pack_complete_messages,
+    select_writer_capacities,
+)
 from src.runtime.tokenization import TokenCounter
 
 
-class CandidateTooSmallError(ValueError):
-    """A candidate cannot contain the fixed Writer prompt and one session."""
-
-
-def _probe_session(probe_id: str, index: int) -> dict[str, Any]:
-    code = f"{probe_id.upper()}-{index:03d}"
-    filler = " ".join(
-        f"Context {number} describes the circumstances without changing the record."
-        for number in range(1, 9)
-    )
-    return {
-        "observation_date": f"2026-01-{(index % 28) + 1:02d}",
-        "turns": [(
-            "user",
-            f"Remember calibration record {code}: the assigned archive label is "
-            f"{code}. This is a durable fact for later exact recall. {filler}",
-        )],
-        "refs": [f"calibration/{probe_id}/msg-{index:03d}"],
-    }
-
-
-def make_probe_sessions(
+def make_probe_workload(
     *,
     probe_id: str,
-    candidate_tokens: int,
-    token_counter: TokenCounter,
-) -> list[dict[str, Any]]:
-    sessions: list[dict[str, Any]] = []
-    for index in range(1, 1000):
-        candidate = [*sessions, _probe_session(probe_id, index)]
-        if token_counter.count(render_writer_input(candidate)) > candidate_tokens:
-            break
-        sessions = candidate
-    if not sessions:
-        raise CandidateTooSmallError(
-            f"candidate {candidate_tokens} is smaller than one complete Writer input"
+    session_count: int,
+    messages_per_session: int,
+    facts_per_session: int = 1,
+    context_sentences: int = 2,
+) -> tuple[list[dict[str, Any]], set[str], set[str]]:
+    if session_count < 1 or messages_per_session < 1 or context_sentences < 1:
+        raise ValueError("probe workload sizes must be positive")
+    if not 1 <= facts_per_session <= messages_per_session:
+        raise ValueError(
+            "facts_per_session must be between 1 and messages_per_session"
         )
-    return sessions
+    sessions = []
+    expected_refs: set[str] = set()
+    expected_facts: set[str] = set()
+    for session_number in range(1, session_count + 1):
+        turns = []
+        refs = []
+        fact_positions = {
+            ((index + 1) * messages_per_session) // (facts_per_session + 1)
+            for index in range(facts_per_session)
+        }
+        for message_number in range(1, messages_per_session + 1):
+            ref = (
+                f"calibration/{probe_id}-s{session_number:03d}/"
+                f"msg-{message_number:03d}"
+            )
+            context = " ".join(
+                f"Conversation context {number} for session "
+                f"{session_number:03d}, message {message_number:03d} continues "
+                "the current discussion without introducing another durable record."
+                for number in range(1, context_sentences + 1)
+            )
+            if message_number - 1 in fact_positions:
+                code = "ARCHIVE-" + hashlib.sha256(
+                    f"{probe_id}:{session_number}:{message_number}".encode()
+                ).hexdigest()[:12].upper()
+                text = (
+                    f"Durable calibration fact: the assigned archive label is {code}. "
+                    f"Retain this fact for later exact recall. {context}"
+                )
+                expected_refs.add(ref)
+                expected_facts.add(code)
+            else:
+                text = (
+                    f"{context} The speaker acknowledges the preceding turn."
+                )
+            turns.append((
+                "user" if message_number % 2 else "assistant",
+                text,
+            ))
+            refs.append(ref)
+        sessions.append({
+            "observation_date": f"2026-01-{((session_number - 1) % 28) + 1:02d}",
+            "turns": turns,
+            "refs": refs,
+        })
+    return sessions, expected_refs, expected_facts
 
 
 def evaluate_probe(
@@ -65,6 +93,7 @@ def evaluate_probe(
     *,
     audit: list[dict[str, Any]],
     expected_refs: set[str],
+    expected_facts: set[str],
 ) -> dict[str, Any]:
     text = "\n".join(
         path.read_text(encoding="utf-8")
@@ -78,29 +107,40 @@ def evaluate_probe(
     )
     covered = sum(ref in text for ref in expected_refs)
     coverage = covered / len(expected_refs) if expected_refs else 0.0
+    facts_covered = sum(fact in text for fact in expected_facts)
+    fact_coverage = (
+        facts_covered / len(expected_facts) if expected_facts else 0.0
+    )
     written_blocks = sum(
         int(row.get("count", 0))
         for row in audit
         if row.get("status") == "ok"
     )
+    round_limit_reached = any(
+        row.get("status") == "stopped" for row in audit
+    )
     return {
-        "passed": coverage == 1.0 and written_blocks > 0,
+        "passed": (
+            coverage == 1.0
+            and fact_coverage == 1.0
+            and written_blocks > 0
+        ),
         "source_coverage": round(coverage, 6),
+        "fact_coverage": round(fact_coverage, 6),
         "written_blocks": written_blocks,
         "audit_error_count": sum(
             row.get("status") == "error" for row in audit
         ),
-        "round_limit_reached": any(
-            row.get("status") == "stopped" for row in audit
-        ),
+        "round_limit_reached": round_limit_reached,
     }
 
 
-def _usage(response: Any) -> tuple[int, int]:
-    value = getattr(response, "usage", None)
+def _usage(result: Any) -> tuple[int, int, int, float]:
     return (
-        int(getattr(value, "prompt_tokens", 0) or 0),
-        int(getattr(value, "completion_tokens", 0) or 0),
+        int(getattr(result, "input_tokens", 0) or 0),
+        int(getattr(result, "output_tokens", 0) or 0),
+        int(getattr(result, "num_turns", 0) or 0),
+        float(getattr(result, "total_cost_usd", 0) or 0),
     )
 
 
@@ -130,15 +170,20 @@ def summarize_levels(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for row in trials
             if isinstance(row.get("source_coverage"), (int, float))
         ]
-        session_counts = [
-            float(row["session_count"])
+        fact_coverage = [
+            float(row["fact_coverage"])
             for row in trials
-            if isinstance(row.get("session_count"), (int, float))
+            if isinstance(row.get("fact_coverage"), (int, float))
         ]
-        rendered_tokens = [
-            float(row["rendered_input_tokens"])
+        batch_counts = [
+            float(row["batch_count"])
             for row in trials
-            if isinstance(row.get("rendered_input_tokens"), (int, float))
+            if isinstance(row.get("batch_count"), (int, float))
+        ]
+        max_batch_tokens = [
+            max(int(value) for value in row["batch_input_tokens"])
+            for row in trials
+            if row.get("batch_input_tokens")
         ]
         first_prompt_tokens = [
             int(row["provider_first_prompt_tokens"])
@@ -168,11 +213,47 @@ def summarize_levels(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "round_limit_trials": sum(
                 bool(row.get("round_limit_reached")) for row in trials
             ),
+            "completion_rate": (
+                round(sum(
+                    not bool(row.get("round_limit_reached")) for row in trials
+                ) / len(trials), 6)
+                if trials else None
+            ),
             "source_coverage_mean": _rounded_mean(coverage),
             "source_coverage_min": round(min(coverage), 6) if coverage else None,
             "source_coverage_std": _rounded_std(coverage),
-            "session_count_mean": _rounded_mean(session_counts),
-            "rendered_input_tokens_mean": _rounded_mean(rendered_tokens),
+            "fact_coverage_mean": _rounded_mean(fact_coverage),
+            "fact_coverage_min": (
+                round(min(fact_coverage), 6) if fact_coverage else None
+            ),
+            "fact_coverage_std": _rounded_std(fact_coverage),
+            "workload_session_count": next(iter({
+                int(row["workload_session_count"])
+                for row in trials if "workload_session_count" in row
+            }), None),
+            "workload_message_count": next(iter({
+                int(row["workload_message_count"])
+                for row in trials if "workload_message_count" in row
+            }), None),
+            "workload_fact_count": next(iter({
+                int(row["workload_fact_count"])
+                for row in trials if "workload_fact_count" in row
+            }), None),
+            "workload_input_tokens": next(iter({
+                int(row["workload_input_tokens"])
+                for row in trials if "workload_input_tokens" in row
+            }), None),
+            "batch_count_mean": _rounded_mean(batch_counts),
+            "batch_count_std": _rounded_std(batch_counts),
+            "max_batch_input_tokens_min": (
+                min(max_batch_tokens) if max_batch_tokens else None
+            ),
+            "max_batch_input_tokens_max": (
+                max(max_batch_tokens) if max_batch_tokens else None
+            ),
+            "batched_input_tokens_total": sum(
+                int(row.get("batched_input_tokens", 0)) for row in rows
+            ),
             "provider_first_prompt_tokens_mean": _rounded_mean([
                 float(value) for value in first_prompt_tokens
             ]),
@@ -230,24 +311,40 @@ def main(argv: list[str] | None = None) -> int:
     model = str(config["model"])
     counter = TokenCounter.resolve(requested_model=model)
     candidates = sorted({int(value) for value in config.get(
-        "candidate_tokens", [1024, 2048, 4096, 8192, 16384]
+        "candidate_tokens", [4096, 8192, 12288, 16384, 20480, 24576]
     )})
-    probe_ids = tuple(config.get(
-        "probe_ids", ["facts-a", "facts-b", "facts-c"]
-    ))
+    probe_ids = tuple(config.get("probe_ids", ["facts-a", "facts-b"]))
+    workload_session_count = int(config.get("workload_sessions", 20))
+    messages_per_session = int(config.get("messages_per_session", 20))
+    facts_per_session = int(config.get("facts_per_session", 1))
+    context_sentences = int(config.get("context_sentences", 2))
+    if not candidates or any(value < 1 for value in candidates):
+        raise ValueError("candidate_tokens must contain positive integers")
+    if not probe_ids:
+        raise ValueError("probe_ids must not be empty")
+    workloads = {
+        str(probe_id): make_probe_workload(
+            probe_id=str(probe_id),
+            session_count=workload_session_count,
+            messages_per_session=messages_per_session,
+            facts_per_session=facts_per_session,
+            context_sentences=context_sentences,
+        )
+        for probe_id in probe_ids
+    }
     runtime = retrieval.create_runtime(
         str(config["base_url"]),
         api_key=api_key,
-        api_format=str(config.get("api_format", "openai")),
         model=model,
-        max_retries=int(config.get("max_retries", 2)),
-        timeout_seconds=float(config.get("timeout_seconds", 180)),
+        cli_path=config.get("claude_cli"),
     )
     memory_config = management.MemoryConfig(
-        agent_max_rounds=int(config.get("agent_max_rounds", 12)),
-        reasoning_effort=config.get("reasoning_effort"),
-        thinking=config.get("thinking"),
-        retry_log=bool(config.get("retry_log", False)),
+        max_turns=int(config.get("max_turns", 20)),
+        max_budget_usd=(
+            float(config["max_budget_usd"])
+            if config.get("max_budget_usd") is not None
+            else None
+        ),
     )
     input_price = float(config.get("input_usd_per_million", 0))
     output_price = float(config.get("output_usd_per_million", 0))
@@ -256,62 +353,92 @@ def main(argv: list[str] | None = None) -> int:
     records: list[dict[str, Any]] = []
     for candidate in candidates:
         for probe_id in probe_ids:
-            usage: list[tuple[int, int]] = []
+            usage: list[tuple[int, int, int, float]] = []
             started = time.monotonic()
+            sessions, expected_refs, expected_facts = workloads[str(probe_id)]
+            workload_json = json.dumps(
+                sessions,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            record = {
+                "candidate_tokens": candidate,
+                "probe_id": probe_id,
+                "workload_sha256": hashlib.sha256(
+                    workload_json.encode("utf-8")
+                ).hexdigest(),
+                "workload_session_count": len(sessions),
+                "workload_message_count": sum(
+                    len(session["turns"]) for session in sessions
+                ),
+                "workload_fact_count": len(expected_facts),
+                "workload_input_tokens": counter.count(
+                    render_writer_input(sessions)
+                ),
+            }
             try:
-                sessions = make_probe_sessions(
-                    probe_id=str(probe_id),
-                    candidate_tokens=candidate,
+                batches = pack_complete_messages(
+                    sessions,
+                    max_input_tokens=candidate,
+                    render_batch=render_writer_input,
                     token_counter=counter,
                 )
+                batch_tokens = [
+                    counter.count(render_writer_input(batch)) for batch in batches
+                ]
                 with tempfile.TemporaryDirectory(prefix="nativemem-capacity-") as directory:
-                    audit = management.write_sessions(
-                        directory,
-                        client=runtime.client,
-                        model=model,
-                        sessions=sessions,
-                        usage_logger=lambda response: usage.append(_usage(response)),
-                        config=memory_config,
-                    )
+                    audit = []
+                    for batch in batches:
+                        audit.extend(management.write_sessions(
+                            directory,
+                            agent=runtime.agent,
+                            sessions=batch,
+                            usage_logger=lambda result: usage.append(
+                                _usage(result)
+                            ),
+                            config=memory_config,
+                        ))
                     result = evaluate_probe(
                         Path(directory),
                         audit=audit,
-                        expected_refs={session["refs"][0] for session in sessions},
+                        expected_refs=expected_refs,
+                        expected_facts=expected_facts,
                     )
-                record = {
-                    "candidate_tokens": candidate,
-                    "probe_id": probe_id,
-                    "session_count": len(sessions),
-                    "rendered_input_tokens": counter.count(
-                        render_writer_input(sessions)
-                    ),
+                record.update({
+                    "batch_count": len(batches),
+                    "batch_message_counts": [
+                        sum(len(session["turns"]) for session in batch)
+                        for batch in batches
+                    ],
+                    "batch_input_tokens": batch_tokens,
+                    "batched_input_tokens": sum(batch_tokens),
                     **result,
-                }
-            except CandidateTooSmallError as exc:
-                record = {
-                    "candidate_tokens": candidate,
-                    "probe_id": probe_id,
+                })
+            except MessageTooLargeError as exc:
+                record.update({
                     "passed": False,
                     "skipped": True,
                     "error": f"{type(exc).__name__}: {exc}",
-                }
+                })
             except Exception as exc:  # noqa: BLE001
-                record = {
-                    "candidate_tokens": candidate,
-                    "probe_id": probe_id,
+                record.update({
                     "passed": False,
                     "error": f"{type(exc).__name__}: {exc}",
-                }
+                })
             prompt_tokens = sum(value[0] for value in usage)
             completion_tokens = sum(value[1] for value in usage)
             record.update({
-                "calls": len(usage),
+                "calls": sum(value[2] for value in usage),
                 "provider_first_prompt_tokens": usage[0][0] if usage else None,
                 "provider_max_prompt_tokens": (
                     max(value[0] for value in usage) if usage else None
                 ),
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
+                "reported_cost_usd": round(sum(
+                    value[3] for value in usage
+                ), 6),
                 "elapsed_seconds": round(time.monotonic() - started, 3),
                 "estimated_cost_usd": round(
                     (
@@ -326,16 +453,21 @@ def main(argv: list[str] | None = None) -> int:
                 key: record.get(key)
                 for key in (
                     "candidate_tokens", "probe_id", "passed",
-                    "source_coverage", "calls", "elapsed_seconds",
+                    "batch_count", "source_coverage", "fact_coverage",
+                    "calls", "elapsed_seconds", "estimated_cost_usd",
                 )
             }, ensure_ascii=False), flush=True)
+    levels = summarize_levels(records)
     try:
-        safe_input_tokens = select_safe_capacity(
-            records, probe_ids={str(value) for value in probe_ids}
-        )
+        selected = select_writer_capacities(levels)
+        safe_input_tokens = selected["recommended_input_tokens"]
+        max_tested_passing_input_tokens = selected[
+            "max_tested_passing_input_tokens"
+        ]
         status = "complete"
     except ValueError:
         safe_input_tokens = None
+        max_tested_passing_input_tokens = None
         status = "failed"
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = (
@@ -351,10 +483,16 @@ def main(argv: list[str] | None = None) -> int:
         "model": model,
         "writer_protocol_sha256": writer_protocol_sha256(),
         "safe_input_tokens": safe_input_tokens,
+        "recommended_input_tokens": safe_input_tokens,
+        "max_tested_passing_input_tokens": max_tested_passing_input_tokens,
         "tokenizer": counter.identity,
         "candidate_tokens": candidates,
         "probe_ids": list(probe_ids),
-        "levels": summarize_levels(records),
+        "workload_sessions": workload_session_count,
+        "messages_per_session": messages_per_session,
+        "facts_per_session": facts_per_session,
+        "context_sentences": context_sentences,
+        "levels": levels,
         "probes": records,
         "totals": {
             "calls": sum(int(row["calls"]) for row in records),
