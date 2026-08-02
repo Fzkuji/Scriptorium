@@ -1,9 +1,34 @@
 """NativeMem V8 adapter."""
 
-import os
+from dataclasses import dataclass
+from pathlib import Path
 
 
-def build_memory(conv, memory_dir, max_sessions=None):
+@dataclass(frozen=True)
+class V8BuildConfig:
+    chunk_turns: int = 6
+    segment: str = "fixed"
+    tidy: bool = True
+    max_topics: int = 30
+    sections: bool = True
+    article: bool = False
+    two_tier: bool = False
+    concurrency: int = 8
+    tidy_combined: bool = False
+
+    def __post_init__(self) -> None:
+        if self.chunk_turns < 1:
+            raise ValueError("chunk_turns must be positive")
+        if self.segment not in {"fixed", "topic"}:
+            raise ValueError("segment must be 'fixed' or 'topic'")
+        if self.max_topics < 1:
+            raise ValueError("max_topics must be positive")
+        if self.concurrency < 1:
+            raise ValueError("concurrency must be positive")
+
+
+def build_memory(conv, memory_dir, max_sessions=None, *, config=None):
+    config = config or V8BuildConfig()
     import time as _t
     from src.adapters import run_nativemem as shared
 
@@ -14,10 +39,9 @@ def build_memory(conv, memory_dir, max_sessions=None):
     _format_topics_snapshot = shared._format_topics_snapshot
     _topics_snapshot = shared._topics_snapshot
     _v8_tidy = shared._v8_tidy
-    _v8_concurrency = shared._v8_concurrency
     ThreadPoolExecutor = shared.ThreadPoolExecutor
     t0 = _t.time()
-    os.makedirs(memory_dir, exist_ok=True)
+    Path(memory_dir).mkdir(parents=True, exist_ok=True)
     sessions, dates = [], []
     i = 1
     while f"session_{i}" in conv:
@@ -30,23 +54,22 @@ def build_memory(conv, memory_dir, max_sessions=None):
     # 小块提炼：默认 6 句/块（而非一整个 session）。块小模型注意力集中、
     # 漏事实少（build 覆盖率是失分主因）；后端是大模型，多几次调用可接受。
     # 模型靠累积的 known_topics 看"以前的记忆"，小块间上下文不断裂。
-    v8_chunk = int(os.environ.get("NATIVEMEM_CHUNK_TURNS", "6"))
+    v8_chunk = config.chunk_turns
     # 切块策略：fixed=固定 6 句/块（默认，一字不变）；topic=每 session 先用一次
     # 便宜 LLM 调用按话题切边界再分块。topic 坏了会自动回退固定切块，不崩。
-    v8_segment = os.environ.get("NATIVEMEM_V8_SEGMENT", "fixed")
+    v8_segment = config.segment
     # 整理环节（spec §6.1）：每 session 末去重（默认 on），topic 文件数超阈值才合并。
-    tidy_on = os.environ.get("NATIVEMEM_V8_TIDY", "on") != "off"
-    max_topics = int(os.environ.get("NATIVEMEM_V8_MAX_TOPICS", "30"))
+    tidy_on = config.tidy
+    max_topics = config.max_topics
     # 分节整理（默认）替代全文重写：模型只出分节方案、代码搬行、行逐字不动。
     # 旧的 NATIVEMEM_V8_ARTICLE（全文重写，默认 off）保留供消融；两者互斥，
     # SECTIONS=on 优先走分节路径。
-    sections_on = os.environ.get("NATIVEMEM_V8_SECTIONS", "on") != "off"
-    article_on = (not sections_on
-                  and os.environ.get("NATIVEMEM_V8_ARTICLE", "off") != "off")
+    sections_on = config.sections
+    article_on = not sections_on and config.article
     # v9.0 两级建库（spec）：=two_tier 时每 session 先逐句转写再谱曲成事件，
     # 得到 events 后走既有 write_events/touched/tidy 流程；默认 off 走下面既有
     # 切块 distill，一字节不变。两级都见全 session，故新路径不用滚动 recent。
-    v9_two_tier = os.environ.get("NATIVEMEM_V9_PIPELINE") == "two_tier"
+    v9_two_tier = config.two_tier
     # 转写层无跨 session 状态（只看自己的句子+日期），全部 session 预先并行
     # 转写；谱曲层要看演进中的 known_topics，保持按时间串行。
     v9_notes_by_idx = {}
@@ -59,7 +82,7 @@ def build_memory(conv, memory_dir, max_sessions=None):
             ft, fd = flat[0]
             return idx, v8_memory.transcribe_session(ft, fd,
                                                      normalize_date(dt))
-        _w = min(_v8_concurrency(), len(sessions))
+        _w = min(config.concurrency, len(sessions))
         with ThreadPoolExecutor(max_workers=_w) as ex:
             for idx, nts in ex.map(_pre_transcribe,
                                    enumerate(zip(sessions, dates))):
@@ -89,7 +112,14 @@ def build_memory(conv, memory_dir, max_sessions=None):
                 if n_topics > max_topics:
                     v8_memory.consolidate_topic_files(memory_dir)
             if touched:                           # 节奏3：整理（按增长触发）
-                _v8_tidy(memory_dir, touched, sections_on, article_on)
+                _v8_tidy(
+                    memory_dir,
+                    touched,
+                    sections_on,
+                    article_on,
+                    concurrency=config.concurrency,
+                    combined=config.tidy_combined,
+                )
             continue
         recent = []                   # 滚动上下文：本 session 已提炼句（内存变量）
         # structured per-turn chunks: numbering is 1:1 with dia_ids by
@@ -123,8 +153,23 @@ def build_memory(conv, memory_dir, max_sessions=None):
             if n_topics > max_topics:
                 v8_memory.consolidate_topic_files(memory_dir)
         if touched:                           # 节奏3：整理（按增长触发）
-            _v8_tidy(memory_dir, touched, sections_on, article_on)
+            _v8_tidy(
+                memory_dir,
+                touched,
+                sections_on,
+                article_on,
+                concurrency=config.concurrency,
+                combined=config.tidy_combined,
+            )
     # 收尾：对所有仍有未归节行的文件做一次收尾整理，保证交付态整洁（同样过硬校验）。
     all_topics = set(v8_memory._topics_dir_files(memory_dir))
-    _v8_tidy(memory_dir, all_topics, sections_on, article_on, final=True)
+    _v8_tidy(
+        memory_dir,
+        all_topics,
+        sections_on,
+        article_on,
+        final=True,
+        concurrency=config.concurrency,
+        combined=config.tidy_combined,
+    )
     return _t.time() - t0, n_events

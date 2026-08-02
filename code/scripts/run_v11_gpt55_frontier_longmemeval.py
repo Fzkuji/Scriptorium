@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import os
-import sqlite3
 import sys
-from itertools import zip_longest
+from dataclasses import asdict
 from pathlib import Path
 
 
@@ -16,37 +14,18 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts import run_v88_gpt55_longmemeval as common  # noqa: E402
-
-
-V11_ANSWER_PROMPT = """User question:
-{question}
-
-Current date:
-{question_date}
-
-The user's memory is stored in a read-only workspace.
-
-The shell is already running at this workspace root:
-{memory_root}
-
-The paths shown below are relative to that root. You may use normal shell
-commands to inspect and manage files inside this workspace. All available
-memory, including source files, is contained here.
-
-The workspace may contain:
-- `topics/`: information organized by subject. Files and Markdown headings are
-  created and organized by the memory agent, so there is no fixed taxonomy.
-- `timeline/`: information organized chronologically.
-- `recent_events.jsonl`: a bounded list of recent memory events.
-- Source references such as `[Dn:m]`: use `read_original` with a complete
-  reference when the original conversation is needed.
-
-Available files:
-{structure}
-
-Use the read-only tools to look up the information needed to answer the user.
-Answer the user directly. Output exactly one <answer>...</answer> block.
-"""
+from scripts.v11_common import source_tree_sha256  # noqa: E402
+from scripts.v11_longmemeval.queue import (  # noqa: E402
+    claim_item,
+    finish_claim,
+    initialize_queue,
+    queue_states,
+)
+from scripts.v11_longmemeval.selection import (  # noqa: E402
+    question_type_indices,
+    round_robin_indices,
+)
+from src.nativemem_versions.v11 import adapter, memory, retrieval  # noqa: E402
 
 
 def parser() -> argparse.ArgumentParser:
@@ -58,6 +37,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--base-url", default="https://api.frontier-intelligence.tech/v1")
     result.add_argument("--model", default="gpt-5.5")
     result.add_argument("--provider-name", default="frontier-intelligence")
+    result.add_argument("--api-key", required=True)
     result.add_argument(
         "--api-format", choices=("openai", "anthropic"), default="openai"
     )
@@ -67,70 +47,34 @@ def parser() -> argparse.ArgumentParser:
     order.add_argument("--question-type")
     result.add_argument("--reverse", action="store_true")
     result.add_argument("--claim-db", type=Path)
+    result.add_argument("--session-batch", type=int, default=5)
+    result.add_argument("--local-reorg-every-sessions", type=int, default=5)
+    result.add_argument(
+        "--verify-writes", action=argparse.BooleanOptionalAction, default=True
+    )
+    result.add_argument("--verify-every-sessions", type=int, default=5)
+    result.add_argument(
+        "--final-manage", action=argparse.BooleanOptionalAction, default=False
+    )
+    result.add_argument("--recent-limit", type=int, default=50)
+    result.add_argument("--core-max-tokens", type=int, default=2_000)
+    result.add_argument("--agent-max-rounds", type=int, default=12)
+    result.add_argument("--manager-max-rounds", type=int, default=8)
+    result.add_argument("--reasoning-effort")
+    result.add_argument("--thinking")
+    result.add_argument("--retry-log", action="store_true")
+    result.add_argument("--retrieval-max-rounds", type=int, default=8)
+    result.add_argument("--retrieval-max-tool-calls", type=int, default=5)
+    result.add_argument("--memory-visible-tokens", type=int, default=10_000)
+    result.add_argument("--answer-max-tokens", type=int, default=16_384)
+    result.add_argument(
+        "--verify-sources", action=argparse.BooleanOptionalAction, default=True
+    )
     return result
-
-
-def round_robin_indices(data: list[dict]) -> list[int]:
-    groups: dict[str, list[int]] = {}
-    for index, item in enumerate(data):
-        groups.setdefault(item["question_type"], []).append(index)
-    return [index for row in zip_longest(*groups.values()) for index in row if index is not None]
-
-
-def question_type_indices(
-    data: list[dict], question_type: str, start: int, limit: int, *, reverse: bool
-) -> list[int]:
-    matching = [
-        index for index, item in enumerate(data)
-        if item["question_type"] == question_type
-    ]
-    if not matching:
-        raise common.DataValidationError(f"unknown --question-type: {question_type}")
-    if reverse:
-        matching.reverse()
-    positions = common.select_indices(len(matching), start, limit)
-    return [matching[position] for position in positions]
-
-
-def initialize_queue(path: Path, indices: list[int]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path, timeout=30) as db:
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS items ("
-            "item INTEGER PRIMARY KEY, state INTEGER NOT NULL, owner TEXT)"
-        )
-        db.executemany(
-            "INSERT OR IGNORE INTO items(item, state) VALUES (?, 0)",
-            ((index,) for index in indices),
-        )
-
-
-def claim_item(path: Path, index: int, owner: str) -> bool:
-    with sqlite3.connect(path, timeout=30, isolation_level=None) as db:
-        db.execute("BEGIN IMMEDIATE")
-        changed = db.execute(
-            "UPDATE items SET state=1, owner=? WHERE item=? AND state=0",
-            (owner, index),
-        ).rowcount
-        db.commit()
-    return changed == 1
-
-
-def finish_claim(path: Path, index: int) -> None:
-    with sqlite3.connect(path, timeout=30) as db:
-        db.execute("UPDATE items SET state=2 WHERE item=?", (index,))
-
-
-def queue_states(path: Path) -> dict[int, int]:
-    with sqlite3.connect(path, timeout=30) as db:
-        return dict(db.execute("SELECT item, state FROM items ORDER BY item"))
 
 
 def main() -> int:
     args = parser().parse_args()
-    api_key = os.environ.get("FRONTIER_API_KEY", "").strip()
-    if not api_key:
-        raise SystemExit("FRONTIER_API_KEY is required")
 
     data_path = args.data.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
@@ -150,31 +94,43 @@ def main() -> int:
     if claim_db:
         initialize_queue(claim_db, list(range(len(data))))
 
-    common.METHOD_ENV = {
-        "NATIVEMEM_PROMPT": "v11",
-        "NATIVEMEM_STORE_MODE": "oneshot",
-        "NATIVEMEM_V8_SINGLE": "1",
-        "NATIVEMEM_V8_MAX_ROUNDS": "20",
-        "NATIVEMEM_V8_MAX_TOKENS": "16384",
-        "NATIVEMEM_V11_SESSION_BATCH": os.environ.get(
-            "NATIVEMEM_V11_SESSION_BATCH", "1"
-        ),
+    memory_config = memory.MemoryConfig(
+        core_max_tokens=args.core_max_tokens,
+        recent_limit=args.recent_limit,
+        agent_max_rounds=args.agent_max_rounds,
+        manager_max_rounds=args.manager_max_rounds,
+        reasoning_effort=args.reasoning_effort,
+        thinking=args.thinking,
+        retry_log=args.retry_log,
+    )
+    build_config = adapter.BuildConfig(
+        session_batch=args.session_batch,
+        local_reorg_every_sessions=args.local_reorg_every_sessions,
+        verify_writes=args.verify_writes,
+        verify_every_sessions=args.verify_every_sessions,
+        final_manage=args.final_manage,
+        memory_config=memory_config,
+    )
+    query_config = retrieval.QueryConfig(
+        max_rounds=args.retrieval_max_rounds,
+        max_tool_calls=args.retrieval_max_tool_calls,
+        visible_token_limit=args.memory_visible_tokens,
+        max_output_tokens=args.answer_max_tokens,
+        verify_sources=args.verify_sources,
+    )
+    common.LME_SINGLE_PROMPT = retrieval.ANSWER_PROMPT
+    backend = retrieval.create_runtime(
+        args.base_url,
+        api_format=args.api_format,
+        model=args.model,
+        api_key=args.api_key,
+        build_config=build_config,
+        query_config=query_config,
+    )
+    config = {
+        "build": asdict(build_config),
+        "query": asdict(query_config),
     }
-    common.LME_SINGLE_PROMPT = V11_ANSWER_PROMPT
-    args.api_key = api_key
-    args.request_concurrency = 1
-    args.trust_proxy = False
-    config = common.configure_environment(args)
-    os.environ["NO_PROXY"] = "localhost,127.0.0.1,api.frontier-intelligence.tech"
-    os.environ["no_proxy"] = os.environ["NO_PROXY"]
-    backend = common.load_backend()
-    if args.api_format == "anthropic":
-        from src.anthropic_openai_compat import AnthropicOpenAICompat
-
-        anthropic_client = AnthropicOpenAICompat(args.api_key, args.base_url)
-        backend.client = anthropic_client
-        backend.nativemem_runtime.client = anthropic_client
-        backend.v8_memory.client = anthropic_client
     run_meta = {
         "method": {
             "name": "NativeMem",
@@ -192,9 +148,14 @@ def main() -> int:
         "code": {
             "git_commit": common.git_head(),
             "runner_sha256": common.sha256_file(Path(__file__)),
-            "v11_memory_sha256": common.sha256_file(ROOT / "src" / "v11_memory.py"),
-            "adapter_sha256": common.sha256_file(
-                ROOT / "src" / "adapters" / "run_nativemem.py"
+            "v11_memory_sha256": source_tree_sha256(
+                ROOT / "src" / "nativemem_versions" / "v11" / "memory"
+            ),
+            "v11_adapter_sha256": common.sha256_file(
+                ROOT / "src" / "nativemem_versions" / "v11" / "adapter.py"
+            ),
+            "retrieval_sha256": common.sha256_file(
+                ROOT / "src" / "nativemem_versions" / "v11" / "retrieval" / "agent.py"
             ),
         },
         "request_audit": {"mode": "direct_frontier_api"},

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from src.memory_bm25 import MemoryBM25Index, parse_topic_file, tokenize
 from src.nativemem_versions.v11.memory import MemoryWorkspace
 import src.v8_memory as V8
@@ -102,6 +104,72 @@ def test_search_filters_path_and_date(tmp_path: Path):
     assert [row["refs"] for row in result] == [["D1:3"]]
 
 
+def test_parse_topic_indexes_each_evidence_supported_claim(tmp_path: Path):
+    memory_dir = tmp_path / "memory"
+    topic = memory_dir / "topics/personal/residence.md"
+    topic.parent.mkdir(parents=True)
+    topic.write_text(
+        "# Personal\n\n## Residence\n\n"
+        "The user lived in Beijing in 2019.[^e-beijing] "
+        "The user moved to Shanghai in 2023.[^e-shanghai] ^block123\n\n"
+        "[^e-beijing]: Time: `2019`; Sources: [D1:1](../../sources/D1.md#d1-1)\n"
+        "[^e-shanghai]: Time: `2023`; Sources: [D2:1](../../sources/D2.md#d2-1)\n",
+        encoding="utf-8",
+    )
+
+    events = parse_topic_file(topic, memory_dir / "topics")
+
+    assert [event.dates for event in events] == [["2019"], ["2023"]]
+    assert [event.refs for event in events] == [["D1:1"], ["D2:1"]]
+    assert "Beijing" in events[0].content
+    assert "Shanghai" in events[1].content
+
+
+def test_search_uses_discrete_evidence_intervals_not_paragraph_envelope(
+    tmp_path: Path,
+):
+    memory_dir = tmp_path / "memory"
+    topic = memory_dir / "topics/work/history.md"
+    topic.parent.mkdir(parents=True)
+    topic.write_text(
+        "# Work\n\n"
+        "The user worked on the Atlas project.[^e-2019][^e-2023] ^block456\n\n"
+        "[^e-2019]: Time: `2019`; Sources: [D1:1](../../sources/D1.md#d1-1)\n"
+        "[^e-2023]: Time: `2023`; Sources: [D2:1](../../sources/D2.md#d2-1)\n",
+        encoding="utf-8",
+    )
+    index = MemoryBM25Index(memory_dir, persist=False)
+
+    assert index.search("Atlas project", date_from="2021", date_to="2021") == []
+    result = index.search("Atlas project", date_from="2023-05", date_to="2023-05")
+
+    assert len(result) == 1
+    assert result[0]["dates"] == ["2019", "2023"]
+
+
+def test_search_validates_temporal_bounds_and_excludes_undated_claims(
+    tmp_path: Path,
+):
+    memory_dir = tmp_path / "memory"
+    topic = memory_dir / "topics/preferences.md"
+    topic.parent.mkdir(parents=True)
+    topic.write_text(
+        "# Preferences\n\n"
+        "The user liked analog photography.[^e-undated] ^block789\n\n"
+        "[^e-undated]: Time: `undated`; Sources: [D1:1](../sources/D1.md#d1-1)\n",
+        encoding="utf-8",
+    )
+    index = MemoryBM25Index(memory_dir, persist=False)
+
+    assert index.search("analog photography")
+    assert index.search("analog photography", date_from="2023") == []
+    for invalid in ("23", "2023-1", "2023-13"):
+        with pytest.raises(ValueError, match="invalid date_from"):
+            index.search("analog photography", date_from=invalid)
+    with pytest.raises(ValueError, match="date_from must not be after date_to"):
+        index.search("analog photography", date_from="2024", date_to="2023")
+
+
 def test_incremental_cache_matches_fresh_rebuild(tmp_path: Path):
     memory_dir = tmp_path / "memory"
     V8.write_events(str(memory_dir), [{
@@ -127,3 +195,37 @@ def test_incremental_cache_matches_fresh_rebuild(tmp_path: Path):
     assert initial[0]["refs"] == ["D1:3"]
     assert incremental == rebuilt
     assert len(cache["files"]) == 2
+
+
+def test_bm25_can_search_without_writing_a_query_time_cache(tmp_path: Path):
+    memory_dir = tmp_path / "memory"
+    V8.write_events(str(memory_dir), [{
+        "when": "2023-05-07",
+        "summary": "Caroline joined a support group",
+        "dia_ids": ["D1:3"],
+        "topic": "Caroline/support",
+    }])
+
+    results = MemoryBM25Index(memory_dir, persist=False).search("support group")
+
+    assert results
+    assert not (memory_dir / ".nativemem-bm25.json").exists()
+
+
+def test_bm25_searches_source_turns_missing_from_topics(tmp_path: Path):
+    memory_dir = tmp_path / "memory"
+    source = memory_dir / "sources/locomo/thread_1.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "# thread_1\n\n"
+        '<a id="source-abc"></a>\n'
+        "<!-- source-id:locomo/thread_1/msg_1 -->\n"
+        "[2023-10-04] Calvin: I bought a drum machine.\n",
+        encoding="utf-8",
+    )
+
+    results = MemoryBM25Index(memory_dir, persist=False).search("drum machine")
+
+    assert results[0]["path"] == "sources/locomo/thread_1.md"
+    assert results[0]["refs"] == ["locomo/thread_1/msg_1"]
+    assert "bought a drum machine" in results[0]["content"]

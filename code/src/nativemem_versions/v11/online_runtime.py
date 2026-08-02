@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from .memory import MemoryWorkspace
+from .memory import MemoryConfig, MemoryWorkspace
 from .runtime_state import (
     RuntimeStateStore,
     SourceRecord,
@@ -26,6 +26,7 @@ class OnlineMemoryRuntime:
         local_batch_threshold: int = 5,
         local_token_threshold: int = 40_000,
         reconciler=None,
+        memory_config: MemoryConfig | None = None,
     ):
         self.memory_dir = Path(memory_dir)
         self.store = RuntimeStateStore(self.memory_dir)
@@ -34,6 +35,7 @@ class OnlineMemoryRuntime:
         self.local_batch_threshold = local_batch_threshold
         self.local_token_threshold = local_token_threshold
         self.reconciler = reconciler
+        self.memory_config = memory_config or MemoryConfig()
 
     def pending(self, records: list[SourceRecord]) -> list[SourceRecord]:
         state = self.store.load()
@@ -77,7 +79,11 @@ class OnlineMemoryRuntime:
         ):
             return False
 
-        workspace = MemoryWorkspace(self.memory_dir, reconciler=self.reconciler)
+        workspace = MemoryWorkspace(
+            self.memory_dir,
+            reconciler=self.reconciler,
+            config=self.memory_config,
+        )
         workspace.archive_source_records(list(batch))
         writer(workspace, batch)
 
@@ -110,6 +116,7 @@ class OnlineMemoryRuntime:
             global_manager(workspace)
             state.last_global_at = now.isoformat()
             state.write_commits_since_global = 0
+        state.creation_order = self.store.load().creation_order
         self.store.git_commit("NativeMem: incremental memory transaction")
         self.store.save(state)
         return True

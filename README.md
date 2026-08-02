@@ -19,7 +19,7 @@ source .venv/bin/activate
 `requirements-dev.txt`, and checks the repository layout. API credentials are
 not stored in this repository. Set the variables required by the selected
 runner before starting an experiment; each runner prints its effective model,
-endpoint, and relevant environment variables.
+endpoint and explicit CLI/function parameters.
 
 The complete local research directory also contains benchmark data, stored
 results, and third-party checkouts that are intentionally not committed to the
@@ -30,7 +30,6 @@ or `.venv-*`; run `./setup.sh` on the destination computer instead.
 ## Layout
 
 ```text
-Model-Aligned-Wiki.html       project overview
 code/
   src/                        NativeMem implementation
   scripts/                    experiment and audit commands
@@ -42,7 +41,14 @@ code/
   results/                    existing experiment artifacts
   third_party/                external framework checkouts
 paper/                        independent paper Git repository
-docs/                         technical documents and experiment plan
+docs/
+  Model-Aligned-Wiki.html     documentation entry and research overview
+  related-work/               paper Related Work, survey, and evidence
+  method/                     current method, designs, versions, and reports
+  experiments/                plans, protocols, results, studies, and runs
+  prompts/                    prompt references
+  archive/                    superseded historical documents
+  internal/                   research analysis and development records
 ```
 
 Root-level `src`, `scripts`, `tests`, `benchmarks`, `experiments`, `figures`,
@@ -70,9 +76,10 @@ pytest -q \
 python src/nativemem.py --sample 0 --outdir results/run --validate
 ```
 
+The documentation entry is [`docs/Model-Aligned-Wiki.html`](docs/Model-Aligned-Wiki.html).
 Experiment commands and evaluation rules are documented in
-[`docs/unified_evaluation_protocol.md`](docs/unified_evaluation_protocol.md) and
-[`docs/experiment-plan.html`](docs/experiment-plan.html).
+[`docs/experiments/protocols/unified_evaluation_protocol.md`](docs/experiments/protocols/unified_evaluation_protocol.md)
+and [`docs/experiments/experiment.html`](docs/experiments/experiment.html).
 
 ## Data and external repositories
 

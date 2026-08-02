@@ -1,8 +1,8 @@
 """Local event-level BM25 retrieval for NativeMem.
 
 The index is deliberately lexical: it uses no embedding model or vector store.
-Topic files are the canonical indexed view; timeline files are excluded because
-they duplicate the same logical events.
+Topic and source files are indexed; timeline files are excluded because they
+duplicate topic events.
 """
 
 from __future__ import annotations
@@ -13,19 +13,30 @@ import os
 import re
 import tempfile
 from dataclasses import asdict, dataclass
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 from rank_bm25 import BM25Plus
 
+from .nativemem_versions.v11.topic_markdown.syntax import (
+    definition_match,
+    source_reference,
+)
+
 _CACHE_NAME = ".nativemem-bm25.json"
 _WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
 _REF_RE = re.compile(r"D\d+:\d+(?:-(?:D\d+:)?\d+)?")
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_TEMPORAL_VALUE_RE = re.compile(r"\d{4}(?:-\d{2}(?:-\d{2})?)?")
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _EVENT_RE = re.compile(r"<!--\s*memory-event:(ev_[0-9a-f]+)\s*-->")
+_SOURCE_ID_RE = re.compile(r"<!--\s*source-id:([^>]+?)\s*-->")
 _COMMENT_RE = re.compile(r"<!--.*?-->")
-_MARKDOWN_LINK_RE = re.compile(r"\[([^]]+)\]\([^)]+\)")
+_MARKDOWN_LINK_RE = re.compile(r"\[([^]]+)\]\(([^)]+)\)")
+_BLOCK_SUFFIX_RE = re.compile(r"\s+\^([A-Za-z0-9-]+)\s*$")
+_EVIDENCE_RE = re.compile(r"\[\^([A-Za-z0-9_-]+)\]")
+_EVIDENCE_GROUP_RE = re.compile(r"(?:\[\^[A-Za-z0-9_-]+\])+")
 
 
 @dataclass(frozen=True)
@@ -35,6 +46,7 @@ class MemoryEvent:
     line: int
     headings: list[str]
     date: str
+    dates: list[str]
     content: str
     refs: list[str]
 
@@ -64,10 +76,89 @@ def _stable_id(path: str, line: int, content: str, refs: list[str]) -> str:
     return "lex_" + hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
+def temporal_bounds(value: str) -> tuple[date, date]:
+    """Expand a year, month, or day to a half-open calendar interval."""
+    value = str(value).strip()
+    if not _TEMPORAL_VALUE_RE.fullmatch(value):
+        raise ValueError(f"invalid temporal value: {value}")
+    parts = value.split("-")
+    year = int(parts[0])
+    try:
+        if len(parts) == 1:
+            return date(year, 1, 1), date(year + 1, 1, 1)
+        month = int(parts[1])
+        start = date(year, month, int(parts[2]) if len(parts) == 3 else 1)
+        if len(parts) == 3:
+            return start, start + timedelta(days=1)
+        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        return start, end
+    except ValueError as error:
+        raise ValueError(f"invalid temporal value: {value}") from error
+
+
+def _query_time_window(
+    date_from: str | None, date_to: str | None
+) -> tuple[date | None, date | None] | None:
+    if not date_from and not date_to:
+        return None
+    try:
+        start = temporal_bounds(date_from)[0] if date_from else None
+    except ValueError as error:
+        raise ValueError(f"invalid date_from: {date_from}") from error
+    try:
+        end = temporal_bounds(date_to)[1] if date_to else None
+    except ValueError as error:
+        raise ValueError(f"invalid date_to: {date_to}") from error
+    if start is not None and end is not None and start >= end:
+        raise ValueError("date_from must not be after date_to")
+    return start, end
+
+
+def _event_overlaps_window(
+    event: MemoryEvent, window: tuple[date | None, date | None] | None
+) -> bool:
+    if window is None:
+        return True
+    query_start, query_end = window
+    for value in event.dates:
+        try:
+            event_start, event_end = temporal_bounds(value)
+        except ValueError:
+            continue
+        if (query_end is None or event_start < query_end) and (
+            query_start is None or query_start < event_end
+        ):
+            return True
+    return False
+
+
+def event_matches_time_window(
+    event: MemoryEvent,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> bool:
+    """Return whether any dated evidence overlaps the optional query window."""
+    return _event_overlaps_window(event, _query_time_window(date_from, date_to))
+
+
 def parse_topic_file(path: Path, topics_root: Path) -> list[MemoryEvent]:
-    """Parse both V8 article/event lines and V11 marker-based topic files."""
+    """Parse V8 lines plus legacy and paragraph-block V11 Topic files."""
     relative = path.relative_to(topics_root).as_posix()
     lines = path.read_text(encoding="utf-8").splitlines()
+    definitions = {}
+    for line in lines:
+        match = definition_match(line)
+        if match:
+            labels = [
+                source_reference(label, target)
+                for label, target in _MARKDOWN_LINK_RE.findall(
+                    match.group("sources")
+                )
+            ]
+            definitions[match.group("id")] = (
+                "" if match.group("when") == "undated" else match.group("when"),
+                labels or _refs(match.group("sources")),
+            )
     headings: list[str] = []
     events: list[MemoryEvent] = []
     index = 0
@@ -117,21 +208,76 @@ def parse_topic_file(path: Path, topics_root: Path) -> list[MemoryEvent]:
                     line=content_number,
                     headings=list(headings),
                     date=date,
+                    dates=[date] if date else [],
                     content=content,
                     refs=refs,
                 ))
             index = cursor
             continue
 
+        if definition_match(line):
+            index += 1
+            continue
+
+        if line.strip():
+            cursor = index
+            paragraph = []
+            while cursor < len(lines):
+                candidate = lines[cursor]
+                if not candidate.strip() or _HEADING_RE.match(candidate):
+                    break
+                if definition_match(candidate) or _EVENT_RE.search(candidate):
+                    break
+                paragraph.append(candidate)
+                cursor += 1
+            joined = "\n".join(paragraph)
+            block = _BLOCK_SUFFIX_RE.search(joined)
+            if block:
+                body = joined[:block.start()]
+                groups = list(_EVIDENCE_GROUP_RE.finditer(body))
+                claim_start = 0
+                for group_number, group in enumerate(groups, start=1):
+                    citations = _EVIDENCE_RE.findall(group.group(0))
+                    dates = list(dict.fromkeys(
+                        definitions[citation][0]
+                        for citation in citations
+                        if citation in definitions and definitions[citation][0]
+                    ))
+                    refs = list(dict.fromkeys(
+                        ref
+                        for citation in citations
+                        for ref in definitions.get(citation, ("", []))[1]
+                    ))
+                    content = _clean_markdown(body[claim_start:group.start()])
+                    claim_start = group.end()
+                    if not content or not refs:
+                        continue
+                    if dates and not content.startswith("["):
+                        content = f"[{'; '.join(dates)}] {content}"
+                    events.append(MemoryEvent(
+                        event_id=f"{block.group(1)}:{group_number}",
+                        path=f"topics/{relative}",
+                        line=index + 1,
+                        headings=list(headings),
+                        date=dates[0] if dates else "",
+                        dates=dates,
+                        content=content,
+                        refs=refs,
+                    ))
+                index = cursor
+                continue
+
         refs = _refs(line)
         content = _clean_markdown(line)
         if refs and content and not line.lstrip().startswith("<!--"):
+            event_date = _date(line)
             events.append(MemoryEvent(
                 event_id=_stable_id(relative, index + 1, content, refs),
                 path=f"topics/{relative}",
                 line=index + 1,
                 headings=list(headings),
-                date=_date(line),
+                date=event_date,
+                dates=[event_date] if event_date else [],
                 content=content,
                 refs=refs,
             ))
@@ -140,16 +286,58 @@ def parse_topic_file(path: Path, topics_root: Path) -> list[MemoryEvent]:
     return events
 
 
+def parse_source_file(path: Path, sources_root: Path) -> list[MemoryEvent]:
+    """Parse each archived source turn as one searchable record."""
+    relative = path.relative_to(sources_root).as_posix()
+    headings: list[str] = []
+    pending_source_id = ""
+    events: list[MemoryEvent] = []
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        heading = _HEADING_RE.match(line)
+        if heading:
+            level = len(heading.group(1))
+            headings = headings[: level - 1] + [heading.group(2).strip()]
+            continue
+        source_id = _SOURCE_ID_RE.search(line)
+        if source_id:
+            pending_source_id = source_id.group(1).strip()
+            continue
+        if not line.strip() or line.lstrip().startswith(("<a ", "<!--")):
+            continue
+        refs = [pending_source_id] if pending_source_id else _refs(line)
+        content = _clean_markdown(line)
+        if not refs or not content:
+            continue
+        event_date = _date(line)
+        events.append(MemoryEvent(
+            event_id=pending_source_id or _stable_id(
+                f"sources/{relative}", line_number, content, refs
+            ),
+            path=f"sources/{relative}",
+            line=line_number,
+            headings=list(headings),
+            date=event_date,
+            dates=[event_date] if event_date else [],
+            content=content,
+            refs=refs,
+        ))
+        pending_source_id = ""
+    return events
+
+
 def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 class MemoryBM25Index:
-    """Incrementally parsed local topic index with in-memory BM25 scoring."""
+    """Incrementally parsed local Topic and Source BM25 index."""
 
     def __init__(self, memory_dir: str | Path, *, persist: bool = True):
         self.memory_dir = Path(memory_dir).resolve()
         self.topics_dir = self.memory_dir / "topics"
+        self.sources_dir = self.memory_dir / "sources"
         self.cache_path = self.memory_dir / _CACHE_NAME
         self.persist = persist
         self._files: dict[str, dict[str, Any]] = {}
@@ -163,14 +351,14 @@ class MemoryBM25Index:
             return
         try:
             payload = json.loads(self.cache_path.read_text(encoding="utf-8"))
-            if payload.get("version") == 1 and isinstance(payload.get("files"), dict):
+            if payload.get("version") == 4 and isinstance(payload.get("files"), dict):
                 self._files = payload["files"]
         except (OSError, ValueError, TypeError):
             self._files = {}
 
     def _write_cache(self) -> None:
         self.memory_dir.mkdir(parents=True, exist_ok=True)
-        payload = {"version": 1, "files": self._files}
+        payload = {"version": 4, "files": self._files}
         fd, temporary = tempfile.mkstemp(prefix=".nativemem-bm25-", dir=self.memory_dir)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -182,11 +370,12 @@ class MemoryBM25Index:
 
     def refresh(self) -> None:
         current: dict[str, Path] = {}
-        if self.topics_dir.exists():
-            current = {
-                path.relative_to(self.topics_dir).as_posix(): path
-                for path in self.topics_dir.rglob("*.md")
-            }
+        for directory in (self.topics_dir, self.sources_dir):
+            if directory.exists():
+                current.update({
+                    path.relative_to(self.memory_dir).as_posix(): path
+                    for path in directory.rglob("*.md")
+                })
 
         changed = set(self._files) != set(current)
         refreshed: dict[str, dict[str, Any]] = {}
@@ -197,9 +386,21 @@ class MemoryBM25Index:
                 refreshed[relative] = cached
                 continue
             changed = True
+            parser = (
+                parse_source_file
+                if relative.startswith("sources/")
+                else parse_topic_file
+            )
+            parser_root = (
+                self.sources_dir
+                if relative.startswith("sources/")
+                else self.topics_dir
+            )
             refreshed[relative] = {
                 "sha256": digest,
-                "events": [asdict(event) for event in parse_topic_file(path, self.topics_dir)],
+                "events": [
+                    asdict(event) for event in parser(path, parser_root)
+                ],
             }
 
         self._files = refreshed
@@ -215,7 +416,7 @@ class MemoryBM25Index:
     def _search_text(event: MemoryEvent) -> str:
         path = event.path.removeprefix("topics/").replace("/", " ").replace("_", " ")
         headings = " ".join(event.headings)
-        return f"{event.content} {path} {headings} {event.date}"
+        return f"{event.content} {path} {headings} {' '.join(event.dates)}"
 
     @staticmethod
     def _rule_adjustment(event: MemoryEvent, query: str, tokens: list[str]) -> tuple[float, list[str]]:
@@ -262,16 +463,16 @@ class MemoryBM25Index:
         if not query_tokens or not self.events:
             return []
 
+        time_window = _query_time_window(date_from, date_to)
         candidates = []
         for event in self.events:
             if path_prefix:
-                normalized = path_prefix.strip().removeprefix("topics/").strip("/")
-                event_path = event.path.removeprefix("topics/")
-                if not event_path.startswith(normalized):
+                normalized = path_prefix.strip().strip("/")
+                if not normalized.startswith(("topics/", "sources/")):
+                    normalized = f"topics/{normalized}"
+                if not event.path.startswith(normalized):
                     continue
-            if date_from and (not event.date or event.date < date_from):
-                continue
-            if date_to and (not event.date or event.date > date_to):
+            if not _event_overlaps_window(event, time_window):
                 continue
             candidates.append(event)
         if not candidates:
@@ -309,7 +510,7 @@ def render_search_results(results: list[dict[str, Any]]) -> str:
         features = ", ".join(row["rule_features"]) or "none"
         blocks.append(
             f"{rank}. {row['path']}:{row['line']} "
-            f"[date={row['date'] or 'unknown'}; score={row['final_score']:.4f}; rules={features}]\n"
+            f"[date={','.join(row['dates']) or 'unknown'}; score={row['final_score']:.4f}; rules={features}]\n"
             f"   {row['content']}\n"
             f"   refs: {', '.join(row['refs'])}"
         )

@@ -1,3 +1,5 @@
+import shlex
+
 import pytest
 
 from src.nativemem_versions.v11.reconciliation import (
@@ -7,7 +9,7 @@ from src.nativemem_versions.v11.reconciliation import (
     classify_topic_diff,
 )
 from src.nativemem_versions.v11.topic_markdown import MemoryUnit, parse_topic_tree
-from src.v11_memory import MemoryWorkspace
+from src.nativemem_versions.v11.memory import MemoryConfig, MemoryWorkspace
 from src.nativemem_versions.v11.memory import _make_reconciler
 from types import SimpleNamespace
 
@@ -90,7 +92,7 @@ def test_apply_reconciliation_allows_only_explicit_correction_deletion():
     assert applied.deleted_ids == ("mem_a",)
 
 
-def test_workspace_calls_reconciler_for_content_change_but_not_move(tmp_path):
+def test_block_workspace_edits_content_and_paths_without_reconciler(tmp_path):
     calls = []
 
     def reconcile(edited_text, old_units, candidate_sources):
@@ -107,28 +109,21 @@ def test_workspace_calls_reconciler_for_content_change_but_not_move(tmp_path):
     }])
     workspace.save_memory([{
         "when": "2026-01-01",
-        "content": "The user wakes at 7:00.",
+        "content": "On 2026-01-01, the user wakes at 7:00.",
         "refs": ["D1:1"],
         "topic_path": "routine.md",
         "headings": ["Routine"],
     }])
 
     workspace.shell("sed -i '' 's/wakes at 7:00/wakes at 6:30/' topics/routine.md")
-    assert len(calls) == 1
+    assert calls == []
     workspace.shell("mkdir -p topics/moved && mv topics/routine.md topics/moved/routine.md")
-    assert len(calls) == 1
+    assert calls == []
+    assert "wakes at 6:30" in (tmp_path / "timeline/2026/01/01.md").read_text()
 
 
-def test_workspace_reconciles_new_free_text_and_materializes_new_id(tmp_path):
-    calls = []
-
-    def reconcile(edited_text, old_units, candidate_sources):
-        calls.append(edited_text)
-        return ReconciliationResult(
-            {}, (("The user started a new job.", "2026-02-01", ("D1:2",)),), ()
-        )
-
-    workspace = MemoryWorkspace(tmp_path, reconciler=reconcile)
+def test_block_workspace_rejects_unannotated_new_text_and_rolls_back(tmp_path):
+    workspace = MemoryWorkspace(tmp_path)
     workspace.archive_sessions([{
         "observation_date": "2026-01-01",
         "turns": [("user", "I moved."), ("user", "I started a new job.")],
@@ -142,32 +137,32 @@ def test_workspace_reconciles_new_free_text_and_materializes_new_id(tmp_path):
         "headings": ["Life"],
     }])
 
-    result = workspace.shell(
-        "printf '%s\n' 'The user started a new job.' >> topics/life.md"
+    before = (tmp_path / "topics/life.md").read_text()
+    with pytest.raises(ValueError, match="memory block ID required"):
+        workspace.shell(
+            "printf '%s\n' 'The user started a new job.' >> topics/life.md"
+        )
+    assert (tmp_path / "topics/life.md").read_text() == before
+
+
+def test_block_workspace_materializes_temporary_ids_and_source_handles(tmp_path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "new fact")],
+        "refs": ["D1:1"],
+    }])
+
+    workspace.shell(
+        "mkdir -p topics && printf '%s\n' '# A' '' "
+        "'On 2026-01-01, new fact.[^new-evidence-fact] ^new-block-fact' '' "
+        "'[^new-evidence-fact]: Time: `2026-01-01`; Sources: D1:1' > topics/a.md"
     )
 
-    assert result.returncode == 0
-    assert len(calls) == 1
-    text = (tmp_path / "topics/life.md").read_text()
-    assert "The user started a new job.[^mem_" in text
-    assert "Sources: [D1:2]" in text
-
-
-def test_workspace_retries_invalid_reconciliation_once(tmp_path):
-    calls = []
-
-    def reconcile(_text, old_units, _sources):
-        calls.append(1)
-        quote = "not present" if len(calls) == 1 else "Updated fact."
-        return ReconciliationResult({old_units[0].memory_id: quote}, (), ())
-
-    workspace = MemoryWorkspace(tmp_path, reconciler=reconcile)
-    workspace.archive_sessions([{"observation_date": "2026-01-01", "turns": [("user", "fact")], "refs": ["D1:1"]}])
-    workspace.save_memory([{"when": "2026-01-01", "content": "Old fact.", "refs": ["D1:1"], "topic_path": "a.md", "headings": ["A"]}])
-
-    workspace.shell("sed -i '' 's/Old fact/Updated fact/' topics/a.md")
-
-    assert len(calls) == 2
+    text = (tmp_path / "topics/a.md").read_text()
+    assert "new-block" not in text and "new-evidence" not in text
+    assert "[D1:1](../sources/D1.md#d1-1)" in text
+    assert len(parse_topic_tree(tmp_path / "topics")) == 1
 
 
 def test_workspace_rejects_source_edits_and_restores_stage(tmp_path):
@@ -191,7 +186,7 @@ def test_llm_reconciler_parses_the_runtime_contract():
         create=lambda **_kwargs: response
     )))
 
-    result = _make_reconciler(client, "test", None)(
+    result = _make_reconciler(client, "test", None, MemoryConfig())(
         "updated new", [unit()], {"D1:1", "D1:2"}
     )
 
@@ -200,10 +195,7 @@ def test_llm_reconciler_parses_the_runtime_contract():
 
 
 def test_workspace_explicit_correction_removes_only_derived_memory(tmp_path):
-    def reconcile(_text, old_units, _sources):
-        return ReconciliationResult({}, (), (old_units[0].memory_id,))
-
-    workspace = MemoryWorkspace(tmp_path, reconciler=reconcile)
+    workspace = MemoryWorkspace(tmp_path)
     workspace.archive_sessions([{"observation_date": "2026-01-01", "turns": [("user", "wrong")], "refs": ["D1:1"]}])
     workspace.save_memory([{"when": "2026-01-01", "content": "Wrong fact.", "refs": ["D1:1"], "topic_path": "a.md", "headings": ["A"]}])
 
@@ -214,48 +206,50 @@ def test_workspace_explicit_correction_removes_only_derived_memory(tmp_path):
     assert (tmp_path / "recent_events.jsonl").read_text() == ""
 
 
-def test_workspace_reconciliation_reanchors_ids_after_split(tmp_path):
-    def reconcile(_text, old_units, _sources):
-        return ReconciliationResult(
-            {old_units[0].memory_id: "First fact."},
-            (("Second fact.", "2026-01-02", ("D1:2",)),),
-            (),
-        )
-
-    workspace = MemoryWorkspace(tmp_path, reconciler=reconcile)
+def test_workspace_split_keeps_one_id_and_materializes_one_new_id(tmp_path):
+    workspace = MemoryWorkspace(tmp_path)
     workspace.archive_sessions([{"observation_date": "2026-01-01", "turns": [("user", "first"), ("user", "second")], "refs": ["D1:1", "D1:2"]}])
     workspace.save_memory([{"when": "2026-01-01", "content": "Combined fact.", "refs": ["D1:1"], "topic_path": "a.md", "headings": ["A"]}])
-    old_id = parse_topic_tree(tmp_path / "topics")[0].memory_id
-
-    workspace.shell("sed -i '' 's/Combined fact/First fact. Second fact/' topics/a.md")
+    old = parse_topic_tree(tmp_path / "topics")[0]
+    text = (
+        "# A\n\n"
+        f"On 2026-01-01, first fact.[^{old.evidence[0].citation_id}] ^{old.memory_id}\n\n"
+        "On 2026-01-02, second fact.[^new-evidence-second] ^new-block-second\n\n"
+        f"[^{old.evidence[0].citation_id}]: Time: `2026-01-01`; Sources: D1:1\n"
+        "[^new-evidence-second]: Time: `2026-01-02`; Sources: D1:2\n"
+    )
+    workspace.shell(f"printf %s {shlex.quote(text)} > topics/a.md")
 
     units = parse_topic_tree(tmp_path / "topics")
-    assert [(row.memory_id, row.content) for row in units] == [
-        (old_id, "First fact."),
-        (units[1].memory_id, "Second fact."),
+    assert [row.content for row in units] == [
+        "On 2026-01-01, first fact.",
+        "On 2026-01-02, second fact.",
     ]
+    assert units[0].memory_id == old.memory_id
+    assert units[1].memory_id != old.memory_id
 
 
-def test_workspace_reconciliation_supports_two_ids_on_merged_text(tmp_path):
-    def reconcile(_text, old_units, _sources):
-        return ReconciliationResult(
-            {unit.memory_id: "Merged fact." for unit in old_units}, (), ()
-        )
-
-    workspace = MemoryWorkspace(tmp_path, reconciler=reconcile)
+def test_workspace_merge_keeps_one_block_and_both_evidence_annotations(tmp_path):
+    workspace = MemoryWorkspace(tmp_path)
     workspace.archive_sessions([{"observation_date": "2026-01-01", "turns": [("user", "one"), ("user", "two")], "refs": ["D1:1", "D1:2"]}])
     workspace.save_memory([
         {"when": "2026-01-01", "content": "First fact.", "refs": ["D1:1"], "topic_path": "a.md", "headings": ["A"]},
         {"when": "2026-01-02", "content": "Second fact.", "refs": ["D1:2"], "topic_path": "a.md", "headings": ["A"]},
     ])
-    old_ids = [row.memory_id for row in parse_topic_tree(tmp_path / "topics")]
-
-    workspace.shell(
-        "sed -i '' "
-        f"-e 's/First fact.\\[\\^{old_ids[0]}\\]/Merged fact./' "
-        f"-e '/Second fact.\\[\\^{old_ids[1]}\\]/d' topics/a.md"
+    old = parse_topic_tree(tmp_path / "topics")
+    first, second = old
+    text = (
+        "# A\n\n"
+        f"On 2026-01-01, first fact.[^{first.evidence[0].citation_id}] "
+        f"On 2026-01-02, second fact.[^{second.evidence[0].citation_id}] ^{first.memory_id}\n\n"
+        f"[^{first.evidence[0].citation_id}]: Time: `2026-01-01`; Sources: D1:1\n"
+        f"[^{second.evidence[0].citation_id}]: Time: `2026-01-02`; Sources: D1:2\n"
     )
+    workspace.shell(f"printf %s {shlex.quote(text)} > topics/a.md")
 
     units = parse_topic_tree(tmp_path / "topics")
-    assert [row.memory_id for row in units] == old_ids
-    assert [row.content for row in units] == ["Merged fact.", "Merged fact."]
+    assert [row.memory_id for row in units] == [first.memory_id]
+    assert units[0].content == (
+        "On 2026-01-01, first fact. On 2026-01-02, second fact."
+    )
+    assert units[0].source_refs == ("D1:1", "D1:2")

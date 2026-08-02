@@ -4,7 +4,7 @@ Patches the OpenAI SDK at the lowest level (sync + async chat.completions
 create), so EVERY LLM call made by any framework inside the adapter process
 is counted — calls, prompt tokens, completion tokens, wall time. This works
 because all 15 adapted frameworks use the bare OpenAI SDK (verified in
-docs/baseline_adapters.md; no litellm bindings).
+docs/experiments/baselines/baseline_adapters.md; no litellm bindings).
 
 Usage in an adapter:
     from _usage_tracker import tracker
@@ -20,7 +20,7 @@ Usage in an adapter:
 
 Embeddings are local sentence-transformers everywhere → no API cost, not
 counted. Matches LightMem Table 2 accounting (tokens in thousands, calls,
-runtime) — see docs/unified_evaluation_protocol.md efficiency section.
+runtime) — see docs/experiments/protocols/unified_evaluation_protocol.md efficiency section.
 """
 
 import functools

@@ -120,6 +120,27 @@ class EmptyStageError(RuntimeError):
     """A swallowed backend/API failure produced an empty stage result."""
 
 
+class LongMemEvalAnswerConfig:
+    def __init__(
+        self,
+        *,
+        max_rounds: int = 12,
+        max_output_tokens: int = 1_200,
+        read_context: int = 1,
+        thinking: str | None = None,
+    ) -> None:
+        if max_rounds < 1:
+            raise ValueError("max_rounds must be positive")
+        if max_output_tokens < 1:
+            raise ValueError("max_output_tokens must be positive")
+        if read_context < 0:
+            raise ValueError("read_context must be non-negative")
+        self.max_rounds = max_rounds
+        self.max_output_tokens = max_output_tokens
+        self.read_context = read_context
+        self.thinking = thinking
+
+
 def _retry_delay(exc: Exception, attempt: int) -> int:
     return 30 if type(exc).__name__ == "RateLimitError" else attempt
 
@@ -401,6 +422,7 @@ def collect_and_answer_longmemeval(
     *,
     prompt_template: str | None = None,
     review_prompt: str | None = None,
+    config: LongMemEvalAnswerConfig | None = None,
 ) -> tuple[list[dict[str, str]], int, str, list[dict[str, Any]]]:
     """Answer from a disposable full-memory workspace."""
     with tempfile.TemporaryDirectory(prefix="nativemem-qa-") as temporary:
@@ -413,6 +435,7 @@ def collect_and_answer_longmemeval(
             turn_index,
             prompt_template=prompt_template,
             review_prompt=review_prompt,
+            config=config,
         )
 
 
@@ -449,15 +472,17 @@ def _collect_and_answer_longmemeval(
     *,
     prompt_template: str | None = None,
     review_prompt: str | None = None,
+    config: LongMemEvalAnswerConfig | None = None,
 ) -> tuple[list[dict[str, str]], int, str, list[dict[str, Any]]]:
     """Use the v8 single-agent retrieval loop with LongMemEval answer rules."""
     injected = getattr(backend, "collect_and_answer_longmemeval", None)
     if callable(injected) and prompt_template is None and review_prompt is None:
         return injected(item, memory_dir, turn_index)
 
-    max_rounds = int(os.environ.get("NATIVEMEM_V8_MAX_ROUNDS", "12"))
-    max_tokens = int(os.environ.get("NATIVEMEM_V8_MAX_TOKENS", "1200"))
-    read_context = int(os.environ.get("NATIVEMEM_V8_READ_CONTEXT", "1"))
+    config = config or LongMemEvalAnswerConfig()
+    max_rounds = config.max_rounds
+    max_tokens = config.max_output_tokens
+    read_context = config.read_context
     prompt = (prompt_template or LME_SINGLE_PROMPT).format(
         structure=backend.memory_structure_map(str(memory_dir)),
         memory_root=str(memory_dir.resolve()),
@@ -479,7 +504,7 @@ def _collect_and_answer_longmemeval(
     consecutive_errors = 0
     review_requested = False
     invalid_outputs: list[dict[str, Any]] = []
-    thinking = os.environ.get("NATIVEMEM_THINKING")
+    thinking = config.thinking
     provider_options = (
         {"extra_body": {"thinking": {"type": thinking}}} if thinking else {}
     )

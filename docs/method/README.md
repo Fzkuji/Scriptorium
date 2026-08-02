@@ -1,13 +1,13 @@
 # NativeMem 方法文档
 
-> 更新：2026-07-31。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
+> 更新：2026-08-01。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
 
 当前实现模块：
 
 - `code/src/nativemem_versions/v11/memory.py`：Writer、Manager、工作区事务和 benchmark 入口；
-- `topic_markdown.py`：自由 Markdown memory unit 的 footnote 解析与物化；
-- `reconciliation.py`：Topic diff 分类和 Reconciler 输出校验；
-- `derived_views.py`：Timeline、Recent 和 structure map 的确定性重建；
+- `topic_markdown.py`：段落 block、claim-adjacent evidence 与关系链接的解析；
+- `reconciliation.py`：旧 Topic 格式的兼容代码，不属于当前 Writer/Manager 主流程；
+- `derived_views.py`：Timeline、Recent、Relations 和 structure map 的确定性重建；
 - `runtime_state.py`：provider source record、cursor、Git 提交和触发条件；
 - `online_runtime.py`：增量写入、局部整理和每日全局管理的在线编排。
 
@@ -28,20 +28,20 @@
 
 ## 当前方法概览
 
-NativeMem 是一个 file-native、multi-view 的外部长期记忆系统。原始交互和派生记忆均保存在可读、可编辑、可版本化的文本文件中；LLM 负责内容抽取、组织和检索决策，Runtime 负责路径、日期、引用、链接、预算和事务边界等确定性约束。
+NativeMem 是一个 file-native、multi-view 的外部记忆系统。Source、Topic 和 Core 是需要保存的权威文本；Timeline、Recent、Relations 与检索索引从这些状态重建。LLM 负责 Topic/Core 的语义内容、组织、证据日期和检索决策，Runtime 负责 ID、来源解析、路径、派生视图、预算和事务边界。
 
 当前设计包含六类状态：
 
 1. `Source Memory`：追加保存完整原始交互，是事实来源；
-2. `Topical View`：按主题组织派生记忆；
-3. `Temporal View`：按事件时间组织派生记忆；
-4. `Hyperlink Relations`：使用 Markdown links 和 backlinks 表示跨文件关系；
+2. `Topical View`：LLM 直接编辑的主要语义状态；
+3. `Temporal View`：Runtime 从 Topic 中 dated evidence 生成的时间视图；
+4. `Hyperlink Relations`：Runtime 从正文 Markdown links 生成的 outbound/backlinks；
 5. `Recent Memory`：始终保留最近写入的 50 条记录，超过容量时按 FIFO 移除最早记录；
 6. `Core Memory`：由 LLM 管理的独立文本文件，保存每次交互都需要提供的信息。
 
-文本文件是权威状态。BM25 和 Embedding 索引都可以从文件重建，只提供检索能力，不保存唯一事实。
+一个 Topic memory unit 是一个自然语言段落：事实后跟 evidence footnote，段落末尾只有一个 Obsidian-compatible block ID。Runtime 将新 block 物化为 8 位十六进制 ID，并在候选冲突时重新计算直到唯一。temporal evidence 的 `Time` 字段使用 `YYYY`、`YYYY-MM` 或 `YYYY-MM-DD`；无法确定任何年份时使用 `undated`。前三种按原始精度生成 Timeline，`undated` 不生成。时间只作为 footnote 元数据保存，正文仅在事实本身自然包含时间时保留日期，不为复制 `Time` 字段而追加日期。Topic 间的 Markdown link 必须指向 `#^block-id`，文件级或 heading 级 Topic link 会被拒绝。Writer、局部 Manager、全局 Manager 和 repair Agent 都只使用 shell 形成完整 Markdown；Runtime 物化临时 ID、解析 Source、规范化 marker 间距、校验 Topic links、改写移动后的相对链接，并重建派生视图。BM25 和 Embedding 只提供检索能力，不保存唯一事实。
 
-事实变化采用完整时间记录：旧事件和新事件都保存在 Topical View 与 Temporal View 中，并绑定各自的 source references；查询时由 LLM 根据时间范围和事件顺序判断。系统不通过覆盖旧事实维护单一 current state，也不增加 `supersedes` 或图边有效期。
+事实变化采用完整时间记录：旧状态和新状态都保存在 Topic 中，并绑定各自的 dated evidence；Runtime 将它们分别生成到 Timeline。`undated` evidence 不生成 Timeline 条目。系统不增加 `supersedes` 或图边有效期。
 
 ## 三级记忆管理
 
@@ -65,7 +65,9 @@ Git/cursor、token/空闲触发和每日管理条件已经由 `online_runtime.py
 | `bm25_search` | 在路径不明确或需要跨文件召回时提供词法排序候选 |
 | `embedding_search` | 提供语义相似候选 |
 
-目录、文件、timeline、links 和 source references 作为结构化访问方式继续保留。三种检索都只返回候选，不替代 LLM 的相关性判断和后续检索决策。
+目录、文件、timeline、links 和 source references 作为结构化访问方式继续保留。Topic 和 Source 都是三种检索方法的可访问文本；Source 不需要通过专用工具间接读取。三种检索都只返回候选，不替代 LLM 的相关性判断和后续检索决策。
+
+Source 始终可以通过目录浏览、文件读取、`grep`、BM25 和 Embedding 直接访问。函数参数 `retrieval.QueryConfig(verify_sources=True|False)` 只控制 prompt 是否要求查询 Agent 在回答前核验相关原始对话；设为 `False` 时核验变为可选，不改变 Source 可见性或工具集合。实际参数值记录在每题 `tool_trace` 的 termination 条目中。NativeMem 的运行参数均由入口显式构造后逐层传入，不从进程环境读取。
 
 标准检索预算暂定为最多 8 次 LLM retrieval rounds、5 次工具调用和 10K memory-visible tokens；development set 扫描 `3/5/8` calls 与 `6K/10K/20K` tokens，test set 固定参数。主要策略对标是 ByteRover 的 5-Tier Progressive Retrieval。其他对标包括 Infini Memory-H/A、LightMem，以及作为后续增强参考的 Semble。详细映射见 [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md#34-reference-systems)。
 
@@ -74,8 +76,8 @@ Git/cursor、token/空闲触发和每日管理条件已经由 `online_runtime.py
 | 状态 | 内容 | 证据边界 |
 |---|---|---|
 | 已完成结果 | v8.8 风格的 Topical + Temporal 视图、source resolution 和连续文件导航 | LoCoMo 1,540 题与 LongMemEval-S 500 题 |
-| 当前实现线 | V11 agentic writer/manager、Recent 50 FIFO、Core 2K、周期局部整理、事务回滚、BM25、Embedding 与检索预算 | 已有实现、单元测试和小规模真实 API smoke test；正式实验矩阵尚未完成 |
-| 已实现、待部署验证 | Footnote Topic、自动 Reconciler、provider source IDs、Git/cursor、token/空闲触发和每日管理条件 | 通过单元与集成测试；尚未完成多 provider 长时间在线运行和成本评估 |
+| 当前实现线 | shell-only V11 Writer/Manager、Topic paragraph blocks、evidence footnotes、Timeline/Recent/Relations 派生、Recent 50 FIFO、Core 2K、事务回滚、BM25、Embedding 与检索预算 | 已有实现与单元/集成测试；正式实验矩阵尚未完成 |
+| 已实现、待部署验证 | provider source IDs、Git/cursor、token/空闲触发和每日管理条件 | 通过单元与集成测试；尚未完成多 provider 长时间在线运行和成本评估 |
 
 现有 90.8% LoCoMo 与 87.0% LongMemEval-S 结果不能自动归因于 V11、Recent Memory、Core Memory、Git/cursor 事务、BM25 或 Embedding。新组件需要在相同 memory、answerer、judge 和预算下分别消融。
 
@@ -83,7 +85,7 @@ Git/cursor、token/空闲触发和每日管理条件已经由 `online_runtime.py
 
 当前只保留会影响实现或实验定义的未决问题：
 
-1. Topical 与 Temporal 采用同步文本 occurrence，还是规范记录加视图链接；
+1. Topic memory block 的理想语义粒度是否需要进一步约束；
 2. Writer/Manager 轮数与 Core Memory 2K token 上限是否需要根据 development set 调整；
 3. 实际部署中是否需要加入基于查询成功率和检索成本的动态整理触发；
 4. 是否采用 Semble 风格的 BM25 + Embedding 融合与结构重排。

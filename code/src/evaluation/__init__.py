@@ -1,6 +1,6 @@
 """Unified evaluation package for NativeMem experiments.
 
-Implements docs/unified_evaluation_protocol.md §6:
+Implements docs/experiments/protocols/unified_evaluation_protocol.md §6:
 - answerer.py: unified short-answer generation (Mem0 original prompt +
   <answer></answer> extraction), same model for every system.
 - judges.py: binary LLM judges — LoCoMo ACCURACY_PROMPT (Mem0/Nemori/

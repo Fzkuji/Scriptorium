@@ -1,4 +1,4 @@
-"""检索 prompt 的策略指导必须锁定，防未来被误删（轨迹诊断的 A 词面鸿沟 / B 选行失败 + 反弃答）。"""
+"""锁定 LLM-controlled retrieval、词面补搜、选行纪律与证据不足时弃答。"""
 from src.adapters.run_nativemem import _V8_SINGLE_PROMPT, _V8_RETRIEVE_PROMPT
 
 

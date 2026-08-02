@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
-from .topic_markdown import MemoryUnit
+from .topic_markdown import MemoryUnit, is_valid_temporal_value
 
 
 class ReconciliationError(ValueError):
@@ -87,7 +86,7 @@ def apply_reconciliation(
         if not quote or quote not in edited_text:
             raise ReconciliationError(f"exact quote not found: {quote!r}")
     for content, when, refs in result.creates:
-        if when is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", when):
+        if when is not None and not is_valid_temporal_value(when):
             raise ReconciliationError(f"invalid date for {content!r}")
         if not refs:
             raise ReconciliationError(f"new memory requires source: {content!r}")

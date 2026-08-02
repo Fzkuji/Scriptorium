@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = next(
     parent
     for parent in Path(__file__).resolve().parents
-    if (parent / "Model-Aligned-Wiki.html").is_file()
+    if (parent / "docs" / "Model-Aligned-Wiki.html").is_file()
 )
 
 
@@ -24,7 +24,7 @@ def test_canonical_layout_has_relative_compatibility_links():
         link = ROOT / name
         assert link.is_symlink()
         assert link.resolve() == (ROOT / "code" / name).resolve()
-    assert (ROOT / "experiment-plan.html").is_symlink()
-    assert (ROOT / "experiment-plan.html").resolve() == (
-        ROOT / "docs" / "experiment-plan.html"
-    ).resolve()
+    assert (ROOT / "docs" / "Model-Aligned-Wiki.html").is_file()
+    assert (ROOT / "docs" / "experiments" / "experiment.html").is_file()
+    assert not (ROOT / "Model-Aligned-Wiki.html").exists()
+    assert not (ROOT / "experiment-plan.html").exists()

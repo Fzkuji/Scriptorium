@@ -1,6 +1,6 @@
 """Verbatim prompts for the unified evaluation protocol.
 
-Sources (see docs/unified_evaluation_protocol.md §6 and docs/prompts_collection/):
+Sources (see docs/experiments/protocols/unified_evaluation_protocol.md §6 and docs/prompts/):
 - ANSWER_PROMPT: Mem0 original short-answer prompt, identical copy used by
   Nemori (evaluation/locomo/search.py) and LightMem (search_locomo.py).
   Key constraint: "The answer should be less than 5-6 words."

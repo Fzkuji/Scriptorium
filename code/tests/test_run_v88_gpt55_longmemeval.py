@@ -443,13 +443,12 @@ def test_longmemeval_answer_can_disable_provider_thinking(tmp_path, monkeypatch)
         ),
         log_usage=lambda *_args, **_kwargs: None,
     )
-    monkeypatch.setenv("NATIVEMEM_THINKING", "disabled")
-
     MOD.collect_and_answer_longmemeval(
         backend,
         {"question": "What happened?", "question_date": "2023-05-22"},
         tmp_path,
         {},
+        config=MOD.LongMemEvalAnswerConfig(thinking="disabled"),
     )
 
     assert calls[0]["extra_body"] == {"thinking": {"type": "disabled"}}

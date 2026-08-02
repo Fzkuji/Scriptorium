@@ -11,7 +11,7 @@ from src.nativemem_versions.v11.runtime_state import (
     should_local_reorganize,
 )
 from src.nativemem_versions.v11.online_runtime import OnlineMemoryRuntime
-from src.v11_memory import MemoryWorkspace
+from src.nativemem_versions.v11.memory import MemoryWorkspace
 
 
 def test_source_record_preserves_opaque_provider_ids_and_order():
@@ -84,6 +84,19 @@ def test_workspace_archives_provider_records_with_stable_ids(tmp_path: Path):
     assert "sources/claude/thread_x.md#source-" in (
         tmp_path / "timeline/2026/08/01.md"
     ).read_text()
+
+
+def test_workspace_archives_provider_refs_from_writer_sessions(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-08-01",
+        "turns": [("user", "hello")],
+        "refs": ["locomo/thread_a1/msg_b2"],
+    }])
+
+    source = tmp_path / "sources/locomo/thread_a1.md"
+    assert source.exists()
+    assert "source-id:locomo/thread_a1/msg_b2" in source.read_text()
 
 
 def test_online_runtime_captures_batch_and_leaves_new_messages_for_next_run(tmp_path: Path):

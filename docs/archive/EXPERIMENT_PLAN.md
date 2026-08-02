@@ -1,6 +1,6 @@
 # 实验规划
 
-> 2026-06-29 更新：本文件保留早期 LoCoMo/qwen3.6-flash 阶段的实验规划。面向 NativeMem 预写论文和后续提交的新版实验路线已经迁移到 `../refine-logs/EXPERIMENT_PLAN.md`，具体 run tracker 在 `../refine-logs/EXPERIMENT_TRACKER.md`。后续不要把这里的早期真实结果和预写论文里的理想完整结果直接混用。
+> 2026-06-29 更新：本文件保留早期 LoCoMo/qwen3.6-flash 阶段的实验规划。面向 NativeMem 预写论文和后续提交的新版实验路线已经迁移到 `../experiments/runs/refine-logs/EXPERIMENT_PLAN.md`，具体 run tracker 在 `../experiments/runs/refine-logs/EXPERIMENT_TRACKER.md`。后续不要把这里的早期真实结果和预写论文里的理想完整结果直接混用。
 
 ## 1. 数据集
 

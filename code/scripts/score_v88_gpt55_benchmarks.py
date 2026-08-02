@@ -47,7 +47,7 @@ JUDGE_PROFILES: dict[str, dict[str, Any]] = {
         "base_url": "dynamic-openrouter-gateway",
         "comparison_status": "protocol-comparable",
         "comparable_to_published_primary": True,
-        "note": "Primary judge required by docs/unified_evaluation_protocol.md section 6.4.",
+        "note": "Primary judge required by docs/experiments/protocols/unified_evaluation_protocol.md section 6.4.",
     },
     "secondary": {
         "id": "secondary-openai-flex-gpt5.5",

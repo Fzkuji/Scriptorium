@@ -5,7 +5,7 @@ import sys
 
 def project_root() -> Path:
     for parent in Path(__file__).resolve().parents:
-        if (parent / "Model-Aligned-Wiki.html").is_file():
+        if (parent / "docs" / "Model-Aligned-Wiki.html").is_file():
             return parent
     raise RuntimeError("project root not found")
 
@@ -17,8 +17,8 @@ def main() -> int:
         "requirements.txt",
         "requirements-dev.txt",
         "setup.sh",
-        "Model-Aligned-Wiki.html",
-        "docs/experiment-plan.html",
+        "docs/Model-Aligned-Wiki.html",
+        "docs/experiments/experiment.html",
     )
     missing = [name for name in required if not (root / name).is_file()]
     for name in (

@@ -1,7 +1,7 @@
 # Baseline 适配器
 
 每个 `run_*.py` 只做**建库 + 检索**，产出统一 `questions.json`；答题/判分统一由
-`src/evaluation/evaluate.py` 完成。详细文档见 `docs/baseline_adapters.md`。
+`src/evaluation/evaluate.py` 完成。详细文档见 `docs/experiments/baselines/baseline_adapters.md`。
 
 ## 适配器清单
 
@@ -23,7 +23,7 @@
 | `run_evermemos.py` | EverMemOS / EverOS（arXiv 2601.02163） | venv `third_party/evermemos_venv` + 本地 uvicorn 子进程（`_evermemos_server_shim.py`） |
 | `run_nativemem.py` | NativeMem（我们的系统） | |
 
-不可行（无适配器，见 `docs/baseline_adapters.md` 小节）：Mnemis（构建端未开源）、
+不可行（无适配器，见 `docs/experiments/baselines/baseline_adapters.md` 小节）：Mnemis（构建端未开源）、
 Memobase（client-server + PG/pgvector/Redis 硬依赖）、TiMem（PostgreSQL 硬依赖 + 裸 SQL 检索）。
 
 ## 契约

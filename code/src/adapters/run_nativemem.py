@@ -31,11 +31,20 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def _v8_concurrency():
-    return max(1, int(os.environ.get("NATIVEMEM_V8_CONCURRENCY", "8")))
+def _v8_concurrency(value=8):
+    return max(1, int(value))
 
 
-def _v8_tidy(memory_dir, touched, sections_on, article_on, final=False):
+def _v8_tidy(
+    memory_dir,
+    touched,
+    sections_on,
+    article_on,
+    final=False,
+    *,
+    concurrency=8,
+    combined=False,
+):
     """节奏3/收尾整理。TIDY_COMBINED=off（默认）走 merge_duplicate_lines +
     organize_topic_sections/rewrite_topic_articles 两次独立调用——v8.6 验尸发现
     合并成一次调用时模型把去重和分节张冠李戴（抽查 10 例合并仅 1 例正确、
@@ -44,8 +53,6 @@ def _v8_tidy(memory_dir, touched, sections_on, article_on, final=False):
     共享可变状态；log_usage 已加锁），并发数 NATIVEMEM_V8_CONCURRENCY（默认 8）。"""
     if not touched:
         return
-    combined = os.environ.get("NATIVEMEM_V8_TIDY_COMBINED", "off") == "on"
-
     def _one(name):
         s = {name}
         if combined:
@@ -58,7 +65,7 @@ def _v8_tidy(memory_dir, touched, sections_on, article_on, final=False):
             v8_memory.rewrite_topic_articles(memory_dir, s, final=final)
 
     names = sorted(touched)
-    workers = min(_v8_concurrency(), len(names))
+    workers = min(_v8_concurrency(concurrency), len(names))
     if workers <= 1:
         for name in names:
             _one(name)
@@ -85,7 +92,6 @@ from src.v8_memory import (build_turn_index, read_turns,  # noqa: E402
                            distill_events, write_events, dia_ids_in)
 import src.v8_memory as v8_memory  # noqa: E402  (module ref: keeps monkeypatch.setattr(V8, ...) live)
 import src.v10_memory as v10_memory  # noqa: E402
-import src.v11_memory as v11_memory  # noqa: E402  (compatibility for existing callers)
 import src.nativemem as nativemem_runtime  # noqa: E402
 from src.adapters.question_checkpoint import (  # noqa: E402
     atomic_json,
@@ -141,7 +147,7 @@ _V8_TURN_INDEX = {}  # v8 检索回原文用；main 在 build 后设置
 
 def _uses_linked_memory():
     """Return whether the selected version uses topic/timeline memory views."""
-    return os.environ.get("NATIVEMEM_PROMPT") in {"v8", "v10", "v11"}
+    return os.environ.get("NATIVEMEM_PROMPT") in {"v8", "v10"}
 
 COLLECT_PROMPT = """You are retrieving relevant memories from a personal memory folder to help answer a question.
 You have a bash tool to execute shell commands. The working directory is the root of the memory folder.
@@ -347,6 +353,7 @@ timeline 行尾的 → topics/....md 是这条事件所属完整文章的路径�
 - 路径明确时用 ls/cat 阅读相关 topic 和兄弟文件。
 - 查专名、原句、编号时用 grep；一个关键词没命中时换多种措辞。
 - 路径不明确、问题包含多个概念、或 grep 没命中时调用 bm25_search；它只做无 embedding 的关键词排序，可改写 query 后再次调用。
+- 问题明确给出日历范围时，可在同一次 bm25_search 调用中传 date_from/date_to；支持 YYYY、YYYY-MM、YYYY-MM-DD。时间含义尚未解析清楚时不要使用硬过滤。
 - 时间、先后、持续时间和状态变化问题查 timeline。
 - 找到 [Dx:y] 后用 read_original 核验原词、日期、指代和冲突；通用 bash 看不到 sources/。
 这些工具没有固定顺序。根据每轮结果决定继续搜索、换工具或停止。
@@ -385,6 +392,7 @@ timeline 行尾的 → topics/....md 是这条事件所属完整文章的路径�
 - 路径明确时用 ls/cat 阅读相关 topic 和兄弟文件。
 - 查专名、原句、编号时用 grep；一个关键词没命中时换多种措辞。
 - 路径不明确、问题包含多个概念、或 grep 没命中时调用 bm25_search；它只做无 embedding 的关键词排序，可改写 query 后再次调用。
+- 问题明确给出日历范围时，可在同一次 bm25_search 调用中传 date_from/date_to；支持 YYYY、YYYY-MM、YYYY-MM-DD。时间含义尚未解析清楚时不要使用硬过滤。
 - 时间、先后、持续时间和状态变化问题查 timeline。
 - 找到 [Dx:y] 后用 read_original 核验原词、日期、指代和冲突；通用 bash 看不到 sources/。
 这些工具没有固定顺序。根据每轮结果决定继续搜索、换工具或停止。
@@ -524,8 +532,8 @@ _V8_BM25_TOOL = {
                 "query": {"type": "string", "description": "检索词，可改写后重复调用"},
                 "top_k": {"type": "integer", "minimum": 1, "maximum": 50, "default": 8},
                 "path_prefix": {"type": "string", "description": "可选的 topics/ 相对路径前缀"},
-                "date_from": {"type": "string", "description": "可选起始日期 YYYY-MM-DD"},
-                "date_to": {"type": "string", "description": "可选结束日期 YYYY-MM-DD"},
+                "date_from": {"type": "string", "description": "可选且包含边界的起始时间：YYYY、YYYY-MM 或 YYYY-MM-DD"},
+                "date_to": {"type": "string", "description": "可选且包含边界的结束时间：YYYY、YYYY-MM 或 YYYY-MM-DD"},
             },
             "required": ["query"],
         },
@@ -808,13 +816,6 @@ def _build_memory_v10(conv, memory_dir, max_sessions=None):
     )
 
 
-def _build_memory_v11(conv, memory_dir, max_sessions=None):
-    """Compatibility wrapper for callers of the former private builder."""
-    return load_version("v11").build_memory(
-        conv, memory_dir, max_sessions=max_sessions
-    )
-
-
 def _build_memory_legacy(conv, memory_dir, max_sessions=None):
     """Replicates src/nativemem.py main(): 10-turn chunks, raw archive."""
 
@@ -932,7 +933,7 @@ def _build_memory_v8(conv, memory_dir, max_sessions=None):
 def build_memory(conv, memory_dir, max_sessions=None):
     """Dispatch versioned builders while preserving pre-V8 implementations."""
     version = os.environ.get("NATIVEMEM_PROMPT")
-    if version in {"v8", "v10", "v11"}:
+    if version in {"v8", "v10"}:
         return load_version(version).build_memory(
             conv, memory_dir, max_sessions=max_sessions
         )
@@ -963,11 +964,11 @@ def main():
     if args.source_build_record and not args.memory_dir:
         ap.error("--source-build-record requires --memory-dir")
     if (
-        os.environ.get("NATIVEMEM_PROMPT") in {"v10", "v11"}
+        os.environ.get("NATIVEMEM_PROMPT") == "v10"
         and args.memory_dir
         and not args.source_build_record
     ):
-        ap.error("v10/v11 --memory-dir requires --source-build-record")
+        ap.error("v10 --memory-dir requires --source-build-record")
 
     with open(DATA_PATH) as f:
         data = json.load(f)
@@ -1001,7 +1002,6 @@ def main():
     if _uses_linked_memory():
         global _V8_TURN_INDEX
         _V8_TURN_INDEX = build_turn_index(conv)
-
     n_files = sum(1 for root, _, files in os.walk(memory_dir)
                   for fn in files if fn.endswith(".md") and "raw" not in root)
 
@@ -1015,35 +1015,23 @@ def main():
         "build_tokens_out": build_snap["tokens_out"] if build_snap else None,
         "build_llm_time_s": build_snap["llm_time_s"] if build_snap else None,
     }
-    if os.environ.get("NATIVEMEM_PROMPT") in {"v10", "v11"} and args.memory_dir:
-        build_record = load_source_build_record(
+    if os.environ.get("NATIVEMEM_PROMPT") == "v10" and args.memory_dir:
+        build_record = load_v10_source_build_record(
             args.source_build_record,
             memory_dir,
             args.sample,
-            os.environ.get("NATIVEMEM_PROMPT"),
         )
         build_record["notes"] = (
             f"reused existing memory dir: {os.path.abspath(memory_dir)}; "
             f"source build record: {os.path.abspath(args.source_build_record)}"
         )
-    elif os.environ.get("NATIVEMEM_PROMPT") in {"v10", "v11"}:
-        version = os.environ.get("NATIVEMEM_PROMPT")
-        build_record["method"] = f"NativeMem-{version}"
+    elif os.environ.get("NATIVEMEM_PROMPT") == "v10":
+        build_record["method"] = "NativeMem-v10"
         build_record["sample"] = args.sample
         build_record["max_sessions"] = args.max_sessions
         build_record["builder_model"] = ALIYUN_MODEL
         build_record["memory_dir"] = os.path.abspath(memory_dir)
-        if version == "v10":
-            build_record["v10_config"] = v10_memory.V10BuildConfig.from_env().to_dict()
-        else:
-            build_record["v11_config"] = {
-                "session_batch": int(
-                    os.environ.get("NATIVEMEM_V11_SESSION_BATCH", "1")
-                ),
-                "recent_limit": int(
-                    os.environ.get("NATIVEMEM_V11_RECENT_LIMIT", "100")
-                ),
-            }
+        build_record["v10_config"] = v10_memory.V10BuildConfig.from_env().to_dict()
         phase_usage = {}
         for entry in nativemem_runtime.CALL_LOG:
             phase = str(entry.get("phase", "unknown"))
@@ -1061,6 +1049,7 @@ def main():
         return
     single_v8 = (_uses_linked_memory()
                  and os.environ.get("NATIVEMEM_V8_SINGLE") == "1")
+    direct_answer = single_v8
 
     checkpoint = checkpoint_path(args.output)
     identity = checkpoint_identity(
@@ -1074,7 +1063,7 @@ def main():
         checkpoint_state,
         sample=args.sample,
         qas=qas,
-        require_answer=single_v8,
+        require_answer=direct_answer,
     )
     if completed:
         print(
@@ -1090,11 +1079,12 @@ def main():
         t0 = time.time()
         phase = f"q{qi}"
         tracker.reset(phase)
-        v8_answer = None
+        direct_answer_text = None
+        tool_trace = None
         with tracker.bind_thread(phase):
             try:
                 if single_v8:
-                    memories, steps, v8_answer = _collect_and_answer_v8(
+                    memories, steps, direct_answer_text = _collect_and_answer_v8(
                         q, memory_dir, _V8_TURN_INDEX)
                 else:
                     memories, steps = collect_memories(q, memory_dir)
@@ -1117,9 +1107,10 @@ def main():
                           "tokens_in": snap["tokens_in"],
                           "tokens_out": snap["tokens_out"]},
         }
-        if v8_answer is not None:
-            # 方案B：单模型已直接给答案，写进 answer 字段，eval_full 跳过独立 answerer
-            _rec["answer"] = v8_answer
+        if direct_answer_text is not None:
+            _rec["answer"] = direct_answer_text
+        if tool_trace is not None:
+            _rec["tool_trace"] = tool_trace
         print(f"  q{qi}: {len(memories)} memories, {steps} steps, {latency:.1f}s")
         return _rec
 
@@ -1131,7 +1122,7 @@ def main():
         for qi, qa in pending:
             record = _answer_one(qi, qa)
             save_answer(checkpoint, checkpoint_state, qi, record)
-            if not single_v8 or str(record.get("answer", "")).strip():
+            if not direct_answer or str(record.get("answer", "")).strip():
                 completed[qi] = record
     else:
         with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -1142,7 +1133,7 @@ def main():
                 qi = futures[future]
                 record = future.result()
                 save_answer(checkpoint, checkpoint_state, qi, record)
-                if not single_v8 or str(record.get("answer", "")).strip():
+                if not direct_answer or str(record.get("answer", "")).strip():
                     completed[qi] = record
 
     missing = [qi for qi in range(len(qas)) if qi not in completed]

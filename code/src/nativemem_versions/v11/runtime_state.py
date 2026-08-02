@@ -75,7 +75,7 @@ class RuntimeStateStore:
         candidates = [
             value for value in (
                 "core.md", "recent_events.jsonl",
-                "sources", "topics", "timeline",
+                "relations.json", "sources", "topics", "timeline",
             )
             if (self.memory_dir / value).exists()
         ]
