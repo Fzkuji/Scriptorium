@@ -1,5 +1,7 @@
 import asyncio
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -107,6 +109,30 @@ def test_create_runtime_uses_explicit_agent_without_mutating_environment(
     assert result.model == "deepseek-v4"
     assert os.environ["MODEL"] == "inherited-model"
     assert os.environ["BUILDER_KEY"] == "inherited-key"
+
+
+def test_runtime_constructs_each_retrieval_index_once_across_threads():
+    runtime = retrieval.Runtime(agent=object(), model="test-model")
+    created = []
+
+    def factory():
+        time.sleep(0.05)
+        value = object()
+        created.append(value)
+        return value
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        indexes = list(
+            executor.map(
+                lambda _number: runtime.get_retrieval_index(
+                    ("embedding", "/memory", ("topics/a.md",)), factory
+                ),
+                range(3),
+            )
+        )
+
+    assert len(created) == 1
+    assert indexes == [created[0]] * 3
 
 
 def test_reanswer_dispatch_uses_retrieval_agent(monkeypatch, tmp_path):
@@ -240,7 +266,9 @@ def test_query_agent_forwards_time_window_to_embedding_search(
     monkeypatch.setattr(
         retrieval_tools,
         "MemoryEmbeddingIndex",
-        lambda root: MemoryEmbeddingIndex(root, encoder=FakeEncoder()),
+        lambda root, *, files: MemoryEmbeddingIndex(
+            root, files=files, encoder=FakeEncoder()
+        ),
     )
     agent = ScriptedQueryAgent(
         [(
@@ -396,6 +424,59 @@ def test_nativemem_ablation_conditions_change_views_and_tools(tmp_path):
     assert {"date_from", "date_to"} <= tool_properties(
         "embedding_search"
     )
+
+
+def test_search_tools_cannot_see_files_hidden_by_ablation(
+    tmp_path, monkeypatch
+):
+    topic = tmp_path / "topics/visible.md"
+    source = tmp_path / "sources/hidden.md"
+    topic.parent.mkdir()
+    source.parent.mkdir()
+    topic.write_text(
+        "# Visible\n\n[2023-01-01] ordinary visible fact [D1:1]\n",
+        encoding="utf-8",
+    )
+    source.write_text(
+        "# Hidden\n\n"
+        "<!-- source-id:D2:1 -->\n"
+        "[2023-01-02] secret-source-only-term\n",
+        encoding="utf-8",
+    )
+    files = retrieval.memory_files(tmp_path, "dual_no_source")
+
+    class ScopeEncoder:
+        def encode(self, texts, **_kwargs):
+            return [
+                [1.0, 0.0]
+                if "secret-source-only-term" in text
+                else [0.0, 1.0]
+                for text in texts
+            ]
+
+    monkeypatch.setattr(
+        retrieval_tools,
+        "MemoryEmbeddingIndex",
+        lambda root, *, files: MemoryEmbeddingIndex(
+            root, files=files, encoder=ScopeEncoder()
+        ),
+    )
+    backend, _logged = scripted_backend(ScriptedQueryAgent([], ""))
+
+    for tool_name in ("bm25_search", "embedding_search"):
+        output, executed, _accepted = retrieval_tools.execute_tool_call(
+            backend,
+            tool_name,
+            {"query": "secret-source-only-term"},
+            memory_dir=tmp_path,
+            files=files,
+            condition="dual_no_source",
+            include_recent=True,
+            indexes={},
+        )
+        assert executed is True
+        assert "sources/" not in output
+        assert "secret-source-only-term" not in output
 
 
 def test_nativemem_source_verification_can_be_disabled(tmp_path):

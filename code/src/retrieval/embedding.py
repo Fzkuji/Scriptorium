@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ import numpy as np
 from .bm25 import (
     MemoryEvent,
     _event_overlaps_window,
+    _indexable_files,
     _query_time_window,
     parse_source_file,
     parse_topic_file,
@@ -19,40 +21,51 @@ from .bm25 import (
 class MemoryEmbeddingIndex:
     """Rebuild an in-memory embedding index from Topic and Source files."""
 
-    def __init__(self, memory_dir: str | Path, *, encoder: Any | None = None):
+    def __init__(
+        self,
+        memory_dir: str | Path,
+        *,
+        encoder: Any | None = None,
+        files: list[Path] | tuple[Path, ...] | None = None,
+    ):
         self.memory_dir = Path(memory_dir).resolve()
         self.topics_dir = self.memory_dir / "topics"
         self.sources_dir = self.memory_dir / "sources"
+        self._visible_files = None if files is None else tuple(files)
         self._encoder = encoder
         self._events_cache: list[MemoryEvent] | None = None
         self._document_vectors: np.ndarray | None = None
+        self._lock = threading.RLock()
 
     @property
     def encoder(self) -> Any:
         if self._encoder is None:
-            from sentence_transformers import SentenceTransformer
+            with self._lock:
+                if self._encoder is None:
+                    from sentence_transformers import SentenceTransformer
 
-            self._encoder = SentenceTransformer(
-                "sentence-transformers/all-MiniLM-L6-v2"
-            )
+                    self._encoder = SentenceTransformer(
+                        "sentence-transformers/all-MiniLM-L6-v2"
+                    )
         return self._encoder
 
     def _events(self) -> list[MemoryEvent]:
         if self._events_cache is not None:
             return self._events_cache
-        self._events_cache = []
-        if self.topics_dir.exists():
-            self._events_cache.extend(
-                event
-                for path in sorted(self.topics_dir.rglob("*.md"))
-                for event in parse_topic_file(path, self.topics_dir)
-            )
-        if self.sources_dir.exists():
-            self._events_cache.extend(
-                event
-                for path in sorted(self.sources_dir.rglob("*.md"))
-                for event in parse_source_file(path, self.sources_dir)
-            )
+        with self._lock:
+            if self._events_cache is not None:
+                return self._events_cache
+            events = []
+            for relative, path in sorted(
+                _indexable_files(
+                    self.memory_dir, self._visible_files
+                ).items()
+            ):
+                if relative.startswith("sources/"):
+                    events.extend(parse_source_file(path, self.sources_dir))
+                else:
+                    events.extend(parse_topic_file(path, self.topics_dir))
+            self._events_cache = events
         return self._events_cache
 
     @staticmethod
@@ -74,10 +87,12 @@ class MemoryEmbeddingIndex:
             return []
 
         if self._document_vectors is None:
-            documents = [self._search_text(event) for event in events]
-            self._document_vectors = np.asarray(
-                self.encoder.encode(documents), dtype=float
-            )
+            with self._lock:
+                if self._document_vectors is None:
+                    documents = [self._search_text(event) for event in events]
+                    self._document_vectors = np.asarray(
+                        self.encoder.encode(documents), dtype=float
+                    )
         time_window = _query_time_window(date_from, date_to)
         candidate_indices = [
             index
@@ -88,7 +103,10 @@ class MemoryEmbeddingIndex:
             return []
         candidate_events = [events[index] for index in candidate_indices]
         document_vectors = self._document_vectors[candidate_indices]
-        query_vector = np.asarray(self.encoder.encode([query]), dtype=float)[0]
+        with self._lock:
+            query_vector = np.asarray(
+                self.encoder.encode([query]), dtype=float
+            )[0]
         document_norms = np.linalg.norm(document_vectors, axis=1)
         query_norm = np.linalg.norm(query_vector)
         denominators = document_norms * query_norm

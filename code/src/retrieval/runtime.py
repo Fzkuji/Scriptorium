@@ -75,7 +75,15 @@ class Runtime:
         self.query_config = query_config or QueryConfig()
         self.call_log: list[dict[str, Any]] = []
         self._usage_lock = threading.Lock()
+        self._retrieval_index_lock = threading.Lock()
+        self._retrieval_indexes: dict[tuple[Any, ...], Any] = {}
         self.tracker = UsageTracker()
+
+    def get_retrieval_index(self, key: tuple[Any, ...], factory: Any) -> Any:
+        with self._retrieval_index_lock:
+            if key not in self._retrieval_indexes:
+                self._retrieval_indexes[key] = factory()
+            return self._retrieval_indexes[key]
 
     def log_agent_result(
         self, result: Any, phase: str = "unknown"
@@ -133,7 +141,7 @@ class Runtime:
     def build_memory(self, conv: dict[str, Any], memory_dir: str):
         if self.build_config is None:
             raise RuntimeError("NativeMem build_config was not supplied")
-        return adapter.build_memory(
+        result = adapter.build_memory(
             conv,
             memory_dir,
             agent=self.agent,
@@ -143,6 +151,9 @@ class Runtime:
             ),
             config=self.build_config,
         )
+        with self._retrieval_index_lock:
+            self._retrieval_indexes.clear()
+        return result
 
     def collect_and_answer_longmemeval(
         self,

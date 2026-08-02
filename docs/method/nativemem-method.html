@@ -149,14 +149,14 @@
       <tr><td><strong>Recent</strong></td><td>当前 blocks + Runtime 创建顺序</td><td>以稳定 <code>memory_id</code> 的首次创建顺序排序，保留末尾 50 条</td><td>改写、移动和换标题不改变顺序；新 ID 追加；删除或合并移除被删除 ID</td></tr>
       <tr><td><strong>Relations</strong></td><td>正文中的 <code>#^memory_id</code> links</td><td>生成 outbound 与 backlinks，并按目标 ID 重写文件移动后的相对路径</td><td>目标 ID 不存在时拒绝整个事务</td></tr>
       <tr><td><strong>Structure map</strong></td><td>Topic 路径与 Markdown headings</td><td>查询前按需生成紧凑目录，不保存语义副本</td><td>不包含 Source 正文和 Runtime 私有状态</td></tr>
-      <tr><td><strong>BM25 index</strong></td><td>Topic block 正文、路径、标题、日期与 refs</td><td>按文件 hash 增量解析文本；缓存可删除后重建</td><td>不改变权威 Markdown</td></tr>
-      <tr><td><strong>Embedding index</strong></td><td>与 BM25 相同的 Topic blocks</td><td>查询实例在内存中编码并计算相似度</td><td>需要额外 encoder，但不要求向量数据库</td></tr>
+      <tr><td><strong>BM25 index</strong></td><td>当前条件可见的 Topic blocks 与 Source turns</td><td>按文件 hash 解析文本；同一冻结 memory 与可见视图复用一份索引</td><td>消融条件不可检索被隐藏的视图；不改变权威 Markdown</td></tr>
+      <tr><td><strong>Embedding index</strong></td><td>与 BM25 相同的可见文本单元</td><td>文档向量只编码一次，并在同一冻结 memory 的并发问题之间复用</td><td>需要额外 encoder，但不要求向量数据库</td></tr>
     </tbody>
   </table></div>
   <p>Timeline 的日期不会由正文、文件修改时间、Git commit 时间或 session 结束时间推断。Topic evidence footnote 可以保存 <code>YYYY</code>、<code>YYYY-MM</code>、<code>YYYY-MM-DD</code> 或 <code>undated</code>。Writer 根据 Source observation date 解析明确的相对表达：“昨天”可解析为完整日期，“上个月”可解析到月份，“去年”可解析到年份。解析后的值只写入 footnote 的 <code>Time</code> 字段；<code>YYYY</code>、<code>YYYY-MM</code> 和 <code>YYYY-MM-DD</code> 都按原始精度进入 Timeline，不补造缺失的月份或日期；<code>undated</code> 只用于无法确定任何年份的事实，并且不进入 Timeline。同一事实在不同时间分别获得证据时，正文后连续放置多个 footnote，每个 footnote 只记录一个语义时间值。</p>
 
   <h3 id="core-memory">2.4 Core Memory</h3>
-  <p>Core 保存每次交互都需要提供的稳定信息，例如长期任务约束和持续偏好。它不是 Topic 的派生副本，也不进入 Recent FIFO。LLM 负责决定 Core 的保留、改写和删除；Runtime 当前执行 2K-token 上限并将其与 Topic 变更放在同一事务中。需要事实证据的 Core 内容应保留 Source 或 Topic 链接；自动引用完整性校验尚未实现。</p>
+  <p>Core 保存每次交互都需要提供的稳定信息，例如长期任务约束和持续偏好。它不是 Topic 的派生副本，也不进入 Recent FIFO。LLM 负责决定 Core 的保留、改写和删除；Runtime 执行 2K-token 上限并将其与 Topic 变更放在同一事务中。Core 可以使用与 Topic 相同的临时 block/evidence ID 和 bare Source handle；Runtime 将它们规范化为稳定 ID 与 Markdown Source links，并拒绝未定义、未使用或无法定位到 Source 的 Core footnote。Core 也可以通过 <code>#^block-id</code> 链接 Topic，而不复制 Topic 正文。</p>
 
   <h3>2.5 Authority and Dependencies</h3>
   <pre><code>Provider messages / files
@@ -175,8 +175,8 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
     <tbody>
       <tr><td>1. Source ingestion</td><td>provider 消息与外部文件</td><td>无</td><td>保留 provider ID、路径和定位信息；只追加 Source；推进前不修改 cursor</td><td>新增 Source 区间</td></tr>
       <tr><td>2. Semantic editing</td><td>新增 Source、目录清单、相关 Topic</td><td>决定是否记录、写入哪个路径和 heading、怎样组织正文、引用哪些来源、语义日期是什么、是否建立跨 Topic link</td><td>提供隔离的 staged workspace 与 shell</td><td>候选 Topic Markdown</td></tr>
-      <tr><td>3. Normalization</td><td>候选 Markdown</td><td>新 block 使用 <code>^new-block-label</code>，新证据使用 <code>[^new-evidence-label]</code></td><td>生成稳定 block/evidence ID，将 bare source handles 转为 Markdown links</td><td>规范化 Topic</td></tr>
-      <tr><td>4. Validation and derivation</td><td>规范化 Topic</td><td>无额外调用</td><td>解析所有 blocks，校验唯一 ID、footnote、Source 以及所有 Topic 间链接的 block 目标；统一 marker 间距，改写移动后的链接，重建 Timeline、Recent 与 Relations</td><td>完整 staged state</td></tr>
+      <tr><td>3. Normalization</td><td>候选 Markdown</td><td>新 block 使用 <code>^new-block-label</code>，新证据使用 <code>[^new-evidence-label]</code></td><td>在 Topic/Core 中生成稳定 block/evidence ID，将 bare source handles 转为 Markdown links</td><td>规范化 Topic 与 Core</td></tr>
+      <tr><td>4. Validation and derivation</td><td>规范化 Topic/Core</td><td>无额外调用</td><td>解析 Topic blocks，校验唯一 ID、footnote、Source 以及所有 Topic 间链接的 block 目标；校验 Core footnote 与 Source 定位；统一 marker 间距，改写移动后的链接，重建 Timeline、Recent 与 Relations</td><td>完整 staged state</td></tr>
       <tr><td>5. Install</td><td>完整 staged state</td><td>无</td><td>一起替换 Topic、Timeline、Recent、Relations、Core 与创建顺序；失败则恢复旧状态</td><td>新的 <code>M_t</code></td></tr>
       <tr><td>6. Runtime completion</td><td>已安装状态</td><td>无</td><td>在线模式创建 Git commit，成功后推进 session cursor</td><td>下一批增量的起点</td></tr>
     </tbody>
@@ -296,9 +296,9 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>状态</th><th>内容</th></tr></thead>
     <tbody>
-      <tr><td class="status-yes">当前 Runtime 已实现</td><td>Source 只追加、Topic 段落 block、claim-adjacent evidence footnotes、临时 ID 物化、source handle 解析、marker 间距规范化、Topic-to-Topic block links 校验、移动后路径改写、Timeline/Recent/Relations 全量重建、Recent 50 与完整创建顺序、Core 2K、staged 原子安装与失败恢复、Claude Agent SDK 驱动的 shell-only Writer/Manager/verification/retrieval、固定 workload Writer 容量校准与完整 message 打包、BM25 与 Embedding 的 evidence 级解析和可选时间区间过滤，以及 <code>read_memory_file</code> 行窗口</td></tr>
+      <tr><td class="status-yes">当前 Runtime 已实现</td><td>Source 只追加、Topic 段落 block、claim-adjacent evidence footnotes、Topic/Core 临时 ID 与 Source link 物化、Core 引用校验、marker 间距规范化、Topic-to-Topic block links 校验、移动后路径改写、Timeline/Recent/Relations 全量重建、Recent 50 与完整创建顺序、Core 2K、staged 原子安装与失败恢复、Claude Agent SDK 驱动的 shell-only Writer/Manager/verification/retrieval、固定 workload Writer 容量校准与完整 message 打包、按可见视图隔离并跨问题复用的 BM25/Embedding 索引、evidence 级可选时间区间过滤，以及 <code>read_memory_file</code> 行窗口</td></tr>
       <tr><td class="status-yes">在线调度代码已实现</td><td>provider-neutral source IDs、持久化 session cursor、token/一小时空闲触发、局部批次或 token 触发、每天最多一次全局管理和可选 Git commit</td></tr>
-      <tr><td class="status-no">尚未完成部署验证</td><td>不同 Anthropic-compatible endpoint 与目标模型的 SDK 实测、新协议下的 Writer 容量校准结果、长时间在线 scheduler 进程、Core 引用自动校验，以及新 Markdown 契约在真实长会话中的格式错误率</td></tr>
+      <tr><td class="status-no">尚未完成部署验证</td><td>不同 Anthropic-compatible endpoint 与目标模型的完整 SDK 矩阵、长时间在线 scheduler 进程，以及新 Markdown 契约在真实长会话中的格式错误率</td></tr>
       <tr><td class="status-no">仍需实验确认</td><td>Recent、Core、周期整理、BM25、Embedding 和 Agent-controlled retrieval 的独立贡献与成本；Topic 规范化对重复和检索效率的影响</td></tr>
     </tbody>
   </table></div>

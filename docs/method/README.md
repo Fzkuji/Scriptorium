@@ -37,7 +37,7 @@ Agent Memory Harness 是一个 file-native、multi-view 的外部记忆系统。
 5. `Recent Memory`：始终保留最近写入的 50 条记录，超过容量时按 FIFO 移除最早记录；
 6. `Core Memory`：由 LLM 管理的独立文本文件，保存每次交互都需要提供的信息。
 
-一个 Topic memory unit 是一个自然语言段落：事实后跟 evidence footnote，段落末尾只有一个 Obsidian-compatible block ID。Runtime 将新 block 物化为 8 位十六进制 ID，并在候选冲突时重新计算直到唯一。temporal evidence 的 `Time` 字段使用 `YYYY`、`YYYY-MM` 或 `YYYY-MM-DD`；无法确定任何年份时使用 `undated`。前三种按原始精度生成 Timeline，`undated` 不生成。时间只作为 footnote 元数据保存，正文仅在事实本身自然包含时间时保留日期，不为复制 `Time` 字段而追加日期。Topic 间的 Markdown link 必须指向 `#^block-id`，文件级或 heading 级 Topic link 会被拒绝。Writer、局部 Manager、全局 Manager 和 repair Agent 都只使用 shell 形成完整 Markdown；Runtime 物化临时 ID、解析 Source、规范化 marker 间距、校验 Topic links、改写移动后的相对链接，并重建派生视图。BM25 和 Embedding 只提供检索能力，不保存唯一事实。
+一个 Topic memory unit 是一个自然语言段落：事实后跟 evidence footnote，段落末尾只有一个 Obsidian-compatible block ID。Runtime 将新 block 物化为 8 位十六进制 ID，并在候选冲突时重新计算直到唯一。temporal evidence 的 `Time` 字段使用 `YYYY`、`YYYY-MM` 或 `YYYY-MM-DD`；无法确定任何年份时使用 `undated`。前三种按原始精度生成 Timeline，`undated` 不生成。时间只作为 footnote 元数据保存，正文仅在事实本身自然包含时间时保留日期，不为复制 `Time` 字段而追加日期。Topic 间的 Markdown link 必须指向 `#^block-id`，文件级或 heading 级 Topic link 会被拒绝。Writer、局部 Manager、全局 Manager 和 repair Agent 都只使用 shell 形成完整 Markdown；Runtime 在 Topic/Core 中物化临时 ID、解析并校验 Source links、规范化 marker 间距、校验 Topic links、改写移动后的相对链接，并重建派生视图。BM25 和 Embedding 只提供检索能力，不保存唯一事实。
 
 事实变化采用完整时间记录：旧状态和新状态都保存在 Topic 中，并绑定各自的 dated evidence；Runtime 将它们分别生成到 Timeline。`undated` evidence 不生成 Timeline 条目。系统不增加 `supersedes` 或图边有效期。
 
@@ -69,9 +69,11 @@ Writer 批量可以由 `BuildConfig.calibration_path` 指向的校准产物控�
 
 Source 始终可以通过目录浏览、文件读取、`grep`、BM25 和 Embedding 直接访问。函数参数 `retrieval.QueryConfig(verify_sources=True|False)` 只控制 prompt 是否要求查询 Agent 在回答前核验相关原始对话；设为 `False` 时核验变为可选，不改变 Source 可见性或工具集合。实际参数值记录在每题 `tool_trace` 的 termination 条目中。运行参数均由入口显式构造后逐层传入，不从父进程环境读取。
 
+BM25 和 Embedding 只索引当前检索条件可见的 Topic/Source 文件。对同一份冻结 memory 和同一可见文件集合，Runtime 在并发问题之间复用索引，文档 embedding 只编码一次；隐藏 Source 的消融条件不能通过 BM25 或 Embedding 间接得到 Source 事件。
+
 工具调用、工具错误、provider 重试和上下文管理由 Claude Agent SDK 处理。Harness 不再实现独立的 OpenAI tool loop、DSML 解析、固定工具调用次数、无新增证据停止条件或工具输出缓存。`read_memory_file` 仍支持 1-based `offset` / `limit` 行窗口，BM25 与 Embedding 仍使用 `top_k` 控制单次候选数量。
 
-标准检索预算暂定为最多 8 次 LLM retrieval rounds、5 次工具调用和 10K memory-visible tokens；development set 扫描 `3/5/8` calls 与 `6K/10K/20K` tokens，test set 固定参数。主要策略对标是 ByteRover 的 5-Tier Progressive Retrieval。其他对标包括 Infini Memory-H/A、LightMem，以及作为后续增强参考的 Semble。详细映射见 [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md#34-reference-systems)。
+标准配置只设置 Claude Agent SDK 的 20 轮 trajectory 上限和可选成本上限，不再设置独立工具调用次数或 memory-visible-token 停止条件；正式 test 配置由 development set 固定。主要策略对标是 ByteRover 的 5-Tier Progressive Retrieval。其他对标包括 Infini Memory-H/A、LightMem，以及作为后续增强参考的 Semble。详细映射见 [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md#34-reference-systems)。
 
 ## 当前证据边界
 

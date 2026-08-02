@@ -526,6 +526,50 @@ def test_shell_core_memory_changes_persist(tmp_path: Path):
     )
 
 
+def test_shell_normalizes_and_validates_core_source_references(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-08-03",
+        "turns": [("user", "My stable preference is jasmine tea.")],
+        "refs": ["diagnostic/thread-1/msg-1"],
+    }])
+
+    workspace.shell(
+        "cat > core.md <<'EOF'\n"
+        "# Core Memory\n\n"
+        "My stable preference is jasmine tea.[^new-evidence-tea] "
+        "^new-block-tea\n\n"
+        "[^new-evidence-tea]: Time: `2026-08-03`; Sources: "
+        "diagnostic/thread-1/msg-1\n"
+        "EOF"
+    )
+
+    text = (tmp_path / "core.md").read_text(encoding="utf-8")
+    assert "new-evidence" not in text
+    assert "new-block" not in text
+    assert re.search(r"\^[0-9a-f]{8}$", text, re.MULTILINE)
+    assert (
+        "[diagnostic/thread-1/msg-1]"
+        "(sources/diagnostic/thread-1.md#source-54a317afec5ee542)"
+    ) in text
+
+
+def test_shell_rejects_missing_core_source_reference(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+
+    with pytest.raises(ValueError, match="missing source reference"):
+        workspace.shell(
+            "cat > core.md <<'EOF'\n"
+            "# Core Memory\n\n"
+            "Unsupported claim.[^new-evidence-claim] ^new-block-claim\n\n"
+            "[^new-evidence-claim]: Time: `undated`; Sources: "
+            "diagnostic/missing/msg-1\n"
+            "EOF"
+        )
+
+    assert not (tmp_path / "core.md").exists()
+
+
 def test_core_memory_rejects_content_over_token_limit(tmp_path: Path):
     workspace = MemoryWorkspace(
         tmp_path, config=memory.MemoryConfig(core_max_tokens=1)

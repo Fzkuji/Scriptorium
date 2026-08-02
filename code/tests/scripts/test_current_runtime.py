@@ -35,6 +35,47 @@ def test_nativemem_adapter_owns_session_conversion(tmp_path: Path, monkeypatch):
     assert captured[0]["refs"] == [adapter.benchmark_source_id("D1:14")]
 
 
+def test_nativemem_adapter_preserves_locomo_image_evidence(
+    tmp_path: Path, monkeypatch
+):
+    captured = []
+    conversation = {
+        "session_1": [{
+            "speaker": "Dave",
+            "text": "This is a photo of my shop.",
+            "query": "car maintenance shop grand opening",
+            "blip_caption": (
+                "a photo of a group of people standing in front of a car"
+            ),
+            "dia_id": "D1:1",
+        }],
+        "session_1_date_time": "1 May, 2023",
+    }
+    monkeypatch.setattr(
+        adapter.memory,
+        "write_sessions",
+        lambda *args, **kwargs: captured.extend(kwargs["sessions"]) or [],
+    )
+
+    adapter.build_memory(
+        conversation,
+        tmp_path,
+        agent=object(),
+        model="test-model",
+        config=adapter.BuildConfig(verify_writes=False, final_manage=False),
+    )
+
+    expected = (
+        "This is a photo of my shop.\n"
+        "[Sharing image - query: car maintenance shop grand opening. "
+        "The image shows: a photo of a group of people standing in front "
+        "of a car]"
+    )
+    assert captured[0]["turns"] == [("Dave", expected)]
+    source_id = adapter.benchmark_source_id("D1:1")
+    assert adapter.build_turn_index(conversation)[source_id]["text"] == expected
+
+
 def test_nativemem_locomo_inventory_selects_stable_sample_id(tmp_path: Path):
     from scripts.nativemem import run_locomo
 

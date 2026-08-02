@@ -1,13 +1,31 @@
 from pathlib import Path
 
 import pytest
-from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
+from claude_agent_sdk import (
+    AssistantMessage,
+    ResultMessage,
+    TextBlock,
+    create_sdk_mcp_server,
+    tool,
+)
 
 from src.agent_runtime import (
     AgentExecutionError,
     ClaudeCodeAgent,
     ClaudeCodeConfig,
 )
+
+
+def test_installed_sdk_can_create_an_in_process_mcp_server() -> None:
+    @tool("ping", "Return the supplied value.", {"value": str})
+    async def ping(arguments):
+        return {
+            "content": [{"type": "text", "text": arguments["value"]}],
+        }
+
+    server = create_sdk_mcp_server("test", tools=[ping])
+
+    assert server["type"] == "sdk"
 
 
 def test_agent_uses_isolated_bare_nonpersistent_claude_code(

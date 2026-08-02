@@ -40,6 +40,7 @@ def writer_protocol_sha256() -> str:
             "writer_batch": WRITER_BATCH_TASK,
             "tools": TOOLS[:1],
             "runtime": "claude-agent-sdk",
+            "contract": "topic-core-v2",
         },
         ensure_ascii=False,
         sort_keys=True,

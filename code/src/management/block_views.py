@@ -16,6 +16,7 @@ from ..markdown import (
     parse_topic_tree,
     render_definition,
 )
+from ..markdown.syntax import SINGLE_CITATION, definitions
 
 
 class BlockViewsMixin:
@@ -32,9 +33,45 @@ class BlockViewsMixin:
                 raise ValueError(
                     f"Core Memory exceeds {limit} tokens: {token_count}"
                 )
+            self._validate_core_sources(core)
         return self._synchronize_block_topics(
             parse_topic_tree(self.stage_dir / "topics")
         )
+
+    def _validate_source_reference(self, ref: str) -> None:
+        legacy = re.fullmatch(r"D(\d+):(\d+)", ref)
+        if legacy:
+            conversation, turn = legacy.groups()
+            source = self.stage_dir / "sources" / f"D{conversation}.md"
+            anchor = f'<a id="d{conversation}-{turn}"></a>'
+        else:
+            location = self._provider_source_location(ref)
+            if location is None:
+                raise ValueError(f"invalid source reference: {ref}")
+            relative, source_anchor = location
+            source = self.stage_dir / relative
+            anchor = f'<a id="{source_anchor}"></a>'
+        if not source.exists() or anchor not in source.read_text(encoding="utf-8"):
+            raise ValueError(f"missing source reference: {ref}")
+
+    def _validate_core_sources(self, core: Path) -> None:
+        lines = core.read_text(encoding="utf-8").splitlines()
+        annotations = definitions(lines)
+        used = {
+            match.group("id")
+            for line in lines
+            if definition_match(line) is None
+            for match in SINGLE_CITATION.finditer(line)
+        }
+        missing = used - set(annotations)
+        if missing:
+            raise ValueError(f"undefined Core footnote: {sorted(missing)[0]}")
+        unused = set(annotations) - used
+        if unused:
+            raise ValueError(f"unused Core footnote: {sorted(unused)[0]}")
+        for _when, refs, _links in annotations.values():
+            for ref in refs:
+                self._validate_source_reference(ref)
 
     def _uses_block_topic_format(self, units: list[Any]) -> bool:
         if any(unit.evidence for unit in units):
@@ -118,20 +155,7 @@ class BlockViewsMixin:
                     f"dangling block link: {sorted(missing_targets)[0]}"
                 )
             for ref in unit.source_refs:
-                legacy = re.fullmatch(r"D(\d+):(\d+)", ref)
-                if legacy:
-                    conversation, turn = legacy.groups()
-                    source = self.stage_dir / "sources" / f"D{conversation}.md"
-                    anchor = f'<a id="d{conversation}-{turn}"></a>'
-                else:
-                    location = self._provider_source_location(ref)
-                    if location is None:
-                        raise ValueError(f"invalid source reference: {ref}")
-                    relative, source_anchor = location
-                    source = self.stage_dir / relative
-                    anchor = f'<a id="{source_anchor}"></a>'
-                if not source.exists() or anchor not in source.read_text(encoding="utf-8"):
-                    raise ValueError(f"missing source reference: {ref}")
+                self._validate_source_reference(ref)
 
         limit = self.config.recent_limit
         state_store = RuntimeStateStore(self.stage_dir)

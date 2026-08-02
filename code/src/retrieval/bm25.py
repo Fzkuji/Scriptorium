@@ -12,6 +12,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -331,15 +332,57 @@ def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _indexable_files(
+    memory_dir: Path,
+    files: list[Path] | tuple[Path, ...] | None = None,
+) -> dict[str, Path]:
+    root = memory_dir.resolve()
+    if files is None:
+        candidates = (
+            path
+            for directory in (root / "topics", root / "sources")
+            if directory.exists()
+            for path in directory.rglob("*.md")
+        )
+    else:
+        candidates = iter(files)
+
+    result = {}
+    for candidate in candidates:
+        path = Path(candidate)
+        path = (root / path).resolve() if not path.is_absolute() else path.resolve()
+        try:
+            relative = path.relative_to(root)
+        except ValueError as error:
+            raise ValueError("index path escapes memory workspace") from error
+        if (
+            len(relative.parts) >= 2
+            and relative.parts[0] in {"topics", "sources"}
+            and path.suffix == ".md"
+            and path.is_file()
+            and not path.is_symlink()
+        ):
+            result[relative.as_posix()] = path
+    return result
+
+
 class MemoryBM25Index:
     """Incrementally parsed local Topic and Source BM25 index."""
 
-    def __init__(self, memory_dir: str | Path, *, persist: bool = True):
+    def __init__(
+        self,
+        memory_dir: str | Path,
+        *,
+        persist: bool = True,
+        files: list[Path] | tuple[Path, ...] | None = None,
+    ):
         self.memory_dir = Path(memory_dir).resolve()
         self.topics_dir = self.memory_dir / "topics"
         self.sources_dir = self.memory_dir / "sources"
         self.cache_path = self.memory_dir / _CACHE_NAME
-        self.persist = persist
+        self._visible_files = None if files is None else tuple(files)
+        self.persist = persist and files is None
+        self._lock = threading.RLock()
         self._files: dict[str, dict[str, Any]] = {}
         self.events: list[MemoryEvent] = []
         if self.persist:
@@ -369,13 +412,11 @@ class MemoryBM25Index:
                 os.unlink(temporary)
 
     def refresh(self) -> None:
-        current: dict[str, Path] = {}
-        for directory in (self.topics_dir, self.sources_dir):
-            if directory.exists():
-                current.update({
-                    path.relative_to(self.memory_dir).as_posix(): path
-                    for path in directory.rglob("*.md")
-                })
+        with self._lock:
+            self._refresh()
+
+    def _refresh(self) -> None:
+        current = _indexable_files(self.memory_dir, self._visible_files)
 
         changed = set(self._files) != set(current)
         refreshed: dict[str, dict[str, Any]] = {}

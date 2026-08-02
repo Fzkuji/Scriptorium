@@ -6,6 +6,23 @@ from datetime import date
 from typing import Any
 
 
+def _turn_text(turn: dict[str, Any]) -> str:
+    text = str(turn.get("text", turn.get("content", ""))).strip()
+    query = str(turn.get("query", "")).strip()
+    caption = str(turn.get("blip_caption", "")).strip()
+    if query and caption:
+        image = (
+            f"[Sharing image - query: {query}. The image shows: {caption}]"
+        )
+    elif caption:
+        image = f"[Sharing image. The image shows: {caption}]"
+    elif query:
+        image = f"[Sharing image - query: {query}.]"
+    else:
+        image = ""
+    return "\n".join(part for part in (text, image) if part)
+
+
 def benchmark_source_id(dia_id: str) -> str:
     """Map a LoCoMo evidence label to the opaque NativeMem Source ID."""
     match = re.fullmatch(r"D(\d+):(\d+)", str(dia_id))
@@ -51,7 +68,7 @@ def build_turn_index(conv: dict[str, Any]) -> dict[str, Any]:
                     "speaker": turn.get(
                         "speaker", turn.get("role", "user")
                     ),
-                    "text": turn.get("text", turn.get("content", "")),
+                    "text": _turn_text(turn),
                     "order": order,
                     "date": observed,
                 }
@@ -138,7 +155,7 @@ def session_content(
         return turns, refs
     for position, turn in enumerate(session, start=1):
         if isinstance(turn, dict):
-            text = str(turn.get("text", turn.get("content", "")))
+            text = _turn_text(turn)
             if not text.strip():
                 continue
             turns.append((

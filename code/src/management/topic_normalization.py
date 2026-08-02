@@ -46,6 +46,9 @@ class TopicNormalizationMixin:
         if not topics.exists():
             return
         paths = sorted(topics.rglob("*.md"))
+        core = self.stage_dir / "core.md"
+        if core.is_file():
+            paths.append(core)
         texts = {path: path.read_text(encoding="utf-8") for path in paths}
         used_blocks = {
             match.group(1)
@@ -95,7 +98,11 @@ class TopicNormalizationMixin:
             for placeholder, stable in evidence_ids.items():
                 text = text.replace(f"[^{placeholder}]", f"[^{stable}]")
             rendered = []
-            topic_path = Path("topics") / path.relative_to(topics)
+            topic_path = (
+                Path("core.md")
+                if path == core
+                else Path("topics") / path.relative_to(topics)
+            )
             for line in text.splitlines():
                 match = definition_match(line)
                 if match:

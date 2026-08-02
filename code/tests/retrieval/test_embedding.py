@@ -1,4 +1,6 @@
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import ModuleType
 
@@ -158,6 +160,37 @@ def test_embedding_index_reuses_document_vectors_for_query_rewrites(tmp_path: Pa
     index.search("painting")
 
     assert encoder.batch_sizes == [1, 1, 1]
+
+
+def test_embedding_index_builds_document_vectors_once_across_threads(
+    tmp_path: Path,
+):
+    memory_dir = tmp_path / "memory"
+    topic = memory_dir / "topics/art.md"
+    topic.parent.mkdir(parents=True)
+    topic.write_text(
+        "# Art\n\n[2023-05-08] Melanie painted a sunrise [D1:4]\n",
+        encoding="utf-8",
+    )
+
+    class SlowCountingEncoder(FakeEncoder):
+        def __init__(self):
+            self.document_batches = 0
+
+        def encode(self, texts, **kwargs):
+            if any("Melanie painted a sunrise" in text for text in texts):
+                self.document_batches += 1
+                time.sleep(0.05)
+            return super().encode(texts, **kwargs)
+
+    encoder = SlowCountingEncoder()
+    index = MemoryEmbeddingIndex(memory_dir, encoder=encoder)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(index.search, ["visual art", "painting"]))
+
+    assert all(result for result in results)
+    assert encoder.document_batches == 1
 
 
 def test_default_encoder_is_loaded_only_when_search_needs_it(
