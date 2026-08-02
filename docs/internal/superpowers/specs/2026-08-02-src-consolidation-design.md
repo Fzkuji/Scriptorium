@@ -11,49 +11,59 @@
 ## 目标目录
 
 ```text
-code/src/
-├── __init__.py
-├── build.py
-├── conversation.py
-├── management/
-│   ├── api.py
-│   ├── agent.py
-│   ├── block_views.py
-│   ├── config.py
-│   ├── event_writing.py
-│   ├── model_reconciliation.py
-│   ├── prompts.py
-│   ├── provider.py
-│   ├── source_archive.py
-│   ├── reconciliation.py
-│   ├── topic_normalization.py
-│   ├── topic_reconciliation.py
-│   ├── verification.py
-│   └── workspace.py
-├── markdown/
-│   ├── models.py
-│   ├── parser.py
-│   ├── syntax.py
-│   └── writer.py
-├── retrieval/
-│   ├── agent.py
-│   ├── config.py
-│   ├── context.py
-│   ├── prompts.py
-│   ├── runtime.py
-│   ├── schemas.py
-│   ├── shell.py
-│   ├── tools.py
-│   ├── views.py
-│   ├── bm25.py
-│   └── embedding.py
-├── runtime/
-│   ├── online.py
-│   ├── state.py
-│   └── derived_views.py
-├── adapters/
-├── evaluation/
-└── providers/
+code/
+├── src/                         # 仅放可复用的核心实现
+│   ├── __init__.py
+│   ├── build.py
+│   ├── conversation.py
+│   ├── management/
+│   │   ├── api.py
+│   │   ├── agent.py
+│   │   ├── block_views.py
+│   │   ├── config.py
+│   │   ├── event_writing.py
+│   │   ├── model_reconciliation.py
+│   │   ├── prompts.py
+│   │   ├── provider.py
+│   │   ├── source_archive.py
+│   │   ├── reconciliation.py
+│   │   ├── topic_normalization.py
+│   │   ├── topic_reconciliation.py
+│   │   ├── verification.py
+│   │   └── workspace.py
+│   ├── markdown/
+│   │   ├── models.py
+│   │   ├── parser.py
+│   │   ├── syntax.py
+│   │   └── writer.py
+│   ├── retrieval/
+│   │   ├── agent.py
+│   │   ├── config.py
+│   │   ├── context.py
+│   │   ├── prompts.py
+│   │   ├── runtime.py
+│   │   ├── schemas.py
+│   │   ├── shell.py
+│   │   ├── tools.py
+│   │   ├── views.py
+│   │   ├── bm25.py
+│   │   └── embedding.py
+│   ├── runtime/
+│   │   ├── online.py
+│   │   ├── state.py
+│   │   └── derived_views.py
+│   ├── adapters/
+│   ├── evaluation/
+│   └── providers/
+├── scripts/                     # 可执行命令、实验和分析
+│   ├── model_capacity/
+│   │   └── calibrate_writer.py
+│   └── nativemem/
+├── tests/                       # 与 src 并列
+├── results/                     # 所有运行产物
+├── benchmarks/
+├── experiments/
+└── third_party/
 ```
 
 `management/` 负责记忆写入、整理、来源归档、事务与校验；`markdown/` 负责
@@ -82,6 +92,30 @@ code/scripts/nativemem/
 
 测试统一放入 `code/tests/nativemem/`，按 build、management、markdown、
 retrieval 和 runtime 职责拆分。删除只验证 v7、v8、v9、v10 和版本路由的测试。
+
+## 模型长度校准脚本
+
+`code/scripts/model_capacity/calibrate_writer.py` 是独立可执行入口。其核心函数接收
+显式的 model client、模型名、两个校准样本和候选 token 长度；命令行入口通过
+`--provider-config` 读取本地 provider 配置，不读取环境变量。校准过程
+只在完整 session 边界组批，以 2K、4K、8K、16K 的顺序增加候选长度；每个候选
+长度重新构建 Topic Memory，并检查事实保留、Markdown 合法性和输出截断。
+
+校准结果写入：
+
+```text
+code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json
+```
+
+结果至少包含 `model`、`prompt_hash`、`safe_writer_request_tokens`、实际测试的 session
+边界、事实保留率、调用次数、token、耗时和失败原因。正式 build runner 通过显式的
+`calibration_path` 参数读取 `safe_writer_request_tokens`；组批前计算完整 Writer 请求
+长度，加入下一个完整 session 会超过限制时立即提交当前批次。单个 session 不拆分。
+
+模型、Writer prompt 或工具 schema 改变时，使用同一脚本重新生成校准结果。脚本
+逻辑由 `code/tests/model_capacity/` 中的本地测试覆盖，测试本身不写入 `src/`。
+校准只输出 Writer 容量结果，不输出 LoCoMo benchmark 分数；任何 LoCoMo 对比仍然
+只能使用仓库锁定的 `scripts/eval_full.py`。
 
 ## 删除范围
 
@@ -117,3 +151,5 @@ retrieval 和 runtime 职责拆分。删除只验证 v7、v8、v9、v10 和版�
    `f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd`。
 4. `python scripts/verify_portable_layout.py`、导入检查和 `git diff --check` 通过。
 5. `results/`、benchmark 数据和 memory 产物的文件数与清理前一致。
+6. 模型长度校准脚本可以使用本地伪 client 完成边界选择，并将结果写入指定的
+   `results/model_capacity/` 目录；正式 builder 能通过函数参数读取该结果。
