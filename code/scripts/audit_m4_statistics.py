@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.run_m4_statistics import calculate, read_json, sha256_file  # noqa: E402
-from src.evaluation.m4_reliability import ReliabilityError  # noqa: E402
+from scripts.evaluation.m4_reliability import ReliabilityError  # noqa: E402
 
 
 def main() -> int:

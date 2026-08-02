@@ -18,12 +18,12 @@ for entry in (ROOT, SCRIPTS):
         sys.path.insert(0, str(entry))
 
 import controlled_locomo_answer_contract as answer_contract  # noqa: E402
-from src.evaluation.durable_model_ledger import (  # noqa: E402
+from scripts.evaluation.durable_model_ledger import (  # noqa: E402
     ledger_state,
     read_ledger,
 )
-from src.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
-from src.evaluation.visible_token_budget import (  # noqa: E402
+from scripts.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
+from scripts.evaluation.visible_token_budget import (  # noqa: E402
     TokenCounter,
     snapshot_memory_path,
 )

@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from src.evaluation.prompts import ANSWER_PROMPT
+from scripts.evaluation.prompts import ANSWER_PROMPT
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -787,7 +787,7 @@ def _base_answer_input(
         "answer_protocol_interface": {
             "status": "reserved_not_executed",
             "requested_model": EXPECTED_MODEL,
-            "prompt_template": "src.evaluation.prompts.ANSWER_PROMPT",
+            "prompt_template": "scripts.evaluation.prompts.ANSWER_PROMPT",
             "prompt_template_sha256": sha256_text(ANSWER_PROMPT),
             "rendered_prompt_sha256": sha256_text(prompt),
             "rendered_prompt_tokens": prompt_tokens,

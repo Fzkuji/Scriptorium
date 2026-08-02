@@ -28,11 +28,11 @@ for entry in (ROOT, SCRIPTS):
         sys.path.insert(0, str(entry))
 
 from scripts import r115_beam_control_contract as contract  # noqa: E402
-from src import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
-from src.evaluation import durable_model_ledger as durable  # noqa: E402
-from src.evaluation import visible_token_audit  # noqa: E402
-from src.evaluation import visible_token_budget as visible  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
+from scripts.evaluation import durable_model_ledger as durable  # noqa: E402
+from scripts.evaluation import visible_token_audit  # noqa: E402
+from scripts.evaluation import visible_token_budget as visible  # noqa: E402
 
 
 class AuditError(RuntimeError):

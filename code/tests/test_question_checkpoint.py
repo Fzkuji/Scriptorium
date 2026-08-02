@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from src.adapters import question_checkpoint as checkpoint
+from scripts.adapters import question_checkpoint as checkpoint
 
 
 def qas():

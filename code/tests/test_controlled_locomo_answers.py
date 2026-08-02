@@ -23,8 +23,8 @@ import audit_controlled_locomo_answers as answer_auditor  # noqa: E402
 import freeze_controlled_answer_protocol as freezer  # noqa: E402
 import run_controlled_locomo_answer_sanity as sanity  # noqa: E402
 import run_controlled_locomo_answers as runner  # noqa: E402
-from src.evaluation.answerer import format_memories  # noqa: E402
-from src.evaluation.visible_token_budget import TokenCounter  # noqa: E402
+from scripts.evaluation.answerer import format_memories  # noqa: E402
+from scripts.evaluation.visible_token_budget import TokenCounter  # noqa: E402
 
 
 def _flex_health() -> dict[str, object]:
@@ -1032,10 +1032,10 @@ def test_full_run_auditor_checks_inventory_proxy_and_complete_manifest(
     base_sha = contract.sha256_file(ROOT / "scripts/gpt55_run_proxy.py")
     controlled_sha = contract.sha256_file(ROOT / "scripts/controlled_gpt55_run_proxy.py")
     upstream_sha = contract.sha256_file(
-        ROOT / "src/openai_gpt55_flex_gateway.py"
+        ROOT / "scripts/gateways/openai_gpt55_flex_gateway.py"
     )
     flex_evidence_sha = contract.sha256_file(
-        ROOT / "src/openai_gpt55_flex_gateway_evidence.py"
+        ROOT / "scripts/gateways/openai_gpt55_flex_gateway_evidence.py"
     )
     upstream = provider_contract["origin"]
     ready = {

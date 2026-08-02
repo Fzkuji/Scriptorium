@@ -32,7 +32,7 @@ memory/
   .nativemem/runtime.json # cursor、触发状态、完整创建顺序
 ```
 
-当前 V11 查询在内存中从 `topics/` 重建 BM25 与 Embedding 索引，不要求向量数据库，也不在查询期间向 memory tree 写入索引文件。
+当前查询实现从 `topics/` 重建 BM25 与 Embedding 索引，不要求向量数据库，也不在查询期间向 memory tree 写入索引文件。
 
 Runtime 可以从目录、文件和章节生成 compact structure map，供写入和查询使用。它是可重建的结构索引，不是新的权威记忆状态。
 
@@ -69,6 +69,14 @@ NativeMem 只采用三级记忆管理。
 每个 session 使用一个 `memory_cursor` 表示已处理到的最后一条消息。Writer 读取本批原始消息、compact structure map 和相关局部文件，通过 shell 直接形成完整 Topic Markdown，并在需要时更新 Core。Runtime 解析本次新增 block IDs，按首次创建顺序刷新 Recent；超过 50 条时只从 Recent 窗口移除最早记录。执行期间新到达的消息留到下一批处理，不建立额外 buffer。
 
 写入 Topical View 时，LLM 根据未来检索位置复用或创建路径、文件、章节和链接，并把语义时间按实际精度写在对应 evidence footnote 中。无法确定任何年份时写 `undated`。Runtime 按年份、月份或完整日期的原始精度生成 Temporal View，不从正文、文件时间或 commit 时间重新推断。
+
+#### 2.1.1 Writer Capacity Calibration
+
+一次 Writer 调用包含多少个 session，由目标模型在当前 Writer protocol 下的校准结果决定，而不是直接使用模型声明的上下文窗口。校准脚本使用两组合成事实 probe，按递增 token 容量运行 Writer；输入 token 包含固定 system prompt、批量写入提示和全部完整 session。连一个完整 Writer 输入都容不下的候选档位只记录为 skipped。其余容量只有在两个 probe 都无 tool error/round limit、产生有效 Topic/Core blocks 且覆盖全部预期 source references 时才通过。扫描在首个实际执行失败容量后停止，取此前最大的通过容量作为 `safe_input_tokens`。
+
+校准结果保存 model、Writer protocol hash、tokenizer identity、候选容量以及逐 probe 的 session 数、实际输入 token、调用次数、输入/输出 token、耗时和来源覆盖率。构建入口通过 `BuildConfig.calibration_path` 显式读取结果，并验证 model 与 protocol hash。Runtime 按原顺序贪心组合完整 session；候选 session 使批次超过上限时，从该 session 开始下一批。单个完整 session 本身超过上限时返回错误，不截断。未提供校准文件时，`session_batch` 仍作为固定回退参数。
+
+该校准只控制增量写入批量，不增加记忆状态、运行时字段或检索方法。脚本位于 `code/scripts/model_capacity/calibrate_writer.py`，输出位于 `code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json`。
 
 ### 2.2 Periodic Local Reorganization
 
@@ -168,7 +176,7 @@ ByteRover 的完整 agentic fallback 允许最多 50 次迭代；LightMem 的粗
 
 ## 4. Runtime Guarantees
 
-当前 V11 benchmark Runtime 已执行以下确定性约束，不替代 LLM 做语义组织决策：
+当前 benchmark Runtime 已执行以下确定性约束，不替代 LLM 做语义组织决策：
 
 - 校验 block/evidence IDs、source references、Topic-to-Topic block links 和关系目标，执行 Recent 50 条 FIFO 与 Core token 上限；
 - 每个具有 `YYYY`、`YYYY-MM` 或 `YYYY-MM-DD` 的 evidence 按原始精度生成一个 Temporal 条目；`undated` evidence 不生成条目；
@@ -179,8 +187,9 @@ ByteRover 的完整 agentic fallback 允许最多 50 次迭代；LightMem 的粗
 - 校验检索 Agent 提供的可选 `date_from` / `date_to`，使用区间重叠完成 BM25 与 Embedding 的候选过滤；
 - 原子替换 Topic、Timeline、Recent、Relations、Core 与创建顺序，并在失败时恢复上一版本；
 - 对局部整理、全局整理和查询循环执行独立轮数或 token 预算。
+- 校验 Writer capacity artifact 的 model、protocol hash 与 tokenizer identity，并只按安全上限组合完整 session。
 
-Git commit、session cursor、按 token 增量触发、一小时空闲触发和每日管理条件已在在线 Runtime 中实现。当前静态 benchmark harness 不启动长时间 scheduler 进程，仍使用固定 session 边界和固定局部/最终管理映射，因此在线触发保证不能归属于既有 benchmark 结果。
+Git commit、session cursor、按 token 增量触发、一小时空闲触发和每日管理条件已在在线 Runtime 中实现。当前静态 benchmark harness 不启动长时间 scheduler 进程；构建批量可以由固定 `session_batch` 或冻结的 Writer capacity artifact 决定，局部/最终管理映射仍需在 development set 固定，因此在线触发保证不能归属于既有 benchmark 结果。
 
 系统不增加 batch ID、`memory_dirty`、独立写入日志或额外 CURRENT buffer。
 

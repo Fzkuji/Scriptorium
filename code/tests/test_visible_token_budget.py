@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-import src.evaluation.visible_token_budget as budget_module
-from src.evaluation.visible_token_audit import _reconstruct_truncation
-from src.evaluation.visible_token_audit import audit_visible_token_trace
-from src.evaluation.visible_token_budget import (
+import scripts.evaluation.visible_token_budget as budget_module
+from scripts.evaluation.visible_token_audit import _reconstruct_truncation
+from scripts.evaluation.visible_token_audit import audit_visible_token_trace
+from scripts.evaluation.visible_token_budget import (
     TokenCounter,
     VisibleTokenBudgetGate,
     copy_snapshot,

@@ -26,7 +26,6 @@ def main() -> int:
         "scripts",
         "tests",
         "benchmarks",
-        "experiments",
         "figures",
         "gold_memory",
         "results",
@@ -35,6 +34,8 @@ def main() -> int:
         path = root / name
         if not path.is_symlink() or path.resolve() != (root / "code" / name).resolve():
             missing.append(f"{name} -> code/{name}")
+    if (root / "code" / "experiments").exists() or (root / "experiments").exists():
+        missing.append("code-level experiments directory must not exist")
     if missing:
         print("Portable layout check failed:", file=sys.stderr)
         for item in missing:

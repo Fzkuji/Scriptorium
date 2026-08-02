@@ -36,12 +36,12 @@ if str(SCRIPTS) not in sys.path:
 
 import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
 import longmemeval_m1_contract as contract  # noqa: E402
-from src.evaluation import durable_model_ledger as durable  # noqa: E402
-from src.evaluation.visible_token_budget import (  # noqa: E402
+from scripts.evaluation import durable_model_ledger as durable  # noqa: E402
+from scripts.evaluation.visible_token_budget import (  # noqa: E402
     VisibleTokenBudgetGate,
     snapshot_memory_path,
 )
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
 
 
 PROXY_SCRIPT = SCRIPTS / "controlled_r301_model_proxy.py"

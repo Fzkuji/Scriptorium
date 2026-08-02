@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from scripts import audit_openai_gpt55_flex_gateway as auditor
-from src import openai_gpt55_flex_gateway as gateway_module
+from scripts.gateways import openai_gpt55_flex_gateway as gateway_module
 
 
 class FakeTransport:

@@ -3,7 +3,7 @@
 
 This process provides exact R110 run linkage while leaving provider selection,
 snapshot pinning, service-tier enforcement, and the durable cost cap to
-``src.openai_gpt55_flex_gateway``.  It accepts only a loopback upstream whose
+``scripts.gateways.openai_gpt55_flex_gateway``.  It accepts only a loopback upstream whose
 health contract proves that fixed gateway is active.
 """
 

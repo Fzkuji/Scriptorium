@@ -1,8 +1,8 @@
 # NativeMem
 
-NativeMem uses a model-managed file system as long-term memory. The repository
-contains the implementation, benchmark adapters, experiment scripts, stored
-results, paper source, and third-party reproduction metadata.
+NativeMem uses model-managed Markdown files as external memory. The repository
+contains the current implementation, benchmark runners, evaluation code,
+stored results, paper source, and third-party reproduction metadata.
 
 ## Install
 
@@ -17,9 +17,10 @@ source .venv/bin/activate
 
 `setup.sh` creates a local virtual environment, installs
 `requirements-dev.txt`, and checks the repository layout. API credentials are
-not stored in this repository. Set the variables required by the selected
-runner before starting an experiment; each runner prints its effective model,
-endpoint and explicit CLI/function parameters.
+not stored in this repository. Current NativeMem commands receive credentials,
+models, endpoints and budgets through explicit CLI or function parameters. The
+capacity calibration command reads its credential from the file named by
+`api_key_file` in its local config.
 
 The complete local research directory also contains benchmark data, stored
 results, and third-party checkouts that are intentionally not committed to the
@@ -31,30 +32,35 @@ or `.venv-*`; run `./setup.sh` on the destination computer instead.
 
 ```text
 code/
-  src/                        NativeMem implementation
-  scripts/                    experiment and audit commands
-  tests/                      repository tests
+  src/                        reusable NativeMem implementation
+  scripts/                    runners, adapters, evaluation and analysis
+    configs/                  frozen command inputs
+    model_capacity/           Writer capacity calibration
+    nativemem/                LoCoMo, LongMemEval and ablation runners
+  tests/                      tests grouped by implementation responsibility
   benchmarks/                 local benchmark datasets
-  experiments/                experiment definitions
   figures/                    generated figures
   gold_memory/                curated memory fixtures
-  results/                    existing experiment artifacts
+  results/                    formal runs, analysis and capacity artifacts
   third_party/                external framework checkouts
 paper/                        independent paper Git repository
 docs/
   Model-Aligned-Wiki.html     documentation entry and research overview
   related-work/               paper Related Work, survey, and evidence
-  method/                     current method, designs, versions, and reports
+  method/                     current method, design and reports
   experiments/                plans, protocols, results, studies, and runs
   prompts/                    prompt references
   archive/                    superseded historical documents
   internal/                   research analysis and development records
 ```
 
-Root-level `src`, `scripts`, `tests`, `benchmarks`, `experiments`, `figures`,
-`gold_memory`, `results`, and `third_party` are relative compatibility
-symlinks. Existing commands and stored result links continue to work after the
-reorganization.
+Root-level `src`, `scripts`, `tests`, `benchmarks`, `figures`, `gold_memory`,
+`results`, and `third_party` are relative compatibility symlinks. Executable
+code is classified under `scripts/`; generated analysis is stored under
+`results/analysis/`. There is no separate code-level `experiments/` directory.
+`code/src/evaluation` is a compatibility link to `code/scripts/evaluation`
+for the hash-locked `code/scripts/eval_full.py`; evaluation implementation is
+maintained only under `code/scripts/evaluation`.
 
 ## Basic commands
 
@@ -64,16 +70,21 @@ Run commands from the repository root:
 # Layout and transfer check
 python scripts/verify_portable_layout.py
 
-# Core V11 tests
+# Current NativeMem tests
 pytest -q \
-  tests/test_v11_memory.py \
-  tests/test_reanswer_longmemeval_existing_memory.py \
-  tests/test_run_v88_gpt55_longmemeval.py \
-  tests/test_run_v11_gpt55_frontier_longmemeval.py \
-  tests/test_run_v11_memory_organizer_pilot.py
+  tests/management \
+  tests/markdown \
+  tests/retrieval \
+  tests/runtime \
+  tests/scripts
 
-# Example memory build
-python src/nativemem.py --sample 0 --outdir results/run --validate
+# Calibrate one model and Writer protocol
+python -m scripts.model_capacity.calibrate_writer \
+  --config scripts/configs/model_capacity.example.json
+
+# Inspect benchmark runner parameters
+python scripts/nativemem/run_locomo.py --help
+python scripts/nativemem/run_longmemeval.py --help
 ```
 
 The documentation entry is [`docs/Model-Aligned-Wiki.html`](docs/Model-Aligned-Wiki.html).
@@ -100,8 +111,8 @@ under `code/third_party/environments`.
 
 ## Results
 
-All existing result directory names and internal paths remain unchanged under
-`code/results`; the root `results` link preserves older scripts and HTML links.
+All existing formal result directory names and internal paths remain unchanged
+under `code/results`; the root `results` link preserves stored HTML links.
 `code/results/STORAGE.md` records storage totals, verified duplicates, and any
 archived content. Do not compare scores unless the builder, answerer, judge,
 prompt, benchmark subset, and evaluation protocol are the same.

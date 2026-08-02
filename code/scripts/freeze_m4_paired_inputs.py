@@ -22,7 +22,7 @@ from scripts.run_m4_statistics import (  # noqa: E402
     read_json,
     sha256_file,
 )
-from src.evaluation.m4_reliability import ReliabilityError  # noqa: E402
+from scripts.evaluation.m4_reliability import ReliabilityError  # noqa: E402
 
 
 SCHEMA_VERSION = 1

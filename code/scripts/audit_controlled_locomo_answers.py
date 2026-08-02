@@ -20,10 +20,10 @@ for entry in (ROOT, SCRIPTS):
 
 import audit_gpt55_locomo_baselines as baseline_auditor  # noqa: E402
 import controlled_locomo_answer_contract as contract  # noqa: E402
-from src import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
-from src.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
-from src.evaluation.visible_token_budget import TokenCounter  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
+from scripts.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
+from scripts.evaluation.visible_token_budget import TokenCounter  # noqa: E402
 
 
 def _trace_records(path: Path) -> list[dict[str, Any]]:
@@ -110,10 +110,10 @@ def _load_proxy_entries(output_dir: Path, run_id: str) -> tuple[list[dict[str, A
             or manifest.get("base_wrapper_sha256")
             != contract.sha256_file(ROOT / "scripts/gpt55_run_proxy.py")
             or manifest.get("upstream_proxy_sha256")
-            != contract.sha256_file(ROOT / "src/openai_gpt55_flex_gateway.py")
+            != contract.sha256_file(ROOT / "scripts/gateways/openai_gpt55_flex_gateway.py")
             or manifest.get("flex_evidence_sha256")
             != contract.sha256_file(
-                ROOT / "src/openai_gpt55_flex_gateway_evidence.py"
+                ROOT / "scripts/gateways/openai_gpt55_flex_gateway_evidence.py"
             )
         ):
             raise contract.ControlledAnswerError("proxy source fingerprint differs")
@@ -755,10 +755,10 @@ def audit_run(output_dir: Path, *, require_complete_manifest: bool = True) -> di
         "run_proxy": contract.sha256_file(ROOT / "scripts/controlled_gpt55_run_proxy.py"),
         "base_run_proxy": contract.sha256_file(ROOT / "scripts/gpt55_run_proxy.py"),
         "upstream_proxy": contract.sha256_file(
-            ROOT / "src/openai_gpt55_flex_gateway.py"
+            ROOT / "scripts/gateways/openai_gpt55_flex_gateway.py"
         ),
         "flex_gateway_evidence": contract.sha256_file(
-            ROOT / "src/openai_gpt55_flex_gateway_evidence.py"
+            ROOT / "scripts/gateways/openai_gpt55_flex_gateway_evidence.py"
         ),
         "auditor": contract.sha256_file(Path(__file__).resolve()),
         "visible_token_budget": contract.sha256_file(ROOT / "src/evaluation/visible_token_budget.py"),

@@ -114,7 +114,7 @@ def create_preregistration(
             "status": "not_started",
             "integration": "deferred_to_shared_controlled_gpt55_answer_protocol",
             "requested_model": contract.EXPECTED_MODEL,
-            "prompt_template": "src.evaluation.prompts.ANSWER_PROMPT",
+            "prompt_template": "scripts.evaluation.prompts.ANSWER_PROMPT",
             "prompt_template_sha256": contract.sha256_text(contract.ANSWER_PROMPT),
             "input_file": "per-item answer_input.json",
             "input_prohibits_dataset_answer_and_reference_session_ids": True,

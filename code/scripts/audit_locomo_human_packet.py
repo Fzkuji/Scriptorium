@@ -21,7 +21,7 @@ from scripts.build_locomo_human_packet import (  # noqa: E402
     read_json,
     sha256_file,
 )
-from src.evaluation.m4_reliability import ReliabilityError  # noqa: E402
+from scripts.evaluation.m4_reliability import ReliabilityError  # noqa: E402
 
 
 def main() -> int:

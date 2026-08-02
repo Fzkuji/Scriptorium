@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import json
+import importlib.metadata
 import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+
+try:
+    importlib.metadata.version("mem0ai")
+except importlib.metadata.PackageNotFoundError:
+    pytest.skip(
+        "formal LongMemEval shared-answer tests require the pinned M1 environment",
+        allow_module_level=True,
+    )
 
 
 ROOT = Path(__file__).resolve().parents[1]

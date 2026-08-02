@@ -18,12 +18,14 @@ def test_portable_setup_files_exist_without_credentials():
 
 def test_canonical_layout_has_relative_compatibility_links():
     for name in (
-        "src", "scripts", "tests", "benchmarks", "experiments", "figures",
+        "src", "scripts", "tests", "benchmarks", "figures",
         "gold_memory", "results", "third_party",
     ):
         link = ROOT / name
         assert link.is_symlink()
         assert link.resolve() == (ROOT / "code" / name).resolve()
+    assert not (ROOT / "experiments").exists()
+    assert not (ROOT / "code" / "experiments").exists()
     assert (ROOT / "docs" / "Model-Aligned-Wiki.html").is_file()
     assert (ROOT / "docs" / "experiments" / "experiment.html").is_file()
     assert not (ROOT / "Model-Aligned-Wiki.html").exists()

@@ -40,14 +40,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
 
 DATASET = ROOT / "benchmarks" / "locomo" / "data" / "locomo10.json"
 ASSEMBLER = ROOT / "scripts" / "assemble_locomo_baseline_inputs.py"
 AUDITOR = ROOT / "scripts" / "audit_gpt55_locomo_baselines.py"
 CONTRACT = ROOT / "scripts" / "locomo_baseline_contract.py"
 RUN_PROXY = ROOT / "scripts" / "gpt55_run_proxy.py"
-FLEX_GATEWAY = ROOT / "src" / "openai_gpt55_flex_gateway.py"
+FLEX_GATEWAY = ROOT / "scripts" / "gateways" / "openai_gpt55_flex_gateway.py"
 FLEX_GATEWAY_AUDITOR = ROOT / "scripts" / "audit_openai_gpt55_flex_gateway.py"
 DEFAULT_PYTHON = "/opt/miniconda3/bin/python3"
 DEFAULT_OUTPUT_ROOT = ROOT / "results" / "gpt55-locomo-baselines-20260714"
@@ -104,81 +104,81 @@ class MethodSpec:
 
 METHOD_REGISTRY: dict[str, MethodSpec] = {
     "full_context": MethodSpec(
-        ROOT / "src/adapters/run_naive.py",
+        ROOT / "scripts/adapters/run_naive.py",
         ("--method", "full_context"),
         expects_llm=False,
         usage_tracking="not_applicable",
         max_sample_workers=10,
     ),
     "bm25": MethodSpec(
-        ROOT / "src/adapters/run_naive.py",
+        ROOT / "scripts/adapters/run_naive.py",
         ("--method", "bm25"),
         expects_llm=False,
         usage_tracking="not_applicable",
         max_sample_workers=10,
     ),
     "mem0": MethodSpec(
-        ROOT / "src/adapters/run_mem0.py",
+        ROOT / "scripts/adapters/run_mem0.py",
         runtime_trees=(ROOT / "third_party/mem0",),
     ),
     "amem": MethodSpec(
-        ROOT / "src/adapters/run_amem.py",
+        ROOT / "scripts/adapters/run_amem.py",
         runtime_trees=(ROOT / "third_party/amem",),
     ),
     "lightmem": MethodSpec(
-        ROOT / "src/adapters/run_lightmem.py",
+        ROOT / "scripts/adapters/run_lightmem.py",
         ("--k", "20"),
         runtime_trees=(ROOT / "third_party/lightmem",),
     ),
     "nemori": MethodSpec(
-        ROOT / "src/adapters/run_nemori.py",
+        ROOT / "scripts/adapters/run_nemori.py",
         runtime_trees=(ROOT / "third_party/nemori",),
     ),
     "zep": MethodSpec(
-        ROOT / "src/adapters/run_zep.py",
+        ROOT / "scripts/adapters/run_zep.py",
         runtime_trees=(ROOT / "third_party/graphiti",),
     ),
     "memoryos": MethodSpec(
-        ROOT / "src/adapters/run_memoryos.py",
+        ROOT / "scripts/adapters/run_memoryos.py",
         runtime_trees=(ROOT / "third_party/memoryos/memoryos-pypi",),
     ),
     "memos": MethodSpec(
-        ROOT / "src/adapters/run_memos.py",
+        ROOT / "scripts/adapters/run_memos.py",
         runtime_trees=(ROOT / "third_party/memos",),
     ),
     "simplemem": MethodSpec(
-        ROOT / "src/adapters/run_simplemem.py",
+        ROOT / "scripts/adapters/run_simplemem.py",
         runtime_trees=(ROOT / "third_party/simplemem",),
     ),
     "hindsight": MethodSpec(
-        ROOT / "src/adapters/run_hindsight.py",
+        ROOT / "scripts/adapters/run_hindsight.py",
         runtime_trees=(ROOT / "third_party/hindsight/hindsight-api-slim",),
         runtime_python_default=ROOT / ".venv-hindsight/bin/python",
     ),
     "memmachine": MethodSpec(
-        ROOT / "src/adapters/run_memmachine.py",
+        ROOT / "scripts/adapters/run_memmachine.py",
         expects_llm=False,
         usage_tracking="not_applicable",
         runtime_trees=(ROOT / "third_party/memmachine",),
         runtime_python_default=ROOT / "third_party/memmachine_venv/bin/python",
     ),
     "mirix": MethodSpec(
-        ROOT / "src/adapters/run_mirix.py",
+        ROOT / "scripts/adapters/run_mirix.py",
         usage_tracking="subprocess_untracked",
-        source_extras=(ROOT / "src/adapters/_mirix_server_shim.py",),
+        source_extras=(ROOT / "scripts/adapters/_mirix_server_shim.py",),
         runtime_trees=(ROOT / "third_party/mirix",),
         runtime_python_env="MIRIX_PY",
         runtime_python_default=ROOT / "third_party/mirix-venv/bin/python",
         requires_diagnostics=True,
     ),
     "emem": MethodSpec(
-        ROOT / "src/adapters/run_emem.py",
+        ROOT / "scripts/adapters/run_emem.py",
         runtime_trees=(ROOT / "third_party/emem",),
     ),
     "evermemos": MethodSpec(
-        ROOT / "src/adapters/run_evermemos.py",
+        ROOT / "scripts/adapters/run_evermemos.py",
         usage_tracking="subprocess_untracked",
-        source_extras=(ROOT / "src/adapters/_evermemos_server_shim.py",),
+        source_extras=(ROOT / "scripts/adapters/_evermemos_server_shim.py",),
         runtime_trees=(ROOT / "third_party/evermemos",),
         runtime_python_env="EVERMEMOS_PY",
         runtime_python_default=ROOT / "third_party/evermemos_venv/bin/python",
@@ -365,8 +365,8 @@ def required_source_paths(spec: MethodSpec) -> list[Path]:
         Path(flex_evidence.__file__),
         PREREGISTRATION,
         spec.adapter,
-        ROOT / "src/adapters/_usage_tracker.py",
-        ROOT / "src/evaluation/llm_clients.py",
+        ROOT / "scripts/adapters/_usage_tracker.py",
+        ROOT / "scripts/evaluation/llm_clients.py",
         *spec.source_extras,
     ]
     unique: dict[Path, None] = {}

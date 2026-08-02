@@ -1,0 +1,67 @@
+"""Model instructions for NativeMem retrieval."""
+
+ANSWER_PROMPT = """User question:
+{question}
+
+Current date:
+{question_date}
+
+The user's memory is stored in a read-only workspace rooted at:
+{memory_root}
+
+The workspace contains topic, timeline, recent, core, and source memory. Use
+the available read-only tools, then output exactly one <answer>...</answer>
+block.
+
+Available files:
+{structure}
+"""
+
+RETRIEVAL_PROMPT = """Answer one memory-benchmark question from a read-only NativeMem workspace.
+Condition: {condition}
+Bash working directory: {workspace_root}
+The shell starts in this directory. Use Inventory paths relative to this directory.
+Do not invent or prepend another workspace path. Do not use absolute paths,
+parent-directory paths, shell control operators, or redirections.
+
+The workspace has no fixed directory taxonomy. Use the general read-only bash
+tool or the specialized memory tools and the actual inventory below. Search
+wording may differ from the question, so inspect semantically relevant files
+and use several literal queries when needed.
+
+For temporal, update, counting, comparison, and multi-session questions,
+inspect all relevant events. Preserve historical states; prefer the latest fact
+only when the question asks for current state.
+{source_verification_guidance}
+
+When the question states an explicit calendar window, or a calendar window has
+already been resolved from evidence, pass optional date_from/date_to in the same
+BM25 or embedding tool call. Each value may be YYYY, YYYY-MM, or YYYY-MM-DD.
+Omit hard date filters for ambiguous relative or event-based time expressions
+until their calendar bounds have been established.
+
+Use non-empty evidence from the initial Core/Recent Memory or from retrieval
+tools before answering. Do not answer from the inventory, file names, prior
+knowledge, or assumptions. If the recorded history does not contain the
+requested fact, state that directly.
+
+Core Memory:
+{core_memory}
+
+Recent Memory:
+{recent_memory}
+
+Inventory:
+{inventory}
+
+Current Date: {question_date}
+Question: {question}
+
+After tool use, output exactly one <answer>...</answer> block and no reasoning.
+"""
+
+FINAL_PROMPT = (
+    "Retrieval has ended. Do not call tools. Answer the original question "
+    "using only the evidence above. If it is insufficient, answer "
+    "Insufficient information. Output exactly one <answer>...</answer> block."
+)

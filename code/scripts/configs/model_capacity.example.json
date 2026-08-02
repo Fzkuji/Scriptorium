@@ -1,0 +1,14 @@
+{
+  "provider": "provider-name",
+  "base_url": "https://provider.example/v1",
+  "api_format": "openai",
+  "model": "provider/model-name",
+  "api_key_file": "/absolute/path/to/api-key.txt",
+  "candidate_tokens": [2048, 4096, 8192, 16384],
+  "probe_ids": ["facts-a", "facts-b"],
+  "agent_max_rounds": 12,
+  "max_retries": 2,
+  "timeout_seconds": 180,
+  "input_usd_per_million": 0.0,
+  "output_usd_per_million": 0.0
+}

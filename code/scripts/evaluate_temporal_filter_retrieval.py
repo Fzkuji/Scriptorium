@@ -17,15 +17,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.memory_bm25 import (  # noqa: E402
+from src.retrieval.bm25 import (  # noqa: E402
     MemoryBM25Index,
     event_matches_time_window,
     temporal_bounds,
 )
-from src.memory_embedding import MemoryEmbeddingIndex  # noqa: E402
+from src.retrieval.embedding import MemoryEmbeddingIndex  # noqa: E402
 
-DATASET = ROOT / "benchmarks/longmemeval/data/longmemeval_s_cleaned.json"
-RUN_ROOT = ROOT / "results/formal/v11-deepseek-bytype-20260723"
+DEFAULT_DATASET = ROOT / "benchmarks/longmemeval/data/longmemeval_s_cleaned.json"
 KS = (1, 3, 5, 10)
 REF_RE = re.compile(r"^D(\d+):")
 
@@ -34,11 +33,13 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def select_items(limit: int | None) -> list[dict[str, Any]]:
-    dataset = json.loads(DATASET.read_text(encoding="utf-8"))
+def select_items(
+    run_root: Path, dataset_path: Path, limit: int | None
+) -> list[dict[str, Any]]:
+    dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
     by_question = {row["question_id"]: (index, row) for index, row in enumerate(dataset)}
     selected: dict[str, dict[str, Any]] = {}
-    for checkpoint_path in sorted(RUN_ROOT.rglob("checkpoint.json")):
+    for checkpoint_path in sorted(run_root.rglob("checkpoint.json")):
         item_dir = checkpoint_path.parent
         topics = item_dir / "memory/topics"
         if not topics.is_dir() or not any(topics.rglob("*.md")):
@@ -100,8 +101,14 @@ def aggregate(records: list[dict[str, Any]], condition: str) -> dict[str, float]
     return {key: mean(row[condition]["metrics"][key] for row in records) for key in keys}
 
 
-def evaluate(method: str, limit: int | None) -> dict[str, Any]:
-    items = select_items(limit)
+def evaluate(
+    method: str,
+    limit: int | None,
+    *,
+    run_root: Path,
+    dataset_path: Path,
+) -> dict[str, Any]:
+    items = select_items(run_root, dataset_path, limit)
     encoder = None
     if method == "embedding":
         from sentence_transformers import SentenceTransformer
@@ -202,9 +209,9 @@ def evaluate(method: str, limit: int | None) -> dict[str, Any]:
         "method": method,
         "protocol": "same query/index/top_k; oracle bounds span semantic dates on memory events citing gold evidence sessions",
         "oracle_warning": "The filtered condition is a retrieval ceiling, not an end-to-end Agent result.",
-        "dataset": str(DATASET.relative_to(ROOT)),
-        "dataset_sha256": sha256(DATASET),
-        "memory_run": str(RUN_ROOT.relative_to(ROOT)),
+        "dataset": str(dataset_path),
+        "dataset_sha256": sha256(dataset_path),
+        "memory_run": str(run_root),
         "sample_count": len(records),
         "available_temporal_questions": len(records),
         "filter_eligible_questions": sum(row["filter_eligible"] for row in records),
@@ -222,10 +229,17 @@ def evaluate(method: str, limit: int | None) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--method", choices=("bm25", "embedding"), required=True)
+    parser.add_argument("--data", type=Path, default=DEFAULT_DATASET)
+    parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    payload = evaluate(args.method, args.limit)
+    payload = evaluate(
+        args.method,
+        args.limit,
+        run_root=args.run_root,
+        dataset_path=args.data,
+    )
     payload["created_at"] = datetime.now(timezone.utc).isoformat()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")

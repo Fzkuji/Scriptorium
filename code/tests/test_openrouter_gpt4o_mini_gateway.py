@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from src import openrouter_gpt4o_mini_gateway as gateway
-from src import openrouter_gateway_evidence
+from scripts.gateways import openrouter_gpt4o_mini_gateway as gateway
+from scripts.gateways import openrouter_gateway_evidence
 
 
 AUDIT_PATH = (
@@ -473,53 +473,3 @@ def test_consumer_binding_requires_marked_live_loopback_gateway(
         result_root=root,
         base_url="http://127.0.0.1:8421/v1",
     ) == binding
-
-
-def test_primary_scorer_and_beam_require_marked_gateway_contract(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from scripts import evaluate_v88_gpt55_beam as beam
-    from scripts import run_r301_organizer_retriever as r301
-    from scripts import score_v88_gpt55_benchmarks as scorer
-
-    root = tmp_path / "root"
-    instance = make_gateway(root, FakeTransport([]))
-    gateway._write_ready(
-        root / gateway.READY_NAME, server_port=8422, gateway=instance
-    )
-    binding = openrouter_gateway_evidence.capture_binding(
-        root, base_url="http://127.0.0.1:8422/v1"
-    )
-    assert r301.capture_formal_openrouter_gateway(
-        root, upstream="http://127.0.0.1:8422/v1"
-    ) == binding
-    with pytest.raises(r301.R301Error, match="marked loopback"):
-        r301.capture_formal_openrouter_gateway(
-            root, upstream="https://openrouter.ai/api/v1"
-        )
-    for name in ("JUDGE_MODEL", "JUDGE_BASE", "JUDGE_KEY", "JUDGE_HTTP_RETRIES"):
-        monkeypatch.setenv(name, "test-placeholder")
-    with pytest.raises(scorer.ScoringError, match="marked loopback"):
-        scorer.configure_judge("primary")
-    profile = scorer.configure_judge(
-        "primary", openrouter_gateway=binding
-    )
-    assert profile["base_url"] == "http://127.0.0.1:8422/v1"
-    assert scorer.os.environ["JUDGE_HTTP_RETRIES"] == "1"
-
-    config = beam.evaluation_config(
-        profile="primary",
-        base_url="http://127.0.0.1:8422/v1",
-        max_tokens=400,
-        max_retries=1,
-        proxy_log=None,
-        openrouter_gateway=binding,
-        formal_transport_contract=True,
-    )
-    beam.validate_formal_config(config)
-    assert config["transport_contract"] == "marked_openrouter_gateway"
-    assert config["base_url"] == binding["base_url"]
-    direct = dict(config)
-    direct["base_url"] = "https://openrouter.ai/api/v1"
-    with pytest.raises(beam.EvaluationError, match="gateway base URL"):
-        beam.validate_formal_config(direct)

@@ -28,10 +28,10 @@ for entry in (ROOT, SCRIPTS):
 
 import audit_gpt55_locomo_baselines as baseline_auditor  # noqa: E402
 import controlled_locomo_answer_contract as contract  # noqa: E402
-from src import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
-from src.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
-from src.evaluation.visible_token_budget import (  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
+from scripts.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
+from scripts.evaluation.visible_token_budget import (  # noqa: E402
     TokenCounter,
     VisibleTokenBudgetGate,
     snapshot_memory_bytes,
@@ -40,8 +40,8 @@ from src.evaluation.visible_token_budget import (  # noqa: E402
 
 RUN_PROXY = ROOT / "scripts/controlled_gpt55_run_proxy.py"
 BASE_RUN_PROXY = ROOT / "scripts/gpt55_run_proxy.py"
-UPSTREAM_PROXY = ROOT / "src/openai_gpt55_flex_gateway.py"
-FLEX_EVIDENCE = ROOT / "src/openai_gpt55_flex_gateway_evidence.py"
+UPSTREAM_PROXY = ROOT / "scripts/gateways/openai_gpt55_flex_gateway.py"
+FLEX_EVIDENCE = ROOT / "scripts/gateways/openai_gpt55_flex_gateway_evidence.py"
 AUDITOR = ROOT / "scripts/audit_controlled_locomo_answers.py"
 DEFAULT_PYTHON = Path("/opt/miniconda3/bin/python3")
 

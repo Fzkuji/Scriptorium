@@ -8,8 +8,8 @@ from urllib.request import ProxyHandler, Request, build_opener
 
 import pytest
 
-from src import openai_gpt55_flex_gateway as gateway
-from src import openai_gpt55_flex_gateway_evidence as evidence
+from scripts.gateways import openai_gpt55_flex_gateway as gateway
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as evidence
 
 
 class FakeTransport:

@@ -30,12 +30,14 @@
     <a class="toc-link toc-h3" href="#derived-views">2.3 Derived Views</a>
     <a class="toc-link toc-h3" href="#core-memory">2.4 Core Memory</a>
     <a class="toc-link" href="#construction">§3 Memory Construction</a>
+    <a class="toc-link toc-h3" href="#writer-capacity">3.1 Writer Capacity Calibration</a>
     <a class="toc-link" href="#management">§4 Memory Management</a>
     <a class="toc-link toc-h3" href="#direct-editing">4.1 Direct Editing</a>
     <a class="toc-link toc-h3" href="#management-levels">4.2 Management Levels</a>
     <a class="toc-link toc-h3" href="#fact-evolution">4.3 Fact Evolution</a>
     <a class="toc-link" href="#retrieval">§5 Query-Time Access</a>
     <a class="toc-link" href="#boundary">§6 Implementation Boundary</a>
+    <a class="toc-link toc-h3" href="#implementation-map">6.1 Code Map</a>
   </nav>
 </aside>
 <main class="document-main">
@@ -51,7 +53,7 @@
     <p class="document-eyebrow">Current Method Specification</p>
     <h1>NativeMem: File-Native, Source-Grounded Multi-View Memory</h1>
     <p class="document-lead">NativeMem 将 Source、Topic、Timeline、Recent、Core 和索引关系组织为一个文件式记忆状态。Topic 是可编辑的主要语义状态；Timeline、Recent 与索引由 Runtime 从 Topic 确定性生成。LLM 负责语义选择和组织，Runtime 负责身份、校验、同步与事务。</p>
-    <p class="document-meta">updated 2026-08-02 · V11 benchmark implementation + target online contract</p>
+    <p class="document-meta">updated 2026-08-02 · current implementation and online contract</p>
   </header>
 
   <figure class="figure architecture-figure">
@@ -96,7 +98,7 @@
 ├── core.md
 └── .nativemem/runtime.json   # cursor、触发器与完整创建顺序；不属于记忆正文</code></pre>
   <h3 id="source-memory">2.1 Source Memory</h3>
-  <p>Source 保存完整消息和外部文档定位信息，是 Topic 事实的证据边界。对话来源使用 provider 提供的稳定 <code>thread_id</code> 与 <code>message_id</code>。如果输入数据只有顺序型 benchmark label，例如 LoCoMo 的 <code>D1:14</code>，Adapter 会在写入前将其确定性转换为 <code>locomo/thread_*/msg_*</code>；顺序 label 只用于 benchmark 输入和评测映射，不写入 V11 的持久记忆。文件来源使用路径及页码、章节或行号。当前 Markdown link 的显示文字保留完整稳定 Source ID。Source 只追加，不因 Topic 修改、纠错或视图重建而覆盖。</p>
+  <p>Source 保存完整消息和外部文档定位信息，是 Topic 事实的证据边界。对话来源使用 provider 提供的稳定 <code>thread_id</code> 与 <code>message_id</code>。如果输入数据只有顺序型 benchmark label，例如 LoCoMo 的 <code>D1:14</code>，Adapter 会在写入前将其确定性转换为 <code>locomo/thread_*/msg_*</code>；顺序 label 只用于 benchmark 输入和评测映射，不写入 NativeMem 的持久记忆。文件来源使用路径及页码、章节或行号。当前 Markdown link 的显示文字保留完整稳定 Source ID。Source 只追加，不因 Topic 修改、纠错或视图重建而覆盖。</p>
 
   <h3 id="topic-memory">2.2 Topic Memory and Memory Unit</h3>
   <p>Topic 是由 LLM 组织的 Markdown 语义状态。一个 memory unit 对应一个语义完整、可独立引用和更新的段落，而不是一句话或一个最小事实。相关的多项事实可以整合为连续正文，并分别保留来源注释；整个段落只在末尾保存一个 Obsidian-compatible block ID。</p>
@@ -184,6 +186,20 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
 [^new-evidence-pudong]: Time: `2026-08-03`; Sources: locomo/thread_782f9c17d73c/msg_0bf7a1000f32</code></pre>
   <p>如果证据只能确定年份或月份，Writer 分别在 footnote 中写 <code>YYYY</code> 或 <code>YYYY-MM</code>；只有无法确定任何日历年份时才写 <code>undated</code>。如果同一事实由多个来源支持，则在 <code>Sources:</code> 后写多个完整 handle，并用逗号分隔。Runtime 不从正文时间字符串自动补充精度，而是直接按 <code>Time</code> 字段的原始精度生成 Timeline。</p>
 
+  <h3 id="writer-capacity">3.1 Writer Capacity Calibration</h3>
+  <p>不同模型即使声明相同的上下文窗口，也可能在多 session 记忆写入中表现出不同的来源覆盖率、格式稳定性和工具调用完成率。因此，NativeMem 在正式构建前对每个 <strong>model + Writer protocol</strong> 组合执行一次轻量校准。该过程测量当前 Writer 系统提示、批量写入提示和工具契约共同作用下的有效输入容量，不把模型声明的最大上下文长度直接作为写入批量。</p>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>步骤</th><th>处理</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td>Probe construction</td><td>使用两组与 benchmark 无关的合成事实 session；每个 session 保持完整，不截断消息，也不跨 session 重排</td><td>候选批次包含可独立核验的 source references</td></tr>
+      <tr><td>Capacity sweep</td><td>按 <code>2K / 4K / 8K / 16K</code> 等递增候选容量，将完整 Writer system prompt 与完整 session batch 一起计数</td><td>只加入仍能完整落在候选 token 上限内的 session；连一个完整 Writer 输入都容不下的档位只记录为 skipped，不视为模型失败</td></tr>
+      <tr><td>Writer execution</td><td>每个候选容量分别运行两组 probe，记录 API 调用、输入/输出 token、耗时、写入 blocks 和格式错误</td><td>事务无 tool error 或 round limit，且全部预期 source references 出现在权威 Topic/Core 状态中</td></tr>
+      <tr><td>Safe limit</td><td>两个 probe 都通过后才接受该容量；第一个失败容量之后不再继续扩大</td><td>选择失败前的最大通过容量</td></tr>
+      <tr><td>Build integration</td><td>构建入口读取 <code>calibration.json</code>，校验 model、Writer protocol hash 和 tokenizer identity，再按 token 上限依次组合完整 session</td><td>单个完整 session 已超限时明确失败，不进行静默截断</td></tr>
+    </tbody>
+  </table></div>
+  <p>校准产物保存 provider、model、Writer protocol hash、tokenizer、候选容量、逐 probe 的 session 数、实际输入 token、调用次数、输入/输出 token、耗时、来源覆盖率和最终 <code>safe_input_tokens</code>。<code>BuildConfig.calibration_path</code> 指向该文件；未提供时保留显式 <code>session_batch</code> 作为可复现实验的固定回退。校准只决定一次 Writer 调用包含多少个完整 session，不改变 Source、Topic、Timeline、Recent、Core 或 Relations，也不构成新的检索方法。</p>
+
   <h2 id="management">§4 Memory Management</h2>
   <p>管理以 Topic 修改为中心。LLM 对完整 Markdown 负责，包括正文边界、已有 ID 的保留、来源脚注和关系链接；Runtime 不重新判断段落语义，只执行可确定的规范化、校验、派生与事务操作。</p>
 
@@ -220,7 +236,7 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>过程</th><th>在线触发</th><th>Benchmark 映射</th><th>LLM 操作</th><th>Runtime 操作</th><th>影响范围</th></tr></thead>
     <tbody>
-      <tr><td><strong>Incremental writing</strong></td><td>未处理内容达到 token/context 阈值，或 session 空闲一小时</td><td>每个静态 session 后写入</td><td>提取新记忆、选择 Topic，必要时更新 Core</td><td>按 cursor 取增量，物化并提交</td><td>新增 Source、相关 Topic 及派生视图</td></tr>
+      <tr><td><strong>Incremental writing</strong></td><td>未处理内容接近已校准 Writer 容量，或 session 空闲一小时</td><td>按校准上限组合完整 session；未校准时使用固定 <code>session_batch</code></td><td>提取新记忆、选择 Topic，必要时更新 Core</td><td>按 cursor 取增量、完整 session 打包、物化并提交</td><td>新增 Source、相关 Topic 及派生视图</td></tr>
       <tr><td><strong>Local reorganization</strong></td><td>累计固定写入批次或新增 token 阈值</td><td>每固定数量 session 执行一次</td><td>整理本周期被修改的 Topic</td><td>限定作用域并重建局部派生视图</td><td>被修改 Topic、对应 Timeline 与 Relations</td></tr>
       <tr><td><strong>Global management</strong></td><td>每天最多一次，且上次管理后存在新写入 commit</td><td>全部输入结束后执行一次</td><td>跨 Topic 调整结构并审查 Core</td><td>全局校验、重建派生视图并提交</td><td>全部 Topic、Timeline、Core 与 Relations</td></tr>
     </tbody>
@@ -270,20 +286,33 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>状态</th><th>内容</th></tr></thead>
     <tbody>
-      <tr><td class="status-yes">当前 V11 Runtime 已实现</td><td>Source 只追加、Topic 段落 block、claim-adjacent evidence footnotes、临时 ID 物化、source handle 解析、marker 间距规范化、Topic-to-Topic block links 校验、移动后路径改写、Timeline/Recent/Relations 全量重建、Recent 50 与完整创建顺序、Core 2K、staged 原子安装与失败恢复、shell-only Writer/Manager、BM25 与 Embedding 的 evidence 级解析和可选时间区间过滤</td></tr>
+      <tr><td class="status-yes">当前 Runtime 已实现</td><td>Source 只追加、Topic 段落 block、claim-adjacent evidence footnotes、临时 ID 物化、source handle 解析、marker 间距规范化、Topic-to-Topic block links 校验、移动后路径改写、Timeline/Recent/Relations 全量重建、Recent 50 与完整创建顺序、Core 2K、staged 原子安装与失败恢复、shell-only Writer/Manager、Writer 容量校准与完整 session 打包、BM25 与 Embedding 的 evidence 级解析和可选时间区间过滤</td></tr>
       <tr><td class="status-yes">在线调度代码已实现</td><td>provider-neutral source IDs、持久化 session cursor、token/一小时空闲触发、局部批次或 token 触发、每天最多一次全局管理和可选 Git commit</td></tr>
-      <tr><td class="status-no">尚未完成部署验证</td><td>不同 Agent provider 的实际 plugin/adapter 集成、长时间在线 scheduler 进程、Core 引用自动校验，以及新 Markdown 契约在真实长会话中的格式错误率</td></tr>
+      <tr><td class="status-no">尚未完成部署验证</td><td>不同 Agent provider 的实际 plugin/adapter 集成、各目标模型的 Writer 容量校准结果、长时间在线 scheduler 进程、Core 引用自动校验，以及新 Markdown 契约在真实长会话中的格式错误率</td></tr>
       <tr><td class="status-no">仍需实验确认</td><td>Recent、Core、周期整理、BM25、Embedding 和 Agent-controlled retrieval 的独立贡献与成本；Topic 规范化对重复和检索效率的影响</td></tr>
     </tbody>
   </table></div>
   <p>已有 LoCoMo 与 LongMemEval 结果只能归属于产生这些结果的既有版本。新增组件必须在相同 memory、answerer、judge 和预算下分别消融，不能由旧结果直接推导效果。</p>
+
+  <h3 id="implementation-map">6.1 Capacity Calibration Code Map</h3>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>路径</th><th>职责</th></tr></thead>
+    <tbody>
+      <tr><td><code>code/scripts/model_capacity/calibrate_writer.py</code></td><td>运行两组通用 probe、逐档执行 Writer，并生成包含质量、token、调用次数、成本与耗时的 <code>calibration.json</code></td></tr>
+      <tr><td><code>code/src/runtime/capacity.py</code></td><td>校验校准产物、选择安全容量，并按 token 上限组合完整 session</td></tr>
+      <tr><td><code>code/src/runtime/tokenization.py</code></td><td>解析可复现的 tokenizer identity，并为校准和正式构建使用同一计数实现</td></tr>
+      <tr><td><code>code/src/build.py</code></td><td>通过 <code>BuildConfig.calibration_path</code> 接入安全容量；未提供时使用显式 <code>session_batch</code></td></tr>
+      <tr><td><code>code/scripts/configs/model_capacity.example.json</code></td><td>提供 provider、model、API key 文件、候选档位、重试、超时与价格的显式配置示例</td></tr>
+      <tr><td><code>code/results/model_capacity/</code></td><td>保存按 provider、model 和 run ID 分组的校准产物，不保存 API key</td></tr>
+    </tbody>
+  </table></div>
+  <p>当前 NativeMem core、容量校准脚本和 benchmark runners 均通过函数参数或命令行参数接收配置，不读取 NativeMem 环境变量。模型名、Writer prompt 或 tool schema 变化后，旧产物会因 model 或 protocol hash 不匹配而被拒绝，需要重新校准。</p>
 
   <footer>
     <a href="../related-work/related-work.html">Related Work</a> ·
     <a href="../related-work/survey.html">Survey</a> ·
     <a href="README.md">Method 文档说明</a> ·
     <a href="designs/file_native_multiview_design.md">完整设计规范</a> ·
-    <a href="reports/method-evolution-results.html">历史方法演进报告</a> ·
     <a href="../experiments/experiment.html">Experiments</a>
   </footer>
 </article>

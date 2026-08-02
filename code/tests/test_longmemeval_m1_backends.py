@@ -1,8 +1,18 @@
+import importlib.metadata
 import json
 from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
+
+
+try:
+    importlib.metadata.version("mem0ai")
+except importlib.metadata.PackageNotFoundError:
+    pytest.skip(
+        "formal LongMemEval backend tests require the pinned M1 environment",
+        allow_module_level=True,
+    )
 
 from scripts import audit_longmemeval_m1_backends as auditor
 from scripts import longmemeval_m1_backend_contract as backend_contract
@@ -10,7 +20,7 @@ from scripts import longmemeval_m1_contract as contract
 from scripts import longmemeval_shared_answer_contract as shared_contract
 from scripts import run_longmemeval_m1_backends as runner
 from scripts import run_longmemeval_m1_baselines as base_runner
-from src.evaluation import durable_model_ledger as durable
+from scripts.evaluation import durable_model_ledger as durable
 
 
 PREREGISTRATION = (

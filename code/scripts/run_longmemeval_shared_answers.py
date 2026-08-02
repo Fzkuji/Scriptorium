@@ -39,11 +39,11 @@ import longmemeval_shared_answer_contract as contract  # noqa: E402
 import run_controlled_locomo_answers as shared_answer  # noqa: E402
 import run_longmemeval_m1_backends as backend_runner  # noqa: E402
 import run_longmemeval_m1_baselines as base_input_runner  # noqa: E402
-from src.evaluation.durable_model_ledger import (  # noqa: E402
+from scripts.evaluation.durable_model_ledger import (  # noqa: E402
     DurableLedgerError,
     proxy_evidence,
 )
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
 
 
 DEFAULT_ROOT = ROOT / "results/gpt55-longmemeval-m1-baselines-20260714"
@@ -608,7 +608,7 @@ def _synthetic_source_input(
         "answer_protocol_interface": {
             "status": "reserved_not_executed",
             "requested_model": contract.EXPECTED_MODEL,
-            "prompt_template": "src.evaluation.prompts.ANSWER_PROMPT",
+            "prompt_template": "scripts.evaluation.prompts.ANSWER_PROMPT",
             "prompt_template_sha256": contract.sha256_text(
                 input_contract.ANSWER_PROMPT
             ),

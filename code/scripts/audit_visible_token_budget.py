@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
+from scripts.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
 
 
 def _path_identity(path: Path) -> str:

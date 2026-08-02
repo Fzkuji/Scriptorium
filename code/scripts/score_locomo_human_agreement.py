@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.build_locomo_human_packet import VERDICTS, read_json, sha256_file  # noqa: E402
 from scripts.run_m4_statistics import atomic_json_no_clobber  # noqa: E402
-from src.evaluation.m4_reliability import ReliabilityError  # noqa: E402
+from scripts.evaluation.m4_reliability import ReliabilityError  # noqa: E402
 
 
 EXPECTED_FIELDS = ["packet_id", "verdict", "confidence", "rationale"]

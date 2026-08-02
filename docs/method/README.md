@@ -1,15 +1,16 @@
 # NativeMem 方法文档
 
-> 更新：2026-08-01。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
+> 更新：2026-08-02。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
 
 当前实现模块：
 
-- `code/src/nativemem_versions/v11/memory.py`：Writer、Manager、工作区事务和 benchmark 入口；
-- `topic_markdown.py`：段落 block、claim-adjacent evidence 与关系链接的解析；
-- `reconciliation.py`：旧 Topic 格式的兼容代码，不属于当前 Writer/Manager 主流程；
-- `derived_views.py`：Timeline、Recent、Relations 和 structure map 的确定性重建；
-- `runtime_state.py`：provider source record、cursor、Git 提交和触发条件；
-- `online_runtime.py`：增量写入、局部整理和每日全局管理的在线编排。
+- `code/src/build.py`：Source session 转换、Writer 批量和构建调度；
+- `code/src/management/`：Writer、Manager 和工作区事务；
+- `code/src/markdown/`：段落 block、claim-adjacent evidence 与关系链接解析；
+- `code/src/runtime/`：派生视图、在线状态、tokenizer 和 Writer capacity artifact；
+- `code/src/retrieval/`：文件、grep、BM25、Embedding 和 Agent-controlled retrieval；
+- `code/scripts/model_capacity/calibrate_writer.py`：按模型校准完整 session 写入容量；
+- `code/scripts/nativemem/`：LoCoMo、LongMemEval 和消融入口。
 
 ## 文档职责
 
@@ -19,12 +20,9 @@
 | [`nativemem-method.html`](nativemem-method.html) | 当前方法正文 | 两个主要贡献、记忆结构、Topic 规范、构建、管理、检索和实现边界 |
 | [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md) | 当前设计 | 记忆状态、写入触发、查询、维护和恢复机制 |
 | [`../internal/analysis/recent_memory_framework_comparison.md`](../internal/analysis/recent_memory_framework_comparison.md) | 内部设计分析 | 近期系统已有而 NativeMem 缺少或尚未定型的组件 |
-| [`designs/memory_management_design.md`](designs/memory_management_design.md) | 历史草案 | 2026-07-04 的运行逻辑，不再作为当前规范 |
-| [`versions/nativemem_v3_baseline.md`](versions/nativemem_v3_baseline.md) | 历史版本 | v3 baseline 固化记录 |
-| [`versions/`](versions/) | 历史版本 | v1–v10 的设计和结果记录 |
 | [`../experiments/experiment.html`](../experiments/experiment.html) | 实验页面 | 实验矩阵、结果与执行状态 |
 
-出现冲突时，以 `nativemem-method.html` 和 `designs/file_native_multiview_design.md` 为当前设计依据；历史文档只用于追踪方案演变和既有实验。
+出现冲突时，以 `nativemem-method.html` 和 `designs/file_native_multiview_design.md` 为当前设计依据。
 
 ## 当前方法概览
 
@@ -53,7 +51,9 @@ NativeMem 是一个 file-native、multi-view 的外部记忆系统。Source、To
 
 Git commit 是三类修改共同使用的有效状态边界。增量写入必须在 commit 成功后推进 session cursor；不增加 batch ID、`memory_dirty` 或独立写入日志。
 
-Git/cursor、token/空闲触发和每日管理条件已经由 `online_runtime.py` 实现；静态 benchmark harness 仍使用固定 session 写入、每 5 个 session 的局部整理和有新增记忆时的最终全局整理。Writer 外层最多 12 轮，Manager 最多 8 轮。长时间 scheduler 进程和具体 Agent provider plugin 不属于静态 benchmark 入口。
+Git/cursor、token/空闲触发和每日管理条件已经由 `code/src/runtime/online.py` 实现；静态 benchmark harness 使用冻结的 Writer capacity artifact 或显式 `session_batch`，并按固定 session 周期执行局部整理。Writer 外层最多 12 轮，Manager 最多 8 轮。长时间 scheduler 进程和具体 Agent provider plugin 不属于静态 benchmark 入口。
+
+Writer 批量可以由 `BuildConfig.calibration_path` 指向的校准产物控制。校准使用两组通用合成 session 扫描递增 token 上限，只有在事务完成且全部 source references 被写入权威记忆时才通过；首个失败容量之前的最大通过值成为安全上限。Runtime 验证 model、Writer protocol hash 和 tokenizer identity，随后只组合完整 session。未提供校准产物时使用显式 `session_batch`。
 
 ## Query-Time Access
 
@@ -76,10 +76,10 @@ Source 始终可以通过目录浏览、文件读取、`grep`、BM25 和 Embeddi
 | 状态 | 内容 | 证据边界 |
 |---|---|---|
 | 已完成结果 | v8.8 风格的 Topical + Temporal 视图、source resolution 和连续文件导航 | LoCoMo 1,540 题与 LongMemEval-S 500 题 |
-| 当前实现线 | shell-only V11 Writer/Manager、Topic paragraph blocks、evidence footnotes、Timeline/Recent/Relations 派生、Recent 50 FIFO、Core 2K、事务回滚、BM25、Embedding 与检索预算 | 已有实现与单元/集成测试；正式实验矩阵尚未完成 |
+| 当前实现线 | shell-only Writer/Manager、Topic paragraph blocks、evidence footnotes、Timeline/Recent/Relations 派生、Recent 50 FIFO、Core 2K、事务回滚、Writer 容量校准、BM25、Embedding 与检索预算 | 已有实现与单元/集成测试；正式实验矩阵尚未完成 |
 | 已实现、待部署验证 | provider source IDs、Git/cursor、token/空闲触发和每日管理条件 | 通过单元与集成测试；尚未完成多 provider 长时间在线运行和成本评估 |
 
-现有 90.8% LoCoMo 与 87.0% LongMemEval-S 结果不能自动归因于 V11、Recent Memory、Core Memory、Git/cursor 事务、BM25 或 Embedding。新组件需要在相同 memory、answerer、judge 和预算下分别消融。
+现有 90.8% LoCoMo 与 87.0% LongMemEval-S 结果来自此前实现，不能自动归因于当前 Writer/Manager、Recent Memory、Core Memory、Git/cursor 事务、容量校准、BM25 或 Embedding。新组件需要在相同 memory、answerer、judge 和预算下分别消融。
 
 ## 待确定项
 
@@ -89,12 +89,3 @@ Source 始终可以通过目录浏览、文件读取、`grep`、BM25 和 Embeddi
 2. Writer/Manager 轮数与 Core Memory 2K token 上限是否需要根据 development set 调整；
 3. 实际部署中是否需要加入基于查询成功率和检索成本的动态整理触发；
 4. 是否采用 Semble 风格的 BM25 + Embedding 融合与结构重排。
-
-## 历史演进
-
-- v1–v3：从自定义工具转向标准文件工具；
-- v4–v6：探索原文保留、事件抽取和代码路径约束；
-- v7：模型自组织与周期维护；
-- v8/v8.8：形成 topic + timeline + source refs 的主结构；
-- v9/v10：研究 writer 粒度、前序信息和整理频率；
-- v11：引入 agentic writer/manager、事务同步和检索验证。

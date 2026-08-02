@@ -337,7 +337,7 @@ def shared_protocol(preregistration: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "formal_methods": list(FORMAL_METHODS),
         "requested_model": EXPECTED_MODEL,
-        "prompt_template": "src.evaluation.prompts.ANSWER_PROMPT",
+        "prompt_template": "scripts.evaluation.prompts.ANSWER_PROMPT",
         "prompt_template_sha256": sha256_text(input_contract.ANSWER_PROMPT),
         "temperature": 0,
         "answer_max_tokens": ANSWER_MAX_TOKENS,
@@ -497,7 +497,7 @@ def validate_frozen_answer_input(
     require(
         interface.get("status") == "reserved_not_executed"
         and interface.get("requested_model") == EXPECTED_MODEL
-        and interface.get("prompt_template") == "src.evaluation.prompts.ANSWER_PROMPT"
+        and interface.get("prompt_template") == "scripts.evaluation.prompts.ANSWER_PROMPT"
         and interface.get("prompt_template_sha256")
         == sha256_text(input_contract.ANSWER_PROMPT)
         and interface.get("rendered_prompt_sha256") == sha256_text(prompt)

@@ -13,10 +13,10 @@ import pytest
 from scripts import audit_r115_beam_controls as auditor
 from scripts import r115_beam_control_contract as contract
 from scripts import run_r115_beam_controls as runner
-from src import openai_gpt55_flex_gateway as flex_gateway
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence
-from src.evaluation import durable_model_ledger as durable
-from src.evaluation import visible_token_budget as visible
+from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence
+from scripts.evaluation import durable_model_ledger as durable
+from scripts.evaluation import visible_token_budget as visible
 
 
 ROOT = Path(__file__).resolve().parents[1]

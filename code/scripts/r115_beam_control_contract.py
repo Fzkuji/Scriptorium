@@ -609,8 +609,8 @@ def source_hashes() -> dict[str, str]:
         "src/evaluation/visible_token_budget.py": ROOT / "src/evaluation/visible_token_budget.py",
         "src/evaluation/visible_token_audit.py": ROOT / "src/evaluation/visible_token_audit.py",
         "src/evaluation/durable_model_ledger.py": ROOT / "src/evaluation/durable_model_ledger.py",
-        "src/openai_gpt55_flex_gateway.py": ROOT / "src/openai_gpt55_flex_gateway.py",
-        "src/openai_gpt55_flex_gateway_evidence.py": ROOT / "src/openai_gpt55_flex_gateway_evidence.py",
+        "scripts/gateways/openai_gpt55_flex_gateway.py": ROOT / "scripts/gateways/openai_gpt55_flex_gateway.py",
+        "scripts/gateways/openai_gpt55_flex_gateway_evidence.py": ROOT / "scripts/gateways/openai_gpt55_flex_gateway_evidence.py",
     }
     missing = [name for name, path in paths.items() if not path.is_file()]
     if missing:

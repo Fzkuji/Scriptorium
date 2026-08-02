@@ -3,8 +3,8 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-import src.evaluation.llm_clients as clients
-from src.evaluation.llm_clients import LLMCallError, _should_trust_proxy, chat
+import scripts.evaluation.llm_clients as clients
+from scripts.evaluation.llm_clients import LLMCallError, _should_trust_proxy, chat
 
 
 def _response(*, choices=None, finish_reason="stop", refusal=None):

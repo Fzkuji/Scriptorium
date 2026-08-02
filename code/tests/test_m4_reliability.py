@@ -17,7 +17,7 @@ from scripts.run_m4_failure_analysis import RULE_VERSION, calculate as calculate
 from scripts.run_m4_statistics import calculate as calculate_statistics
 from scripts.run_m4_statistics import atomic_json_no_clobber
 from scripts.score_locomo_human_agreement import calculate as calculate_agreement
-from src.evaluation.m4_reliability import (
+from scripts.evaluation.m4_reliability import (
     ReliabilityError,
     analyze_comparison,
     attribute_failure,

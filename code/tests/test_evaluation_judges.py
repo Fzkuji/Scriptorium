@@ -1,7 +1,7 @@
 import pytest
 
-import src.evaluation.judges as judges
-from src.evaluation.judges import _parse_label, _parse_yes_no_strict
+import scripts.evaluation.judges as judges
+from scripts.evaluation.judges import _parse_label, _parse_yes_no_strict
 
 
 def _chat_usage(prompt_tokens, requested, response, response_id):

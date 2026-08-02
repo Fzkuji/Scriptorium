@@ -75,6 +75,9 @@ Topic Markdown 解析和渲染；`retrieval/` 负责 grep、BM25、Embedding 和
 Agent；`runtime/` 负责在线处理状态、token 计数和自动派生视图。`src/` 不包含
 benchmark adapters、评估程序或网关服务；这些可执行程序分别归入
 `scripts/adapters/`、`scripts/evaluation/` 和 `scripts/gateways/`。
+`code/src/evaluation` 仅保留为指向 `../scripts/evaluation` 的相对链接，使哈希锁定且
+不可修改的 `scripts/eval_full.py` 继续解析原导入路径；评测实现只维护在
+`scripts/evaluation/`，该链接不属于 NativeMem 核心 API。
 
 ## 入口
 
@@ -158,6 +161,8 @@ code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json
 仓库根目录的 `src -> code/src`、`scripts -> code/scripts`、`tests -> code/tests`
 等仍有实际目标的相对链接继续保留；`experiments` 链接随目录删除。保留的链接只
 解决仓库路径兼容，不再承担 NativeMem 版本兼容。
+`code/src/evaluation -> ../scripts/evaluation` 是唯一的包内兼容链接，只服务于保持
+`scripts/eval_full.py` 原文件字节不变。
 历史结果中的代码哈希和旧路径不重写；需要复现旧版本时使用 Git 提交
 `31cc34c` 或更早提交。
 

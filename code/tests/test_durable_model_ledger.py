@@ -7,14 +7,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.evaluation.durable_model_ledger import (
+from scripts.evaluation.durable_model_ledger import (
     DurableLedgerError,
     DurableModelObserver,
     HashChainLedger,
     ledger_state,
     read_ledger,
 )
-from src.evaluation.visible_token_budget import TokenCounter
+from scripts.evaluation.visible_token_budget import TokenCounter
 
 
 class FakeResponse:

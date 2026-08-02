@@ -27,7 +27,7 @@ if str(SCRIPTS) not in sys.path:
 
 import longmemeval_m1_contract as base  # noqa: E402
 import run_longmemeval_m1_baselines as base_runner  # noqa: E402
-from src.evaluation import durable_model_ledger as durable  # noqa: E402
+from scripts.evaluation import durable_model_ledger as durable  # noqa: E402
 
 
 BACKEND_RUN_SCHEMA = "longmemeval-m1-backend-run-v1"

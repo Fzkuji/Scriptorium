@@ -1,4 +1,4 @@
-from src.evaluation.evaluate import aggregate_efficiency
+from scripts.evaluation.evaluate import aggregate_efficiency
 
 
 def test_efficiency_aggregates_every_independent_build_unit():

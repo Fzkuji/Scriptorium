@@ -32,9 +32,9 @@ for entry in (ROOT, SCRIPTS):
         sys.path.insert(0, str(entry))
 
 from scripts import r115_beam_control_contract as contract  # noqa: E402
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
-from src.evaluation import durable_model_ledger as durable  # noqa: E402
-from src.evaluation import visible_token_budget as visible  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
+from scripts.evaluation import durable_model_ledger as durable  # noqa: E402
+from scripts.evaluation import visible_token_budget as visible  # noqa: E402
 
 
 DEFAULT_OUTPUT = ROOT / "results/paper-experiments-20260714/r115-beam-controls"
@@ -574,7 +574,7 @@ def create_preregistration(output_path: Path) -> dict[str, Any]:
             "formal_model_calls_require_explicit_allow": True,
             "base_url": "derived_only_from_validated_Flex_gateway_root",
             "provider_contract": (
-                "src.openai_gpt55_flex_gateway_evidence.active_contract"
+                "scripts.gateways.openai_gpt55_flex_gateway_evidence.active_contract"
             ),
             "exclusive_prefix_window": (
                 "capture_start/capture_end plus exact consumer request IDs"

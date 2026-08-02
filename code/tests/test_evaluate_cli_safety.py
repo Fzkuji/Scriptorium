@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from src.evaluation import evaluate
+from scripts.evaluation import evaluate
 
 
 def _input(path):

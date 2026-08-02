@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from src.evaluation.prompts import ANSWER_PROMPT
-from src.evaluation.visible_token_budget import DeliveryResult, TokenCounter
+from scripts.evaluation.prompts import ANSWER_PROMPT
+from scripts.evaluation.visible_token_budget import DeliveryResult, TokenCounter
 
 
 SCHEMA_VERSION = "controlled-locomo-answer-v1"

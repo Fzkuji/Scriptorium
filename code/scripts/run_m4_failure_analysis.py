@@ -20,7 +20,7 @@ from scripts.run_m4_statistics import (  # noqa: E402
     read_json,
     sha256_file,
 )
-from src.evaluation.m4_reliability import (  # noqa: E402
+from scripts.evaluation.m4_reliability import (  # noqa: E402
     FAILURE_LABELS,
     ReliabilityError,
     attribute_failure,

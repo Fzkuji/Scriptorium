@@ -6,22 +6,13 @@ from pathlib import Path
 
 import pytest
 
-# 让 tests 能 import src.nativemem
+# 让 tests 能 import 当前 src 与 scripts package。
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "src"))
 sys.path.insert(0, _ROOT)
 
 _DATA = os.path.join(_ROOT, "benchmarks", "locomo", "data", "locomo10.json")
 
-
-@pytest.fixture(autouse=True)
-def _article_rewrite_off_by_default(monkeypatch):
-    """整理环节（分节 / 全文重写）默认全关——它们在 build 里走真实模型 client，
-    忘了 patch 的测试会误打真实 API。要测它的用例自行 setenv on（并 fake client）。"""
-    monkeypatch.setenv("NATIVEMEM_V8_ARTICLE", "off")
-    monkeypatch.setenv("NATIVEMEM_V8_SECTIONS", "off")
-    monkeypatch.setenv("NATIVEMEM_V8_MERGE_LINES", "off")
-    monkeypatch.setenv("NATIVEMEM_V8_TIDY_COMBINED", "off")
 
 @pytest.fixture
 def locomo_session():
@@ -36,7 +27,7 @@ class _FakeTransport:
         self.calls = 0
 
     def send(self, payload):
-        from src import openai_gpt55_flex_gateway as gateway
+        from scripts.gateways import openai_gpt55_flex_gateway as gateway
 
         self.calls += 1
         request = json.loads(payload)
@@ -67,7 +58,7 @@ class _FakeTransport:
 
 class FakeFlexEvidenceProvider:
     def __init__(self, root: Path):
-        from src import openai_gpt55_flex_gateway as gateway
+        from scripts.gateways import openai_gpt55_flex_gateway as gateway
 
         self.gateway = gateway.GPT55FlexGateway(
             result_root=root / "fake-flex-gateway",
@@ -95,8 +86,8 @@ class FakeFlexEvidenceProvider:
 
     def close_window(self, request_label: str | None = None):
         """Create a valid local-only provider window for integration fixtures."""
-        from src import openai_gpt55_flex_gateway as gateway
-        from src import openai_gpt55_flex_gateway_evidence as evidence
+        from scripts.gateways import openai_gpt55_flex_gateway as gateway
+        from scripts.gateways import openai_gpt55_flex_gateway_evidence as evidence
 
         start = evidence.capture_start(self.root)
         response = None
@@ -134,8 +125,8 @@ class FakeFlexEvidenceProvider:
         }
 
     def attach(self, run_dir: Path, manifest: dict, run_id: str):
-        from src import openai_gpt55_flex_gateway as gateway
-        from src import openai_gpt55_flex_gateway_evidence as evidence
+        from scripts.gateways import openai_gpt55_flex_gateway as gateway
+        from scripts.gateways import openai_gpt55_flex_gateway_evidence as evidence
 
         start = evidence.capture_start(self.root)
         status, response = self.gateway.handle({

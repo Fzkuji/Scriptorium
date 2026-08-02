@@ -22,11 +22,11 @@ import controlled_locomo_answer_contract as answer_contract  # noqa: E402
 import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
 import longmemeval_m1_contract as input_contract  # noqa: E402
 import longmemeval_shared_answer_contract as contract  # noqa: E402
-from src.evaluation.durable_model_ledger import (  # noqa: E402
+from scripts.evaluation.durable_model_ledger import (  # noqa: E402
     DurableLedgerError,
     read_proxy_events,
 )
-from src import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
+from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
 
 
 def _inside(root: Path, relative: Any, *, label: str, directory: bool) -> Path:
