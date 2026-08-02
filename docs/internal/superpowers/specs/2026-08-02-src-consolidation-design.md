@@ -51,13 +51,14 @@ code/
 │   ├── runtime/
 │   │   ├── online.py
 │   │   ├── state.py
-│   │   └── derived_views.py
-│   ├── adapters/
-│   ├── evaluation/
-│   └── providers/
+│   │   ├── derived_views.py
+│   │   └── tokenization.py
 ├── scripts/                     # 运行命令、benchmark 配置和分析代码
+│   ├── adapters/
 │   ├── analysis/
 │   ├── configs/
+│   ├── evaluation/
+│   ├── gateways/
 │   ├── model_capacity/
 │   │   └── calibrate_writer.py
 │   └── nativemem/
@@ -71,8 +72,9 @@ code/
 
 `management/` 负责记忆写入、整理、来源归档、事务与校验；`markdown/` 负责
 Topic Markdown 解析和渲染；`retrieval/` 负责 grep、BM25、Embedding 和检索
-Agent；`runtime/` 负责在线处理状态和自动派生视图。通用 benchmark adapters、
-evaluation 和 provider clients 保持独立。
+Agent；`runtime/` 负责在线处理状态、token 计数和自动派生视图。`src/` 不包含
+benchmark adapters、评估程序或网关服务；这些可执行程序分别归入
+`scripts/adapters/`、`scripts/evaluation/` 和 `scripts/gateways/`。
 
 ## 入口
 
