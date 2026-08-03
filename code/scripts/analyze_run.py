@@ -23,12 +23,38 @@ def analyze(run_dir):
             cats.setdefault(c, [0, 0]); cats[c][0] += ok; cats[c][1] += 1
         print(f"  分数: n={n} 标准={std/n*100:.1f} 严格={strict/n*100:.1f} 弃答={ab}")
         print("  分项:", {CAT.get(c, c): f"{a/b*100:.1f}" for c, (a, b) in sorted(cats.items())})
+    # 旧格式:build 统计塞在 sample*_questions.json 的 _build_stats 记录里。
     for qf in sorted(glob.glob(os.path.join(run_dir, "sample*_questions.json"))):
         recs = json.load(open(qf))
-        b = recs[0] if recs and recs[0].get("question_id") == "_build_stats" else None
-        if b:
+        b = recs[0] if recs and isinstance(recs, list) and isinstance(recs[0], dict) \
+            and recs[0].get("question_id") == "_build_stats" else None
+        if b and "build_time_s" in b:
             print(f"  build[{os.path.basename(qf)}]: {b['build_time_s']/60:.0f}min "
                   f"{b['build_calls']}调用 out={b['build_tokens_out']/1e6:.2f}M | {b.get('notes','')}")
+    # 当前格式:build.json 独立成文件,键名也换了。
+    bp = os.path.join(run_dir, "build.json")
+    if os.path.exists(bp):
+        b = json.load(open(bp))
+        secs = b.get("wall_time_s") or 0
+        out = b.get("output_tokens") or 0
+        line = (f"  build: {secs/60:.0f}min {b.get('calls', 0)}调用 "
+                f"out={out/1e6:.2f}M events={b.get('event_count', 0)}")
+        mem = b.get("memory") or {}
+        if mem:
+            line += (f" | 库 {mem.get('files', 0)}文件"
+                     f"(topic {mem.get('topic_files', 0)}"
+                     f"/timeline {mem.get('timeline_files', 0)}"
+                     f"/source {mem.get('source_files', 0)})")
+        print(line)
+    pp = os.path.join(run_dir, "performance.json")
+    if os.path.exists(pp):
+        u = (json.load(open(pp)).get("usage") or {}).get("totals") or {}
+        if u:
+            # estimated 用你给的单价;SDK 那个按 Anthropic 价折算,不是账单。
+            print(f"  成本: estimated=${u.get('estimated_cost_usd', 0):.4f} "
+                  f"in={u.get('input_tokens', 0)/1e6:.2f}M "
+                  f"out={u.get('output_tokens', 0)/1e6:.2f}M "
+                  f"cache_read={u.get('cache_read_tokens', 0)/1e6:.2f}M")
     for md in sorted(glob.glob(os.path.join(run_dir, "memory_sample*"))):
         files = glob.glob(md + "/**/*.md", recursive=True)
         lines = [l for f in files for l in open(f) if l.strip() and not l.strip().startswith("#")]
