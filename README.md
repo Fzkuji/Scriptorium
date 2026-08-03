@@ -101,29 +101,68 @@ code is classified under `scripts/`; generated analysis is stored under
 for the hash-locked `code/scripts/eval_full.py`; evaluation implementation is
 maintained only under `code/scripts/evaluation`.
 
-## Basic commands
+## Running an experiment
 
-Run commands from the repository root:
+Every runner takes its settings from a JSON config, so a run is one command and
+no credential reaches your shell history. Copy the example and edit it:
+
+```bash
+cp scripts/configs/locomo.example.json scripts/configs/my-run.json
+```
+
+Point `api_key_file` and `judge_api_key_file` at files **outside** the
+repository. Relative paths inside a config resolve against the config file, so
+a config can be moved together with its inputs.
+
+```bash
+# 1. Measure how much input this model's Writer handles reliably
+python -m scripts.model_capacity.calibrate_writer \
+  --config scripts/configs/model_capacity.example.json
+
+# 2. Build memory for one conversation and evaluate it
+python scripts/nativemem/run_locomo.py --config scripts/configs/my-run.json
+
+# 3. Same run, build only, to inspect the memory before spending on answers
+python scripts/nativemem/run_locomo.py --config scripts/configs/my-run.json \
+  --build-only
+```
+
+Any config value can be overridden on the command line, which is convenient for
+sweeps:
+
+```bash
+for sample in conv-50 conv-51 conv-52; do
+  python scripts/nativemem/run_locomo.py \
+    --config scripts/configs/my-run.json \
+    --sample-id "$sample" \
+    --output-dir "results/formal/sweep-$sample"
+done
+```
+
+`run_longmemeval.py` accepts `--config` the same way. Run
+`python scripts/nativemem/run_locomo.py --help` for the full option list.
+
+A run writes `status.json`, `build.json`, `call_log.json`, `performance.json`
+and `eval_full.json` into its output directory, and is resumable: rerunning the
+same command skips completed work.
+
+### Reading the cost numbers
+
+`performance.json` reports two different things. `estimated_cost_usd` uses the
+prices you supplied and is the one to trust. `anthropic_equivalent_cost_usd`
+comes from the Claude Agent SDK, which prices every trajectory at Anthropic's
+rates even when `base_url` points somewhere else — it is not what you were
+billed.
+
+## Other commands
 
 ```bash
 # Layout and transfer check
 python scripts/verify_portable_layout.py
 
-# Current Scriptorium tests
+# Tests
 pytest -q \
-  tests/management \
-  tests/markdown \
-  tests/retrieval \
-  tests/runtime \
-  tests/scripts
-
-# Calibrate one model and Writer protocol
-python -m scripts.model_capacity.calibrate_writer \
-  --config scripts/configs/model_capacity.example.json
-
-# Inspect benchmark runner parameters
-python scripts/nativemem/run_locomo.py --help
-python scripts/nativemem/run_longmemeval.py --help
+  tests/management tests/markdown tests/retrieval tests/runtime tests/scripts
 ```
 
 The documentation entry is [`docs/Model-Aligned-Wiki.html`](docs/Model-Aligned-Wiki.html).

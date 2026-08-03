@@ -5,16 +5,25 @@ import signal
 from pathlib import Path
 from typing import Any
 
-from scripts.nativemem.common import stop_on_signal
+from scripts.nativemem.common import run_config, stop_on_signal
 from src import retrieval
 
 from .execution import answer_one, lme, run_pending
 from .results import load_completed_results, source_records, write_results
 
+# Config values naming a file resolve against the config file's directory.
+_PATH_KEYS = ("analysis", "data", "output_dir", "claude_cli")
+
 
 def main() -> int:
     signal.signal(signal.SIGTERM, stop_on_signal)
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description=(
+            "Re-answer frozen LongMemEval items. Pass --config to supply "
+            "defaults from a JSON file; explicit flags override it."
+        )
+    )
+    run_config.add_config_flag(parser)
     parser.add_argument("--analysis", type=Path, required=True)
     parser.add_argument("--data", type=Path, default=lme.DEFAULT_DATA)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -33,6 +42,10 @@ def main() -> int:
         choices=("native", *retrieval.CONDITION_VIEWS),
         default="native",
     )
+    try:
+        run_config.apply(parser, None, path_keys=_PATH_KEYS)
+    except run_config.ConfigError as exc:
+        parser.error(str(exc))
     args = parser.parse_args()
     if args.workers < 1:
         parser.error("--workers must be positive")

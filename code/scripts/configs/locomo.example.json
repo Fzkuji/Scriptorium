@@ -1,0 +1,15 @@
+{
+  "sample_id": "conv-50",
+  "output_dir": "../../results/formal/my-locomo-run",
+  "base_url": "https://provider.example/v1",
+  "model": "deepseek-v4-flash",
+  "api_key_file": "~/.config/scriptorium/provider-key.txt",
+  "judge_api_key_file": "~/.config/scriptorium/judge-key.txt",
+  "input_usd_per_million": 0.0,
+  "output_usd_per_million": 0.0,
+  "workers": 8,
+  "session_batch": 5,
+  "verify_writes": true,
+  "verify_every_sessions": 5,
+  "max_turns": 60
+}

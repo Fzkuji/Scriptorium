@@ -1,5 +1,6 @@
 """Shared utilities for NativeMem experiment entrypoints."""
 
+from . import run_config
 from .io import (
     atomic_json,
     read_json,
@@ -17,6 +18,7 @@ def stop_on_signal(_signum: object, _frame: object) -> None:
 __all__ = [
     "atomic_json",
     "read_json",
+    "run_config",
     "sha256_file",
     "source_tree_sha256",
     "stop_on_signal",

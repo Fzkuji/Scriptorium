@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.nativemem.common import source_tree_sha256  # noqa: E402
+from scripts.nativemem.common import run_config, source_tree_sha256  # noqa: E402
 from scripts.nativemem.longmemeval import support as common  # noqa: E402
 from scripts.nativemem.longmemeval.queue import (  # noqa: E402
     claim_item,
@@ -30,8 +30,13 @@ from src import management as memory  # noqa: E402
 from src import retrieval  # noqa: E402
 
 
+# Config values naming a file resolve against the config file's directory.
+_PATH_KEYS = ("data", "output_dir", "writer_calibration", "claim_db", "claude_cli")
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
+    run_config.add_config_flag(result)
     result.add_argument("--data", type=Path, default=common.DEFAULT_DATA)
     result.add_argument("--output-dir", type=Path, required=True)
     result.add_argument("--start", type=int, required=True)
@@ -69,7 +74,12 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    args = parser().parse_args()
+    built = parser()
+    try:
+        run_config.apply(built, None, path_keys=_PATH_KEYS)
+    except run_config.ConfigError as exc:
+        built.error(str(exc))
+    args = built.parse_args()
     if args.writer_input_token_cap is not None and args.writer_input_token_cap < 1:
         raise SystemExit("--writer-input-token-cap must be positive")
 

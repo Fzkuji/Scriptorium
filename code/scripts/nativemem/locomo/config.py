@@ -3,15 +3,23 @@
 import argparse
 from pathlib import Path
 
+from ..common import run_config
 
 CODE_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_DATA = CODE_ROOT / "benchmarks" / "locomo" / "data" / "locomo10.json"
 
+# Config values naming a file resolve against the config file's directory.
+_PATH_KEYS = ("data", "output_dir", "writer_calibration", "claude_cli")
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build and evaluate one LoCoMo conversation with NativeMem."
+        description=(
+            "Build and evaluate one LoCoMo conversation. Pass --config to "
+            "supply defaults from a JSON file; explicit flags override it."
+        )
     )
+    run_config.add_config_flag(parser)
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA)
     parser.add_argument("--sample-id", default="conv-50")
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -45,6 +53,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--evaluate", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument("--build-only", action="store_true")
+    try:
+        run_config.apply(parser, argv, path_keys=_PATH_KEYS)
+    except run_config.ConfigError as exc:
+        parser.error(str(exc))
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers must be positive")
