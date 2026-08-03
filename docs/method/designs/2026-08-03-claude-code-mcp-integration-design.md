@@ -1,6 +1,8 @@
 # Agent Memory Harness 与 Claude Code 集成技术规格
 
-状态：设计完成，待实现，2026-08-03。
+状态：已实现，2026-08-03。实现见 `code/agent_memory_harness/`、`code/src/management/transaction.py`、`code/src/management/patching.py`、`code/src/retrieval/inspect.py` 与 `claude-plugin/`。
+
+与本规格的差异：`memory_update` 的 patch 只支持 create、update、delete；`agent-memory validate` 在 scratch 副本中重建派生视图；plugin 的 `author` 按 manifest schema 写成 object。
 
 本文定义 Agent Memory Harness 的可安装 Python package、外部 stdio MCP server、Claude Code plugin 和交付文档。实现者应以本文为接口规格，不改变已有 Topic block contract、benchmark evaluator 或实验结果。
 
