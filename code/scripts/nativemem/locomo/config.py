@@ -44,6 +44,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--evaluate", action=argparse.BooleanOptionalAction, default=True
     )
+    parser.add_argument("--build-only", action="store_true")
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers must be positive")

@@ -177,7 +177,7 @@ class ClaudeCodeAgent:
                 details = "; ".join(final.errors or []) or (
                     final.result or final.subtype
                 )
-                if final.api_error_status is not None:
+                if getattr(final, "api_error_status", None) is not None:
                     details += f"; API status {final.api_error_status}"
                 details = details.replace(self.config.api_key, "[redacted]")
                 raise AgentExecutionError(details)

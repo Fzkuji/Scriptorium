@@ -126,7 +126,7 @@ def test_agent_preserves_api_status_when_cli_exits_after_error_result(
 ) -> None:
     async def fake_query(*, prompt, options):
         del prompt, options
-        yield ResultMessage(
+        message = ResultMessage(
             subtype="success",
             duration_ms=10,
             duration_api_ms=5,
@@ -134,8 +134,9 @@ def test_agent_preserves_api_status_when_cli_exits_after_error_result(
             num_turns=1,
             session_id="test-session",
             result=None,
-            api_error_status=529,
         )
+        message.api_error_status = 529
+        yield message
         raise Exception("Claude Code returned an error result: success")
 
     agent = ClaudeCodeAgent(

@@ -45,6 +45,47 @@ def test_pack_complete_messages_rejects_one_oversized_message():
         )
 
 
+def test_explicit_writer_cap_batches_without_a_calibration_file(
+    tmp_path: Path, monkeypatch
+):
+    from src import build
+    from src.runtime.tokenization import TokenCounter
+
+    captured = []
+    monkeypatch.setattr(
+        build.TokenCounter,
+        "resolve",
+        lambda **_kwargs: TokenCounter.utf8_bytes(requested_model="test-model"),
+    )
+    monkeypatch.setattr(
+        build.memory,
+        "write_sessions",
+        lambda *_args, **kwargs: captured.append(kwargs["sessions"]) or [],
+    )
+    conversation = {
+        "session_1": [{"speaker": "user", "text": "a" * 3_000, "dia_id": "D1:1"}],
+        "session_2": [{"speaker": "user", "text": "b" * 3_000, "dia_id": "D2:1"}],
+    }
+
+    build.build_memory(
+        conversation,
+        tmp_path,
+        agent=object(),
+        model="test-model",
+        config=build.BuildConfig(
+            session_batch=10,
+            writer_input_token_cap=10_000,
+            verify_writes=False,
+            final_manage=False,
+        ),
+    )
+
+    assert [[session["refs"] for session in batch] for batch in captured] == [
+        [[build.benchmark_source_id("D1:1")]],
+        [[build.benchmark_source_id("D2:1")]],
+    ]
+
+
 def test_capacity_selection_uses_full_workload_cost_not_largest_batch():
     from src.runtime.capacity import select_writer_capacities
 

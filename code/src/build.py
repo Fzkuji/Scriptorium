@@ -91,20 +91,26 @@ def build_memory(
     touched_topics: set[str] = set()
 
     verification_path = Path(memory_dir) / "verification.jsonl"
-    if config.calibration_path:
+    if config.calibration_path or config.writer_input_token_cap:
+        max_input_tokens = config.writer_input_token_cap
         capacity = WriterCapacity.load(
             config.calibration_path,
             model=model,
             writer_protocol_sha256=writer_protocol_sha256(),
-        )
+        ) if config.calibration_path else None
+        if capacity:
+            max_input_tokens = min(
+                capacity.safe_input_tokens,
+                max_input_tokens or capacity.safe_input_tokens,
+            )
         batches = pack_complete_messages(
             sessions,
-            max_input_tokens=min(
-                capacity.safe_input_tokens,
-                config.writer_input_token_cap or capacity.safe_input_tokens,
-            ),
+            max_input_tokens=max_input_tokens,
             render_batch=render_writer_input,
-            token_counter=TokenCounter.from_identity(capacity.tokenizer),
+            token_counter=(
+                TokenCounter.from_identity(capacity.tokenizer)
+                if capacity else TokenCounter.resolve(requested_model=model)
+            ),
         )
     else:
         batches = [

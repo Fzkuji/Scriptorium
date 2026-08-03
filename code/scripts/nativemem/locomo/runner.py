@@ -117,6 +117,22 @@ def main(argv: list[str] | None = None) -> int:
         atomic_json(build_path, build)
         atomic_json(call_log_path, backend.call_log)
 
+    if args.build_only:
+        atomic_json(status_path, {
+            "phase": "complete",
+            "stage": "building",
+            "sample": inventory,
+            "memory_dir": str(memory_dir),
+            "build": str(build_path),
+            "finished_at": utc_now(),
+        })
+        print(json.dumps({
+            "sample": inventory,
+            "memory_dir": str(memory_dir),
+            "build": str(build_path),
+        }, ensure_ascii=False))
+        return 0
+
     completed = load_completed(questions_path, sample_index)
     write_questions(questions_path, build, completed)
     turn_index = backend.build_turn_index(sample["conversation"])
