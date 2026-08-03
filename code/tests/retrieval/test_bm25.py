@@ -24,7 +24,40 @@ def _write_events(memory_dir: Path, events: list[dict]) -> None:
 
 
 def test_tokenize_is_lexical_and_unicode_aware():
-    assert tokenize("LGBTQ-support 2023 水族箱") == ["lgbtq", "support", "2023", "水族箱"]
+    assert tokenize("LGBTQ-support 2023 水族箱") == [
+        "lgbtq", "support", "2023",
+        # The whole run is kept, then made substring-searchable.
+        "水族箱", "水", "族", "箱", "水族", "族箱",
+    ]
+
+
+def test_tokenize_leaves_space_delimited_text_alone():
+    assert tokenize("cost accounting 2026") == ["cost", "accounting", "2026"]
+
+
+def test_tokenize_makes_cjk_substrings_searchable():
+    """A CJK run is one word-boundary token, so substrings need their own."""
+    tokens = tokenize("成本是怎么回事儿")
+
+    assert "成本是怎么回事儿" in tokens
+    assert "成本" in tokens
+    assert "成" in tokens
+
+
+def test_cjk_query_matches_a_longer_run(tmp_path: Path):
+    memory_dir = tmp_path / "memory"
+    topic = memory_dir / "topics/notes.md"
+    topic.parent.mkdir(parents=True)
+    topic.write_text(
+        "# Notes\n\n"
+        "用户问成本是怎么回事儿。[^e-cost] ^blockcjk\n\n"
+        "[^e-cost]: Time: `2026-08-03`; Sources: [D1:1](../sources/D1.md#d1-1)\n",
+        encoding="utf-8",
+    )
+
+    result = MemoryBM25Index(memory_dir, persist=False).search("成本")
+
+    assert result and result[0]["path"] == "topics/notes.md"
 
 
 def test_index_parses_topics_without_timeline_duplicates(tmp_path: Path):
@@ -118,6 +151,47 @@ def test_search_filters_path_and_date(tmp_path: Path):
     )
 
     assert [row["refs"] for row in result] == [["D1:3"]]
+
+
+@pytest.mark.parametrize("prefix", ["topics/", "topics", "Caroline", "topics/Caroline"])
+def test_path_prefix_accepts_root_and_relative_forms(tmp_path: Path, prefix: str):
+    """A prefix naming a root must not be rewritten into topics/topics."""
+    memory_dir = tmp_path / "memory"
+    _write_events(memory_dir, [
+        {
+            "when": "2023-05-07",
+            "summary": "Caroline joined a support group",
+            "dia_ids": ["D1:3"],
+            "topic": "Caroline/support",
+        },
+    ])
+
+    result = MemoryBM25Index(memory_dir).search(
+        "support group", path_prefix=prefix
+    )
+
+    assert [row["refs"] for row in result] == [["D1:3"]]
+
+
+def test_path_prefix_sources_root_excludes_topics(tmp_path: Path):
+    memory_dir = tmp_path / "memory"
+    _write_events(memory_dir, [
+        {
+            "when": "2023-05-07",
+            "summary": "Caroline joined a support group",
+            "dia_ids": ["D1:3"],
+            "topic": "Caroline/support",
+        },
+    ])
+
+    index = MemoryBM25Index(memory_dir)
+
+    from_sources = index.search("support group", path_prefix="sources/")
+    from_topics = index.search("support group", path_prefix="topics/")
+
+    assert from_sources and from_topics
+    assert all(row["path"].startswith("sources/") for row in from_sources)
+    assert all(row["path"].startswith("topics/") for row in from_topics)
 
 
 def test_parse_topic_indexes_each_evidence_supported_claim(tmp_path: Path):

@@ -27,6 +27,13 @@ from ..markdown.syntax import (
 
 _CACHE_NAME = ".nativemem-bm25.json"
 _WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
+# Scripts written without spaces, where a whole run would otherwise become one
+# token: CJK ideographs (plus extensions A/B and compatibility), hiragana,
+# katakana and hangul syllables.
+_UNSEGMENTED_RE = re.compile(
+    r"[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]"
+    r"|[\U00020000-\U0002a6df]"
+)
 _REF_RE = re.compile(r"D\d+:\d+(?:-(?:D\d+:)?\d+)?")
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _TEMPORAL_VALUE_RE = re.compile(r"\d{4}(?:-\d{2}(?:-\d{2})?)?")
@@ -53,8 +60,28 @@ class MemoryEvent:
 
 
 def tokenize(text: str) -> list[str]:
-    """Tokenize lexical text without language-model dependencies."""
-    return [token.casefold() for token in _WORD_RE.findall(text)]
+    """Tokenize lexical text without language-model dependencies.
+
+    Space-delimited scripts split on word boundaries. Scripts written without
+    spaces are additionally indexed per character and as adjacent pairs: a run
+    like "成本是怎么回事" is one word-boundary token, so a query for "成本"
+    would never match it, making such memory findable only by repeating the
+    whole run verbatim. Emitting the run, its characters and its bigrams keeps
+    exact-run matches ranked highest while making substrings retrievable.
+    """
+    tokens = []
+    for token in _WORD_RE.findall(text):
+        folded = token.casefold()
+        tokens.append(folded)
+        characters = _UNSEGMENTED_RE.findall(folded)
+        if len(characters) < 2 or len(characters) != len(folded):
+            continue
+        tokens.extend(characters)
+        tokens.extend(
+            first + second
+            for first, second in zip(characters, characters[1:])
+        )
+    return tokens
 
 
 def _clean_markdown(text: str) -> str:
@@ -95,6 +122,24 @@ def temporal_bounds(value: str) -> tuple[date, date]:
         return start, end
     except ValueError as error:
         raise ValueError(f"invalid temporal value: {value}") from error
+
+
+def _normalize_path_prefix(path_prefix: str) -> str:
+    """Resolve a search prefix against the indexed roots.
+
+    A prefix may name a root ("topics", "sources/"), a path under a root
+    ("topics/tooling"), or a path relative to topics ("tooling"). Compare the
+    bare root name, not the slash-stripped string: stripping "topics/" down to
+    "topics" and then testing for a "topics/" prefix fails, which silently
+    rewrote the most common query into "topics/topics" and matched nothing.
+    """
+    normalized = path_prefix.strip().strip("/")
+    if not normalized:
+        return ""
+    head = normalized.split("/", 1)[0]
+    if head in ("topics", "sources"):
+        return normalized
+    return f"topics/{normalized}"
 
 
 def _query_time_window(
@@ -508,9 +553,7 @@ class MemoryBM25Index:
         candidates = []
         for event in self.events:
             if path_prefix:
-                normalized = path_prefix.strip().strip("/")
-                if not normalized.startswith(("topics/", "sources/")):
-                    normalized = f"topics/{normalized}"
+                normalized = _normalize_path_prefix(path_prefix)
                 if not event.path.startswith(normalized):
                     continue
             if not _event_overlaps_window(event, time_window):

@@ -351,9 +351,10 @@ def _embedding_search(
             "EMBEDDING_UNAVAILABLE", f"embedding search unavailable: {exc}"
         ) from exc
     if path_prefix:
-        normalized = str(path_prefix).strip().strip("/")
-        if not normalized.startswith(("topics/", "sources/")):
-            normalized = f"topics/{normalized}"
+        # Same prefix semantics as BM25; embedding search has no built-in filter.
+        from .bm25 import _normalize_path_prefix
+
+        normalized = _normalize_path_prefix(str(path_prefix))
         hits = [
             hit for hit in hits
             if str(hit.get("path", "")).startswith(normalized)
