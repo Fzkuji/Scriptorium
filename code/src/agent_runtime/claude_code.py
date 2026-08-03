@@ -90,10 +90,14 @@ class ClaudeCodeAgent:
             raise ValueError("max_turns must be positive")
         if max_budget_usd is not None and max_budget_usd <= 0:
             raise ValueError("max_budget_usd must be positive")
+        # Resolve before building the coroutine: an exception raised while
+        # evaluating these arguments would leave _run() created but never
+        # awaited, which surfaces as a RuntimeWarning far from its cause.
+        resolved_cwd = Path(cwd).resolve()
         return asyncio.run(self._run(
             prompt=prompt,
             system_prompt=system_prompt,
-            cwd=Path(cwd).resolve(),
+            cwd=resolved_cwd,
             tools=tools or [],
             max_turns=max_turns,
             max_budget_usd=max_budget_usd,
