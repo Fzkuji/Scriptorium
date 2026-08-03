@@ -99,8 +99,18 @@ class SourceArchiveMixin:
         return f"[{label or ref}]({relative}#{anchor})"
 
     def archive_source_records(
-        self, records: list[SourceRecord]
+        self,
+        records: list[SourceRecord],
+        *,
+        root: Path | None = None,
     ) -> list[str]:
+        """Append records to the source tree.
+
+        Writes into ``memory_dir`` and refreshes the stage by default. Pass
+        ``root=self.stage_dir`` to archive inside an in-progress transaction
+        so sources are installed atomically with the topics that cite them.
+        """
+        target_root = self.memory_dir if root is None else Path(root)
         grouped: dict[Path, list[SourceRecord]] = {}
         for record in sorted(
             records,
@@ -118,7 +128,7 @@ class SourceArchiveMixin:
             grouped.setdefault(location[0], []).append(record)
         refs = []
         for relative, rows in grouped.items():
-            path = self.memory_dir / relative
+            path = target_root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             text = path.read_text(encoding="utf-8") if path.exists() else ""
             known = set(re.findall(r"<!-- source-id:([^>]+) -->", text))
@@ -143,5 +153,6 @@ class SourceArchiveMixin:
                     + "\n",
                     encoding="utf-8",
                 )
-        self._refresh_stage()
+        if root is None:
+            self._refresh_stage()
         return refs

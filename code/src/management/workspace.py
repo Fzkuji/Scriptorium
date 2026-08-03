@@ -12,9 +12,23 @@ from ..markdown import parse_topic_tree, topic_prose
 from .block_views import BlockViewsMixin
 from .config import MemoryConfig
 from .event_writing import EventWritingMixin
+from .patching import apply_patch
 from .source_archive import SourceArchiveMixin
 from .topic_normalization import TopicNormalizationMixin
 from .topic_reconciliation import TopicReconciliationMixin
+from .transaction import (
+    TransactionError,
+    TransactionLimits,
+    TransactionResult,
+    committed_baseline,
+    git_commit_state,
+    install_state,
+    parse_sources,
+    resolve_source_labels,
+    source_records,
+    workspace_revision,
+    workspace_write_lock,
+)
 
 
 class MemoryWorkspace(
@@ -117,6 +131,129 @@ class MemoryWorkspace(
             except Exception:
                 self._refresh_stage()
                 raise
+        return result
+
+    def revision(self) -> str:
+        """Fingerprint of the committed workspace, for optimistic concurrency."""
+        return workspace_revision(self.memory_dir)
+
+    def update(
+        self,
+        *,
+        base_revision: str,
+        patch: str,
+        sources: Any = None,
+        commit_message: str | None = None,
+        git_commit: str = "auto",
+        limits: TransactionLimits | None = None,
+    ) -> TransactionResult:
+        """Apply sources and a topic patch as one atomic transaction.
+
+        Sources are archived into the stage rather than ``memory_dir`` so that
+        evidence and the topics citing it become visible in the same install.
+        """
+        if git_commit not in ("auto", "on", "off"):
+            raise TransactionError(
+                "INVALID_ARGUMENT", "git_commit must be auto, on or off"
+            )
+        limits = limits or TransactionLimits()
+        if len(patch.encode("utf-8")) > limits.max_patch_bytes:
+            raise TransactionError(
+                "INVALID_ARGUMENT",
+                f"patch exceeds {limits.max_patch_bytes} bytes",
+            )
+        message = (commit_message or "Update memory").replace("\n", " ").strip()
+        message = "".join(
+            char for char in message if char.isprintable()
+        )[:limits.max_commit_message_chars] or "Update memory"
+        parsed_sources = parse_sources(sources, limits)
+
+        with workspace_write_lock(self.memory_dir):
+            current = workspace_revision(self.memory_dir)
+            if base_revision != current:
+                raise TransactionError(
+                    "CONCURRENT_UPDATE",
+                    "workspace changed since base_revision was read",
+                    details={"base_revision": base_revision, "revision": current},
+                )
+            self._refresh_stage()
+            before_files = self._committed_files()
+            before_units, before_block_ids = committed_baseline(self)
+            try:
+                records = source_records(parsed_sources)
+                mapping = {
+                    item.label: record.source_id
+                    for item, record in zip(parsed_sources, records)
+                }
+                if records:
+                    self.archive_source_records(records, root=self.stage_dir)
+                resolved = resolve_source_labels(patch, mapping)
+                changed = apply_patch(self.stage_dir, resolved)
+                install_state(self, before_units, before_block_ids)
+            except TransactionError:
+                self._refresh_stage()
+                raise
+            except Exception as exc:
+                self._refresh_stage()
+                raise TransactionError(
+                    "INVALID_TOPIC_FORMAT", str(exc)
+                ) from exc
+
+            after_files = self._committed_files()
+            changed_files = sorted(
+                set(changed)
+                | {
+                    path
+                    for path in set(before_files) | set(after_files)
+                    if before_files.get(path) != after_files.get(path)
+                }
+            )
+            result = TransactionResult(
+                revision=workspace_revision(self.memory_dir),
+                source_ids=mapping,
+                block_ids=dict(getattr(self, "last_block_id_map", {}) or {}),
+                evidence_ids=dict(
+                    getattr(self, "last_evidence_id_map", {}) or {}
+                ),
+                changed_files=changed_files,
+            )
+            if git_commit == "off":
+                return result
+            try:
+                commit = git_commit_state(self.memory_dir, message)
+            except Exception as exc:
+                if git_commit == "on":
+                    raise TransactionError(
+                        "GIT_COMMIT_FAILED",
+                        # Files are already installed; a failed commit does not
+                        # undo them and must not be reported as a rollback.
+                        f"memory committed but git commit failed: {exc}",
+                        details={"memory_committed": True, "git_committed": False},
+                    ) from exc
+                return result
+            if commit is None and git_commit == "on":
+                raise TransactionError(
+                    "GIT_COMMIT_FAILED",
+                    "memory committed but workspace is not a git repository",
+                    details={"memory_committed": True, "git_committed": False},
+                )
+            result.git_commit = commit
+            result.git_committed = commit is not None
+            result.revision = workspace_revision(self.memory_dir)
+            return result
+
+    def _committed_files(self) -> dict[str, str]:
+        root = self.memory_dir
+        result = {}
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.is_symlink():
+                continue
+            relative = path.relative_to(root)
+            if relative.parts and relative.parts[0].startswith(".nativemem"):
+                continue
+            result[relative.as_posix()] = hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
         return result
 
     def _workspace_fingerprint(self) -> str:

@@ -180,6 +180,11 @@ class BlockViewsMixin:
             shutil.rmtree(backup)
         backup.mkdir()
         relatives = (
+            # Sources are staged by the structured transaction so that new
+            # evidence installs together with the topics citing it. The
+            # experiment path stages an unmodified copy, so including it here
+            # is a no-op there.
+            Path("sources"),
             Path("topics"),
             Path("timeline"),
             Path("recent_events.jsonl"),

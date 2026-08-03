@@ -42,6 +42,9 @@ class TopicNormalizationMixin:
             counter += 1
 
     def _normalize_topic_edits(self, existing_block_ids: set[str]) -> None:
+        # Callers that need to report assigned IDs read these afterwards.
+        self.last_block_id_map: dict[str, str] = {}
+        self.last_evidence_id_map: dict[str, str] = {}
         topics = self.stage_dir / "topics"
         if not topics.exists():
             return
@@ -89,6 +92,8 @@ class TopicNormalizationMixin:
             )
             for placeholder in sorted(evidence_placeholders)
         }
+        self.last_block_id_map = dict(block_ids)
+        self.last_evidence_id_map = dict(evidence_ids)
         for path, original in texts.items():
             text = original
             for placeholder, stable in block_ids.items():
