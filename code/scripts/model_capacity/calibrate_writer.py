@@ -20,10 +20,20 @@ from src.management.api import render_writer_input, writer_protocol_sha256
 from src.runtime.capacity import (
     SCHEMA,
     MessageTooLargeError,
+    find_capacity_inversions,
     pack_complete_messages,
     select_writer_capacities,
 )
 from src.runtime.tokenization import TokenCounter
+
+# High enough that no level is decided by the turn budget. The measurement is
+# how much input the Writer handles, so turns must not be the binding limit.
+DEFAULT_MAX_TURNS = 500
+# Three trials per level, so a single flaky trial cannot decide a level.
+DEFAULT_TRIALS = 3
+# Probe facts have this exact shape, so a label in memory that was never in the
+# workload is one the model invented.
+ARCHIVE_CODE_RE = re.compile(r"ARCHIVE-[0-9A-F]{12}")
 
 
 def make_probe_workload(
@@ -111,6 +121,15 @@ def evaluate_probe(
     fact_coverage = (
         facts_covered / len(expected_facts) if expected_facts else 0.0
     )
+    # Recall alone cannot tell a faithful record from an invented one. Probe
+    # facts have a fixed shape, so any archive label in memory that was never
+    # in the workload was fabricated by the model.
+    written_facts = set(ARCHIVE_CODE_RE.findall(text))
+    fabricated_facts = sorted(written_facts - expected_facts)
+    fact_precision = (
+        len(written_facts & expected_facts) / len(written_facts)
+        if written_facts else 0.0
+    )
     written_blocks = sum(
         int(row.get("count", 0))
         for row in audit
@@ -119,14 +138,23 @@ def evaluate_probe(
     round_limit_reached = any(
         row.get("status") == "stopped" for row in audit
     )
+    # Judge the memory that was written, not how it was produced. An earlier
+    # rule also required written_blocks > 0, which counts newly created block
+    # IDs only: a trial that reorganized or extended existing blocks scored
+    # zero and failed with source_coverage and fact_coverage both at 1.0.
+    passed = (
+        coverage == 1.0 and fact_coverage == 1.0 and not fabricated_facts
+    )
     return {
-        "passed": (
-            coverage == 1.0
-            and fact_coverage == 1.0
-            and written_blocks > 0
-        ),
+        "passed": passed,
+        # A trial cut off by the turn limit proves nothing about capacity, so
+        # it is reported separately instead of counting as a capacity failure.
+        "inconclusive": round_limit_reached and not passed,
         "source_coverage": round(coverage, 6),
         "fact_coverage": round(fact_coverage, 6),
+        "fact_precision": round(fact_precision, 6),
+        "fabricated_fact_count": len(fabricated_facts),
+        "fabricated_facts": fabricated_facts[:10],
         "written_blocks": written_blocks,
         "audit_error_count": sum(
             row.get("status") == "error" for row in audit
@@ -213,6 +241,10 @@ def summarize_levels(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "round_limit_trials": sum(
                 bool(row.get("round_limit_reached")) for row in trials
             ),
+            # Trials cut off by the turn budget prove nothing about capacity.
+            "inconclusive_trials": sum(
+                bool(row.get("inconclusive")) for row in trials
+            ),
             "completion_rate": (
                 round(sum(
                     not bool(row.get("round_limit_reached")) for row in trials
@@ -227,6 +259,14 @@ def summarize_levels(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 round(min(fact_coverage), 6) if fact_coverage else None
             ),
             "fact_coverage_std": _rounded_std(fact_coverage),
+            "fact_precision_mean": _rounded_mean([
+                float(row["fact_precision"]) for row in trials
+                if "fact_precision" in row
+            ]),
+            "fabricated_fact_trials": sum(
+                int(row.get("fabricated_fact_count", 0) or 0) > 0
+                for row in trials
+            ),
             "workload_session_count": next(iter({
                 int(row["workload_session_count"])
                 for row in trials if "workload_session_count" in row
@@ -339,7 +379,11 @@ def main(argv: list[str] | None = None) -> int:
         cli_path=config.get("claude_cli"),
     )
     memory_config = management.MemoryConfig(
-        max_turns=int(config.get("max_turns", 20)),
+        # Deliberately far above what any level needs. A small candidate size
+        # is split into more batches and so needs more turns; a low ceiling
+        # therefore fails small sizes for running out of turns and made
+        # capacity look like it improved as input grew.
+        max_turns=int(config.get("max_turns", DEFAULT_MAX_TURNS)),
         max_budget_usd=(
             float(config["max_budget_usd"])
             if config.get("max_budget_usd") is not None
@@ -458,6 +502,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             }, ensure_ascii=False), flush=True)
     levels = summarize_levels(records)
+    trials_per_level = len(probe_ids)
+    inversions = find_capacity_inversions(levels)
     try:
         selected = select_writer_capacities(levels)
         safe_input_tokens = selected["recommended_input_tokens"]
@@ -469,6 +515,16 @@ def main(argv: list[str] | None = None) -> int:
         safe_input_tokens = None
         max_tested_passing_input_tokens = None
         status = "failed"
+    if inversions and status == "complete":
+        # Something other than capacity decided these levels, so the numbers
+        # are not a capacity curve and must not be consumed as one.
+        status = "inconsistent"
+        for smaller, larger in inversions:
+            print(
+                f"warning: {smaller} tokens failed while {larger} passed; "
+                "capacity cannot improve as input grows",
+                flush=True,
+            )
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = (
         args.results_root
@@ -492,6 +548,17 @@ def main(argv: list[str] | None = None) -> int:
         "messages_per_session": messages_per_session,
         "facts_per_session": facts_per_session,
         "context_sentences": context_sentences,
+        # Recorded so a result can be reproduced. Earlier artifacts omitted the
+        # turn budget, which made it impossible to tell afterwards whether a
+        # level failed on capacity or on turns.
+        "max_turns": memory_config.max_turns,
+        "max_budget_usd": memory_config.max_budget_usd,
+        "trials_per_level": trials_per_level,
+        # A larger input outperforming a smaller one is not a capacity curve.
+        "capacity_inversions": [
+            {"failing_candidate_tokens": smaller, "passing_candidate_tokens": larger}
+            for smaller, larger in inversions
+        ],
         "levels": levels,
         "probes": records,
         "totals": {

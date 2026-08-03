@@ -356,22 +356,22 @@ def test_probe_evaluation_requires_every_source_reference(tmp_path: Path):
         expected_facts={"FACT-ONE", "FACT-TWO"},
     )
 
-    assert failed == {
+    assert failed.items() >= {
         "passed": False,
         "source_coverage": 0.5,
         "fact_coverage": 0.0,
         "written_blocks": 1,
         "audit_error_count": 0,
         "round_limit_reached": False,
-    }
-    assert passed == {
+    }.items()
+    assert passed.items() >= {
         "passed": True,
         "source_coverage": 1.0,
         "fact_coverage": 1.0,
         "written_blocks": 1,
         "audit_error_count": 0,
         "round_limit_reached": False,
-    }
+    }.items()
 
 
 def test_probe_evaluation_accepts_a_corrected_error_when_final_memory_is_complete(
@@ -393,14 +393,14 @@ def test_probe_evaluation_accepts_a_corrected_error_when_final_memory_is_complet
         expected_facts={"Fact"},
     )
 
-    assert result == {
+    assert result.items() >= {
         "passed": True,
         "source_coverage": 1.0,
         "fact_coverage": 1.0,
         "written_blocks": 1,
         "audit_error_count": 1,
         "round_limit_reached": False,
-    }
+    }.items()
 
 
 def test_probe_evaluation_reports_an_unfinished_agent_run_separately(tmp_path: Path):

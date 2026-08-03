@@ -39,6 +39,19 @@ class WriterCapacity:
             raise ValueError("Writer capacity model does not match")
         if value.get("writer_protocol_sha256") != writer_protocol_sha256:
             raise ValueError("Writer capacity protocol does not match")
+        status = value.get("status")
+        if status not in (None, "complete"):
+            # "inconsistent" means a larger input outperformed a smaller one,
+            # so the numbers do not describe capacity and must not be used.
+            raise ValueError(
+                f"Writer capacity artifact is not usable: status={status}"
+            )
+        inversions = value.get("capacity_inversions") or []
+        if inversions:
+            raise ValueError(
+                f"Writer capacity artifact reports {len(inversions)} "
+                "capacity inversion(s); recalibrate before using it"
+            )
         safe_input_tokens = value.get("safe_input_tokens")
         if not isinstance(safe_input_tokens, int) or safe_input_tokens < 1:
             raise ValueError("safe_input_tokens must be a positive integer")
@@ -101,14 +114,41 @@ def pack_complete_messages(
     return batches
 
 
-def select_writer_capacities(levels: list[dict[str, Any]]) -> dict[str, int]:
-    """Select the cheapest fully correct level and the largest passing level."""
-    passing = [
-        level for level in levels
-        if level.get("pass_rate") == 1.0
+def is_passing_level(level: dict[str, Any]) -> bool:
+    return (
+        level.get("pass_rate") == 1.0
         and level.get("source_coverage_min") == 1.0
         and level.get("fact_coverage_min") == 1.0
-    ]
+    )
+
+
+def find_capacity_inversions(levels: list[dict[str, Any]]) -> list[tuple[int, int]]:
+    """Report (failing, passing) pairs where a larger input outperforms a smaller one.
+
+    Writer capacity cannot genuinely improve as the input grows, so such a pair
+    means something other than capacity decided the result — a turn budget, a
+    flaky trial, or too few trials. Reporting it prevents the largest passing
+    level from being read as the answer when smaller levels failed.
+    """
+    ordered = sorted(levels, key=lambda level: int(level["candidate_tokens"]))
+    inversions = []
+    for index, level in enumerate(ordered):
+        if is_passing_level(level):
+            continue
+        # Inconclusive levels were cut off, not out-of-capacity.
+        if int(level.get("inconclusive_trials", 0) or 0) >= int(level.get("trials", 0) or 0):
+            continue
+        smaller = int(level["candidate_tokens"])
+        for larger in ordered[index + 1:]:
+            if is_passing_level(larger):
+                inversions.append((smaller, int(larger["candidate_tokens"])))
+                break
+    return inversions
+
+
+def select_writer_capacities(levels: list[dict[str, Any]]) -> dict[str, int]:
+    """Select the cheapest fully correct level and the largest passing level."""
+    passing = [level for level in levels if is_passing_level(level)]
     if not passing:
         raise ValueError("no Writer capacity level completed the fixed workload")
     recommended = min(
