@@ -78,7 +78,9 @@ NativeMem 只采用三级记忆管理。
 
 每个档位运行两组内容等价但标识不同的 probe。内容通过要求最终权威 Topic/Core 状态覆盖全部预期事实及 source references；tool error 数和是否达到 agent round limit 单独记录，用于分析格式稳定性与停止行为，不覆盖最终内容判定。推荐输入预算在内容全部通过的档位中按整份工作负载的平均成本最低者选择，成本相同时再比较平均耗时；同时单独保存本次测试的最大通过档位。校准结果保存 model、Writer protocol hash、tokenizer identity、固定工作负载 hash、候选容量、批次数、调用次数、输入/输出 token、耗时、成本、内容覆盖率和 completion rate。构建入口通过 `BuildConfig.calibration_path` 显式读取结果，并验证 model 与 protocol hash；未提供校准文件时，`session_batch` 仍作为固定回退参数。
 
-当前 PackyAPI DeepSeek V4 Flash 校准使用两组相同规模的 20-session 工作负载，每组完整输入为 16,261 个本地计数 token。测试档位为 2K、4K、8K、10K、12K、14K 和 16K。16K 的四次内容通过率为 100%，平均每组 1 个批次、10 次模型调用、53.20 秒和 $0.03143，因而推荐为当前 Writer 输入预算；其 completion rate 为 75%，说明停止行为仍有波动。这里的 16K 只是当前 protocol 和工作负载下的推荐值及最大已测试通过值，不表示模型声明或实测的最大上下文长度。
+当前 PackyAPI DeepSeek V4 Flash + Claude Agent SDK 校准使用两组相同规模的 20-session 工作负载，每组 400 条消息、27,314 个本地计数 token。测试档位为 4K、8K、12K、16K、24K 和 32K，六档均为 2/2 完整通过。平均完整 workload 成本依次为 $0.02476、$0.01764、$0.01403、$0.01155、$0.00771 和 $0.00399；平均耗时依次为 353.0、264.8、223.6、157.9、93.7 和 64.7 秒。32K 档位单批处理完整 workload，因此产物将 27,314 tokens 记录为当前 `safe_input_tokens`，不表示模型声明或实测的最大上下文长度。
+
+真实 Conv-50 还包含持续增长的 Topic workspace 和多轮文件编辑。8K/30 轮与 4K/30 轮均达到 trajectory 上限，4K/60 轮才完成全部 30 个 session。因此 `BuildConfig.writer_input_token_cap` 可以在校准上限以下固定正式实验档位；输入容量与 trajectory 轮次必须分别在 development workload 上验证。
 
 该校准只控制增量写入批量，不增加记忆状态、运行时字段或检索方法。脚本位于 `code/scripts/model_capacity/calibrate_writer.py`，输出位于 `code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json`。
 
@@ -104,7 +106,7 @@ Writer、Manager、verification 和查询均作为 Claude Agent SDK trajectory �
 
 如果没有新的 incremental-writing commit，本次管理直接结束。全局管理不重新处理 Source Memory，也不改变 session cursor。
 
-Writer、verification、局部 Manager、全局 Manager 和查询统一默认最多执行 20 个模型轮次，并可设置单条 trajectory 的 `max_budget_usd`。停止原因、实际轮次、token、耗时和框架报告成本写入 audit 或调用日志。20 轮是安全上限，不要求 Agent 使用完，也不替代构建成本统计。
+Writer、verification、局部 Manager、全局 Manager 和查询默认最多执行 20 个模型轮次，也允许正式配置按 model profile 显式覆盖，并可设置单条 trajectory 的 `max_budget_usd`。DeepSeek V4 Flash 的 Conv-50 诊断使用 60 轮上限；查询实际最多 29 轮，而 Writer 曾在 30 轮配置下未完成。停止原因、实际轮次、token、耗时和框架报告成本写入 audit 或调用日志。
 
 ## 3. Query-Time Access
 

@@ -51,6 +51,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--claim-db", type=Path)
     result.add_argument("--session-batch", type=int, default=5)
     result.add_argument("--writer-calibration", type=Path)
+    result.add_argument("--writer-input-token-cap", type=int)
     result.add_argument("--local-reorg-every-sessions", type=int, default=5)
     result.add_argument(
         "--verify-writes", action=argparse.BooleanOptionalAction, default=True
@@ -69,6 +70,8 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
+    if args.writer_input_token_cap is not None and args.writer_input_token_cap < 1:
+        raise SystemExit("--writer-input-token-cap must be positive")
 
     data_path = args.data.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
@@ -100,6 +103,7 @@ def main() -> int:
             str(args.writer_calibration.expanduser().resolve())
             if args.writer_calibration else None
         ),
+        writer_input_token_cap=args.writer_input_token_cap,
         local_reorg_every_sessions=args.local_reorg_every_sessions,
         verify_writes=args.verify_writes,
         verify_every_sessions=args.verify_every_sessions,

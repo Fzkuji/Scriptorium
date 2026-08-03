@@ -27,6 +27,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-usd-per-million", type=float, required=True)
     parser.add_argument("--session-batch", type=int, default=5)
     parser.add_argument("--writer-calibration", type=Path)
+    parser.add_argument("--writer-input-token-cap", type=int)
     parser.add_argument("--local-reorg-every-sessions", type=int, default=5)
     parser.add_argument("--verify-every-sessions", type=int, default=5)
     parser.add_argument(
@@ -50,6 +51,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--max-turns must be positive")
     if args.max_budget_usd is not None and args.max_budget_usd <= 0:
         parser.error("--max-budget-usd must be positive")
+    if args.writer_input_token_cap is not None and args.writer_input_token_cap < 1:
+        parser.error("--writer-input-token-cap must be positive")
     if args.input_usd_per_million < 0 or args.output_usd_per_million < 0:
         parser.error("model prices must be non-negative")
     return args

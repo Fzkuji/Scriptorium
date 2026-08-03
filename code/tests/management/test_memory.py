@@ -180,7 +180,7 @@ def test_shell_normalizes_an_unquoted_evidence_time(tmp_path: Path):
     assert parse_topic_tree(tmp_path / "topics")[0].evidence[0].when == "2026-01-01"
 
 
-def test_shell_rejects_model_invented_block_id(tmp_path: Path):
+def test_shell_replaces_model_invented_block_id(tmp_path: Path):
     workspace = MemoryWorkspace(tmp_path)
     workspace.archive_sessions([{
         "observation_date": "2023-05-03",
@@ -188,18 +188,18 @@ def test_shell_rejects_model_invented_block_id(tmp_path: Path):
         "refs": ["D1:1"],
     }])
 
-    with pytest.raises(
-        ValueError,
-        match=r"new memory blocks must use \^new-block-<label>",
-    ):
-        workspace.shell(
-            "mkdir -p topics/people && "
-            "printf '%s\\n' '# Dave' '' "
-            "'Dave works at a local garage.[^new-evidence-work] "
-            "^1478d194b29awork' '' "
-            "'[^new-evidence-work]: Time: `2023-05-03`; Sources: D1:1' "
-            "> topics/people/dave.md"
-        )
+    workspace.shell(
+        "mkdir -p topics/people && "
+        "printf '%s\\n' '# Dave' '' "
+        "'Dave works at a local garage.[^new-evidence-work] "
+        "^1478d194b29awork' '' "
+        "'[^new-evidence-work]: Time: `2023-05-03`; Sources: D1:1' "
+        "> topics/people/dave.md"
+    )
+
+    topic = (tmp_path / "topics/people/dave.md").read_text()
+    assert "1478d194b29awork" not in topic
+    assert re.search(r"\^[0-9a-f]{8}$", topic, re.MULTILINE)
 
 
 def test_shell_rejects_topic_file_link_without_block_target(tmp_path: Path):

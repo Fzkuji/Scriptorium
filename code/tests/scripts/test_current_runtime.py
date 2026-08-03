@@ -1,5 +1,8 @@
 import json
+from types import SimpleNamespace
 from pathlib import Path
+
+import pytest
 
 from src import build as adapter
 
@@ -207,3 +210,69 @@ def test_nativemem_management_exports_the_current_writing_api():
     assert hasattr(memory, "__path__")
     assert callable(memory.write_sessions)
     assert callable(memory.verify_session)
+
+
+def test_locomo_runner_records_build_failure_and_partial_usage(
+    tmp_path: Path, monkeypatch
+):
+    from scripts.nativemem.locomo import runner
+
+    data_path = tmp_path / "locomo.json"
+    data_path.write_text("[]", encoding="utf-8")
+    output_dir = tmp_path / "run"
+    args = SimpleNamespace(
+        data=data_path,
+        output_dir=output_dir,
+        sample_id="conv-test",
+        core_max_tokens=2_000,
+        recent_limit=50,
+        max_turns=20,
+        max_budget_usd=None,
+        session_batch=5,
+        writer_calibration=None,
+        writer_input_token_cap=None,
+        local_reorg_every_sessions=5,
+        verify_writes=True,
+        verify_every_sessions=5,
+        final_manage=False,
+        verify_sources=True,
+        base_url="https://example.test/v1",
+        model="test-model",
+        api_key="test-key",
+        claude_cli=None,
+    )
+
+    class FailingRuntime:
+        call_log = [{"phase": "writer", "calls": 2}]
+
+        def build_memory(self, *_args, **_kwargs):
+            raise RuntimeError("writer reached its turn limit")
+
+    monkeypatch.setattr(runner, "parse_args", lambda _argv=None: args)
+    monkeypatch.setattr(runner, "verify_evaluator", lambda: None)
+    monkeypatch.setattr(
+        runner,
+        "load_sample",
+        lambda *_args: (0, {"sample_id": "conv-test", "conversation": {}, "qa": []}),
+    )
+    monkeypatch.setattr(
+        runner,
+        "sample_inventory",
+        lambda _sample: {"sample_id": "conv-test"},
+    )
+    monkeypatch.setattr(
+        runner.retrieval,
+        "create_runtime",
+        lambda *_args, **_kwargs: FailingRuntime(),
+    )
+
+    with pytest.raises(RuntimeError, match="turn limit"):
+        runner.main([])
+
+    assert json.loads((output_dir / "call_log.json").read_text()) == [
+        {"phase": "writer", "calls": 2}
+    ]
+    status = json.loads((output_dir / "status.json").read_text())
+    assert status["phase"] == "failed"
+    assert status["stage"] == "building"
+    assert status["error"] == "RuntimeError: writer reached its turn limit"

@@ -45,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
             str(args.writer_calibration.expanduser().resolve())
             if args.writer_calibration else None
         ),
+        writer_input_token_cap=args.writer_input_token_cap,
         local_reorg_every_sessions=args.local_reorg_every_sessions,
         verify_writes=args.verify_writes,
         verify_every_sessions=args.verify_every_sessions,
@@ -85,9 +86,24 @@ def main(argv: list[str] | None = None) -> int:
         if memory_dir.exists() and any(memory_dir.iterdir()):
             raise RuntimeError("memory exists without a complete build record")
         started = time.monotonic()
-        _, event_count = backend.build_memory(
-            sample["conversation"], str(memory_dir)
-        )
+        try:
+            _, event_count = backend.build_memory(
+                sample["conversation"], str(memory_dir)
+            )
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            for secret in (args.api_key, getattr(args, "judge_api_key", None)):
+                if secret:
+                    error = error.replace(secret, "[redacted]")
+            atomic_json(call_log_path, backend.call_log)
+            atomic_json(status_path, {
+                "phase": "failed",
+                "stage": "building",
+                "sample": inventory,
+                "error": error,
+                "finished_at": utc_now(),
+            })
+            raise
         build = build_record(
             sample_index=sample_index,
             sample=sample,

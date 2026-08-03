@@ -193,15 +193,27 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
     <thead><tr><th>步骤</th><th>处理</th><th>判定</th></tr></thead>
     <tbody>
       <tr><td>Fixed workload</td><td>构造两组与 benchmark 无关、规模相同的合成事实 workload；每组包含固定的 20 个 session</td><td>所有候选容量处理完全相同的全部消息和 source references</td></tr>
-      <tr><td>Capacity sweep</td><td>按 <code>2K / 4K / 8K / 10K / 12K / 14K / 16K</code> 等候选容量，将 Writer system prompt、批量写入提示和消息一起计数</td><td>容量只改变完成整份 workload 所需的批次数，不改变总任务</td></tr>
+      <tr><td>Capacity sweep</td><td>按 <code>4K / 8K / 12K / 16K / 24K / 32K</code> 候选容量，将 Writer system prompt、批量写入提示和消息一起计数</td><td>容量只改变完成整份 workload 所需的批次数，不改变总任务</td></tr>
       <tr><td>Message-boundary packing</td><td>按原顺序贪心加入完整 message；下一条 message 导致超限时，将其整体放入下一批</td><td>不截断 message 正文；session 可以跨批次；单条完整 message 超限时明确失败</td></tr>
       <tr><td>Writer execution</td><td>每个候选容量分别运行两组 probe，统计整份 workload 的 API 调用、输入/输出 token、耗时、成本、写入 blocks 和格式错误</td><td>最终状态须覆盖全部预期事实和 source references；tool error 与 round limit 作为独立诊断项</td></tr>
       <tr><td>Budget selection</td><td>只比较两组 probe 内容均完整的档位</td><td>以平均总成本最低者作为推荐预算，成本相同时比较平均总耗时；最大已测试通过档位另行记录</td></tr>
       <tr><td>Build integration</td><td>构建入口读取 <code>calibration.json</code>，校验 model、Writer protocol hash 和 tokenizer identity，再按推荐 token 上限分批</td><td>只在原 session 的最后一条 message 完成后执行该 session 的验证与管理计数</td></tr>
     </tbody>
   </table></div>
+  <p>2026-08-03 的 PackyAPI DeepSeek V4 Flash + Claude Agent SDK 校准使用 20 个 session、每个 session 20 条消息，共 27,314 个本地计数 token；每个档位运行两次，事实与来源覆盖率均为 100%。下表中的调用、耗时与成本均是处理完整固定 workload 的单次平均值，而不是单批统计。</p>
+  <div class="table-scroll"><table tabindex="0">
+    <thead><tr><th>Writer 输入上限</th><th>平均批数</th><th>通过</th><th>平均模型轮次</th><th>平均耗时</th><th>PackyAPI 估算成本</th></tr></thead>
+    <tbody>
+      <tr><td>4K</td><td>9</td><td>2/2</td><td>80.0</td><td>353.0 s</td><td>$0.02476</td></tr>
+      <tr><td>8K</td><td>4</td><td>2/2</td><td>44.0</td><td>264.8 s</td><td>$0.01764</td></tr>
+      <tr><td>12K</td><td>3</td><td>2/2</td><td>37.5</td><td>223.6 s</td><td>$0.01403</td></tr>
+      <tr><td>16K</td><td>2</td><td>2/2</td><td>22.5</td><td>157.9 s</td><td>$0.01155</td></tr>
+      <tr><td>24K</td><td>2</td><td>2/2</td><td>15.0</td><td>93.7 s</td><td>$0.00771</td></tr>
+      <tr><td>32K</td><td>1</td><td>2/2</td><td>9.5</td><td>64.7 s</td><td>$0.00399</td></tr>
+    </tbody>
+  </table></div>
   <p>校准产物保存 provider、model、Writer protocol hash、tokenizer、固定 workload hash、候选容量、批次数、调用次数、输入/输出 token、耗时、成本、事实与来源覆盖率、completion rate、推荐预算 <code>safe_input_tokens</code> 以及最大已测试通过档位。<code>BuildConfig.calibration_path</code> 指向该文件；未提供时保留显式 <code>session_batch</code> 作为可复现实验的固定回退。校准只决定 Writer 的增量输入预算，不改变 Source、Topic、Timeline、Recent、Core 或 Relations，也不构成新的检索方法。</p>
-  <p>此前 PackyAPI DeepSeek V4 Flash 的 16K 结果由旧的直接 API tool loop 产生，只保留为历史结果。迁移到 Claude Agent SDK 后，Writer protocol hash 已改变，旧校准产物会被拒绝；正式 benchmark 前必须按新协议重新校准，不能继续把 16K 作为当前推荐预算。</p>
+  <p>该合成 workload 在 32K 档位已经可以单批完成，因此产物将完整 workload 的 27,314 tokens 记录为 <code>safe_input_tokens</code>，不能据此推断更长输入仍然可靠。真实 Conv-50 写入还包含持续增长的 Topic workspace 和多轮文件编辑：8K/30 轮与 4K/30 轮均达到轮次上限，4K/60 轮才完成全部 30 个 session。当前构建入口因此允许用 <code>writer_input_token_cap</code> 在校准上限以下固定正式实验档位；输入容量与 trajectory 轮次需要分别在 development workload 上验证。</p>
 
   <h3 id="agent-context">3.2 Agent Context and Tool Output</h3>
   <p>Writer 获得本批原始消息和当前 workspace structure。staged workspace 中的 Source 与派生视图可以读取，但只有 Topic 与 Core 可以修改；派生视图仍由 Runtime 在 Topic 修改通过校验后生成。</p>
@@ -290,7 +302,7 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
   </table></div>
   <p>Runtime 将 <code>2022</code> 展开为 <code>[2022-01-01, 2023-01-01)</code>，将 <code>2022-07</code> 展开为 <code>[2022-07-01, 2022-08-01)</code>，将 <code>2022-07-20</code> 展开为 <code>[2022-07-20, 2022-07-21)</code>。<code>date_to</code> 包含其指定精度的完整年份、月份或日期。候选过滤使用区间重叠，之后才执行 BM25 词法排序或 Embedding 相似度排序。同一段落分别具有 2019 年和 2023 年 evidence 时，这两个时间保持离散，不能合成为连续的 2019–2023 范围。</p>
   <p><code>read_memory_file</code> 是代码暴露给模型的受限文件读取工具：它校验相对路径，并只允许读取当前检索条件可见的文件。Native 条件同时提供只读 shell；不提供 shell 的检索消融条件依赖该工具。它支持可选的 1-based <code>offset</code> / <code>limit</code>；省略时读取全文，提供时只返回相应行窗口。Prompt 只建议先定位相关文件与章节，不规定命令或工具顺序。</p>
-  <p>Writer、verification、局部 Manager、全局 Manager 和查询统一由 Claude Agent SDK 管理，默认每条 trajectory 最多 20 个模型轮次，并可设置 <code>max_budget_usd</code>。Harness 不设置独立工具调用上限或 memory-visible-token 停止条件。实际轮次、工具调用数、可见 token、停止原因、耗时和框架报告成本保留为评测记录。</p>
+  <p>Writer、verification、局部 Manager、全局 Manager 和查询统一由 Claude Agent SDK 管理。Runtime 默认每条 trajectory 最多 20 个模型轮次，也允许正式配置按 model profile 显式覆盖，并可设置 <code>max_budget_usd</code>。DeepSeek V4 Flash 的 Conv-50 诊断使用 60 轮上限；实际查询最大使用 29 轮，而 Writer 曾在 30 轮上限下未完成。Harness 不设置独立工具调用上限或 memory-visible-token 停止条件。实际轮次、工具调用数、可见 token、停止原因、耗时和框架报告成本保留为评测记录。</p>
 
   <h2 id="boundary">§6 Implementation and Evidence Boundary</h2>
   <div class="table-scroll"><table tabindex="0">
@@ -302,7 +314,7 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
       <tr><td class="status-no">仍需实验确认</td><td>Recent、Core、周期整理、BM25、Embedding 和 Agent-controlled retrieval 的独立贡献与成本；Topic 规范化对重复和检索效率的影响</td></tr>
     </tbody>
   </table></div>
-  <p>已有 LoCoMo 与 LongMemEval 结果只能归属于产生这些结果的既有版本。新增组件必须在相同 memory、answerer、judge 和预算下分别消融，不能由旧结果直接推导效果。</p>
+  <p>已有完整 LoCoMo 与 LongMemEval 结果只能归属于产生这些结果的既有版本。当前 Claude Agent SDK 实现已完成一次 LoCoMo Conv-50 单 conversation 诊断：158 个 category 1–4 问题的锁定 judge accuracy 为 96.2%，构建与查询估算成本为 $0.83548，但 Build + Query 耗时为 7,432.6 秒、共 2,000 个模型轮次。该结果验证实现可完整执行，不替代 10-conversation 主实验或组件消融。</p>
 
   <h3 id="implementation-map">6.1 Capacity Calibration Code Map</h3>
   <div class="table-scroll"><table tabindex="0">

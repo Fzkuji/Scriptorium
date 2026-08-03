@@ -1,6 +1,6 @@
 # Agent Memory Harness 方法文档
 
-> 更新：2026-08-02。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
+> 更新：2026-08-03。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
 
 当前实现模块：
 
@@ -51,9 +51,9 @@ Agent Memory Harness 是一个 file-native、multi-view 的外部记忆系统。
 
 Git commit 是三类修改共同使用的有效状态边界。增量写入必须在 commit 成功后推进 session cursor；不增加 batch ID、`memory_dirty` 或独立写入日志。
 
-Git/cursor、token/空闲触发和每日管理条件已经由 `code/src/runtime/online.py` 实现；静态 benchmark harness 使用冻结的 Writer capacity artifact 或显式 `session_batch`，并按固定 session 周期执行局部整理。Writer、Manager、verification 与查询统一由 Claude Agent SDK 执行；默认每条 trajectory 最多 20 个模型轮次，也可通过同一个可选成本上限提前停止。长时间 scheduler 进程不属于静态 benchmark 入口。
+Git/cursor、token/空闲触发和每日管理条件已经由 `code/src/runtime/online.py` 实现；静态 benchmark harness 使用冻结的 Writer capacity artifact 或显式 `session_batch`，并按固定 session 周期执行局部整理。Writer、Manager、verification 与查询统一由 Claude Agent SDK 执行；默认每条 trajectory 最多 20 个模型轮次，也可由 model profile 显式覆盖，并通过同一个可选成本上限提前停止。DeepSeek V4 Flash 的 Conv-50 诊断使用 60 轮上限：查询实际最多 29 轮，Writer 在此前 30 轮配置下曾未完成。长时间 scheduler 进程不属于静态 benchmark 入口。
 
-Writer 批量可以由 `BuildConfig.calibration_path` 指向的校准产物控制。校准让每个候选 token 上限处理相同的完整工作负载，比较最终事实与来源覆盖率、总调用、成本和耗时。Runtime 验证 model、Writer protocol hash 和 tokenizer identity，随后按原顺序在完整 message 边界分批；session 可以跨批次，message 正文不截断。推荐预算取内容全部通过档位中的最低平均总成本，最大已测试通过档位另行记录。未提供校准产物时使用显式 `session_batch`。
+Writer 批量可以由 `BuildConfig.calibration_path` 指向的校准产物控制。校准让每个候选 token 上限处理相同的完整工作负载，比较最终事实与来源覆盖率、总调用、成本和耗时。Runtime 验证 model、Writer protocol hash 和 tokenizer identity，随后按原顺序在完整 message 边界分批；session 可以跨批次，message 正文不截断。2026-08-03 的 DeepSeek V4 Flash SDK 校准在同一份 20-session、400-message、27,314-token workload 上测试 4K–32K，六档均为 2/2 完整通过，完整 workload 的平均成本从 4K 的 $0.02476 降至 32K 的 $0.00399。该合成 workload 不包含持续增长的真实 Topic 编辑复杂度，因此正式 Conv-50 仍用 `writer_input_token_cap=4096`；未提供校准产物时使用显式 `session_batch`。
 
 ## Query-Time Access
 
@@ -73,14 +73,14 @@ BM25 和 Embedding 只索引当前检索条件可见的 Topic/Source 文件。�
 
 工具调用、工具错误、provider 重试和上下文管理由 Claude Agent SDK 处理。Harness 不再实现独立的 OpenAI tool loop、DSML 解析、固定工具调用次数、无新增证据停止条件或工具输出缓存。`read_memory_file` 仍支持 1-based `offset` / `limit` 行窗口，BM25 与 Embedding 仍使用 `top_k` 控制单次候选数量。
 
-标准配置只设置 Claude Agent SDK 的 20 轮 trajectory 上限和可选成本上限，不再设置独立工具调用次数或 memory-visible-token 停止条件；正式 test 配置由 development set 固定。主要策略对标是 ByteRover 的 5-Tier Progressive Retrieval。其他对标包括 Infini Memory-H/A、LightMem，以及作为后续增强参考的 Semble。详细映射见 [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md#34-reference-systems)。
+标准配置只设置 Claude Agent SDK 的 trajectory 轮次上限和可选成本上限，不再设置独立工具调用次数或 memory-visible-token 停止条件；默认值为 20，model-specific test 配置由 development set 固定。主要策略对标是 ByteRover 的 5-Tier Progressive Retrieval。其他对标包括 Infini Memory-H/A、LightMem，以及作为后续增强参考的 Semble。详细映射见 [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md#34-reference-systems)。
 
 ## 当前证据边界
 
 | 状态 | 内容 | 证据边界 |
 |---|---|---|
 | 已完成结果 | v8.8 风格的 Topical + Temporal 视图、source resolution 和连续文件导航 | LoCoMo 1,540 题与 LongMemEval-S 500 题 |
-| 当前实现线 | Claude Agent SDK 驱动的 shell-only Writer/Manager、Topic paragraph blocks、evidence footnotes、Timeline/Recent/Relations 派生、Recent 50 FIFO、Core 2K、事务回滚、Writer 容量校准、BM25 与 Embedding | 已有实现与单元/集成测试；正式实验矩阵尚未完成 |
+| 当前实现线 | Claude Agent SDK 驱动的 shell-only Writer/Manager、Topic paragraph blocks、evidence footnotes、Timeline/Recent/Relations 派生、Recent 50 FIFO、Core 2K、事务回滚、Writer 容量校准、BM25 与 Embedding | 已有实现与单元/集成测试；Conv-50 单 conversation 诊断为 96.2%（152/158），完整 10-conversation 矩阵尚未完成 |
 | 已实现、待部署验证 | provider source IDs、Git/cursor、token/空闲触发和每日管理条件 | 通过单元与集成测试；尚未完成多 provider 长时间在线运行和成本评估 |
 
 现有 90.8% LoCoMo 与 87.0% LongMemEval-S 结果来自此前实现，不能自动归因于当前 Writer/Manager、Recent Memory、Core Memory、Git/cursor 事务、容量校准、BM25 或 Embedding。新组件需要在相同 memory、answerer、judge 和预算下分别消融。

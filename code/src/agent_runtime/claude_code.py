@@ -165,8 +165,9 @@ class ClaudeCodeAgent:
                     elif isinstance(message, ResultMessage):
                         final = message
             except Exception as exc:
-                message = str(exc).replace(self.config.api_key, "[redacted]")
-                raise AgentExecutionError(message) from exc
+                if final is None:
+                    message = str(exc).replace(self.config.api_key, "[redacted]")
+                    raise AgentExecutionError(message) from exc
 
             if final is None:
                 raise AgentExecutionError(
@@ -176,6 +177,8 @@ class ClaudeCodeAgent:
                 details = "; ".join(final.errors or []) or (
                     final.result or final.subtype
                 )
+                if final.api_error_status is not None:
+                    details += f"; API status {final.api_error_status}"
                 details = details.replace(self.config.api_key, "[redacted]")
                 raise AgentExecutionError(details)
             usage = final.usage or {}

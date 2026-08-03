@@ -24,6 +24,7 @@ from .runtime.tokenization import TokenCounter
 class BuildConfig:
     session_batch: int = 1
     calibration_path: str | None = None
+    writer_input_token_cap: int | None = None
     local_reorg_every_sessions: int = 5
     verify_writes: bool = True
     verify_every_sessions: int = 1
@@ -37,6 +38,8 @@ class BuildConfig:
             raise ValueError("session_batch must be positive")
         if self.calibration_path is not None and not self.calibration_path.strip():
             raise ValueError("calibration_path must not be empty")
+        if self.writer_input_token_cap is not None and self.writer_input_token_cap < 1:
+            raise ValueError("writer_input_token_cap must be positive")
         if self.local_reorg_every_sessions < 0:
             raise ValueError("local_reorg_every_sessions must be non-negative")
         if self.verify_every_sessions < 1:
@@ -96,7 +99,10 @@ def build_memory(
         )
         batches = pack_complete_messages(
             sessions,
-            max_input_tokens=capacity.safe_input_tokens,
+            max_input_tokens=min(
+                capacity.safe_input_tokens,
+                config.writer_input_token_cap or capacity.safe_input_tokens,
+            ),
             render_batch=render_writer_input,
             token_counter=TokenCounter.from_identity(capacity.tokenizer),
         )

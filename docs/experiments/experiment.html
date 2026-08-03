@@ -354,6 +354,32 @@
 </table>
 <p>所有条件复用同一批已构建 memory、同一题集、answerer、judge 和工具预算。报告任务成功率或最终准确率、工具调用数、可见 token、延迟、直接成本和索引大小。主要比较 NativeMem Retrieval 与 ByteRover-style。</p>
 
+<h3 id="conv50-sdk-diagnostic">Claude Agent SDK Conv-50 诊断（2026-08-03）</h3>
+<p>该运行处理 LoCoMo <code>conv-50</code> 的 30 个 session、568 条消息和 204 个问题，其中锁定评估器统计 category 1–4 的 158 题。Builder 与 Answerer 均为 PackyAPI DeepSeek V4 Flash；Judge 为 gpt-4o-mini。Writer 输入上限为 4K，trajectory 上限为 60 轮，每 5 个 session 验证并局部整理一次，关闭 final management，查询并发为 4，Source verification 开启。该结果是单 conversation 诊断，不是 LoCoMo 10-conversation 主结果。</p>
+<table tabindex="0">
+<thead><tr><th>Overall</th><th>Multi-hop</th><th>Temporal</th><th>Open-domain</th><th>Single-hop</th></tr></thead>
+<tbody><tr><td><strong>96.2</strong>（152/158）</td><td>93.8</td><td>96.9</td><td>100.0</td><td>96.6</td></tr></tbody>
+</table>
+<table tabindex="0">
+<thead><tr><th>阶段</th><th>耗时</th><th>模型轮次</th><th>Input</th><th>Output</th><th>PackyAPI 估算成本</th></tr></thead>
+<tbody>
+<tr><td>Build</td><td>6,181.5 s</td><td>469</td><td>1,067,428</td><td>647,790</td><td>$0.33082</td></tr>
+<tr><td>Query（204 题，4 workers）</td><td>1,251.1 s</td><td>1,531</td><td>3,043,874</td><td>280,423</td><td>$0.50466</td></tr>
+<tr><td>Total</td><td>7,432.6 s</td><td>2,000</td><td>4,111,302</td><td>928,213</td><td>$0.83548</td></tr>
+</tbody>
+</table>
+<p>构建内部包含 12 条语义写入 trajectory（301 轮，$0.22033）、6 次写后验证产生的 18 条 trajectory（59 轮，$0.01956）和 5 条局部整理 trajectory（109 轮，$0.09093）。局部整理占构建估算成本 27.5%，需要通过关闭或降低频率的构建消融判断其收益。查询共执行 1,327 次工具调用；单题延迟均值 24.0 秒、中位数 16.8 秒、P95 61.0 秒，最大 97.1 秒。</p>
+<table tabindex="0">
+<thead><tr><th>Conv-50 实现</th><th>Judge accuracy</th><th>Build + Query</th><th>模型轮次</th><th>Input / Output</th><th>估算成本</th></tr></thead>
+<tbody>
+<tr><td>旧直接 API tool loop</td><td>89.2</td><td>979.4 s</td><td>806</td><td>8.09M / 172.7K</td><td>$1.18082</td></tr>
+<tr><td>Claude Agent SDK</td><td>96.2</td><td>7,432.6 s</td><td>2,000</td><td>4.11M / 928.2K</td><td>$0.83548</td></tr>
+</tbody>
+</table>
+<p>SDK 版本不再出现 DSML 文本化工具调用：旧运行有 12 个答案包含 DSML，其中 5 个被判错；本次为 0。相对旧运行，本次准确率增加 7.0 个百分点，按指定 PackyAPI 单价估算的模型成本降低 29.2%，但 Build + Query 时间约为 7.6 倍，模型轮次约为 2.5 倍，因此当前结果不支持时间或调用次数优势。</p>
+<p>6 个错误对应的 gold evidence 全部已经进入 Topic；其中 5 题的 evidence 也出现在查询记录中。错误主要来自时间地点混淆、重复事件计数、多来源事实聚合不完整和实体选择，另有 1 题是检索未覆盖 gold evidence。对全部 156 个带 evidence 的主问题，Topic 覆盖 211/222 个 gold source references（95.0%），查询记录覆盖 204/222（91.9%）。旧、新运行有 4 题从“正确”变为“错误”，其中至少两题的旧答案与 gold 明显不一致，说明单次 LLM judge 标签存在波动；7.0 个百分点差值不能全部归因为 SDK。</p>
+<p>证据：<a href="../../code/results/formal/agent-memory-harness-locomo-conv50-deepseek-v4-flash-claude-sdk-20260803-r8/performance.json">performance.json</a> · <a href="../../code/results/formal/agent-memory-harness-locomo-conv50-deepseek-v4-flash-claude-sdk-20260803-r8/eval_full.json">eval_full.json</a> · <a href="../../code/results/formal/agent-memory-harness-locomo-conv50-deepseek-v4-flash-claude-sdk-20260803-r8/build.json">build.json</a> · <a href="../../code/results/model_capacity/packyapi--deepseek-v4-flash/deepseek-v4-flash-sdk-fixed20x20-20260803-r1/calibration.json">calibration.json</a>。</p>
+
 <h3 id="master-queue">待跑队列</h3>
 <ol>
 <li><s>Full-ctx 校准</s> ✓ 80.3（s0，4o-mini judge；answerer 提升 +7.6 → 对文献用相对差值）</li>

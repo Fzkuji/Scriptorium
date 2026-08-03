@@ -41,7 +41,7 @@ class TopicNormalizationMixin:
                 return value
             counter += 1
 
-    def _normalize_topic_edits(self) -> None:
+    def _normalize_topic_edits(self, existing_block_ids: set[str]) -> None:
         topics = self.stage_dir / "topics"
         if not topics.exists():
             return
@@ -50,19 +50,17 @@ class TopicNormalizationMixin:
         if core.is_file():
             paths.append(core)
         texts = {path: path.read_text(encoding="utf-8") for path in paths}
-        used_blocks = {
+        current_block_ids = {
             match.group(1)
             for text in texts.values()
             for match in re.finditer(r"(?m)\^([A-Za-z0-9-]+)\s*$", text)
-            if not match.group(1).startswith("new-block-")
         }
         block_placeholders = {
-            match.group(1)
-            for text in texts.values()
-            for match in re.finditer(
-                r"(?m)\^(new-block-[A-Za-z0-9-]+)\s*$", text
-            )
+            block_id for block_id in current_block_ids
+            if block_id.startswith("new-block-")
+            or block_id not in existing_block_ids
         }
+        used_blocks = current_block_ids - block_placeholders | existing_block_ids
         block_ids = {
             placeholder: self._stable_local_id(
                 f"block|{placeholder}|" + "".join(texts.values()),

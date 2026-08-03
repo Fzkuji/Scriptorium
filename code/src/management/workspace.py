@@ -1,6 +1,7 @@
 """Transactional editable memory workspace."""
 
 import hashlib
+import re
 import shutil
 import subprocess
 import tempfile
@@ -73,6 +74,13 @@ class MemoryWorkspace(
         before_topics = self._topic_fingerprints(self.stage_dir / "topics")
         before_sources = self._tree_fingerprint(self.stage_dir / "sources")
         before_units = parse_topic_tree(self.stage_dir / "topics")
+        before_block_ids = {unit.memory_id for unit in before_units}
+        core = self.stage_dir / "core.md"
+        if core.is_file():
+            before_block_ids.update(re.findall(
+                r"(?m)\^([A-Za-z0-9-]+)\s*$",
+                core.read_text(encoding="utf-8"),
+            ))
         before_prose = topic_prose(self.stage_dir / "topics")
         result = subprocess.run(
             command,
@@ -89,7 +97,7 @@ class MemoryWorkspace(
             try:
                 if self._tree_fingerprint(self.stage_dir / "sources") != before_sources:
                     raise ValueError("Source Memory is append-only")
-                self._normalize_topic_edits()
+                self._normalize_topic_edits(before_block_ids)
                 self._validate_topic_contract(before_units)
                 self._reconcile_topic_edit(
                     before_units, before_prose, allow_correction=allow_correction

@@ -119,3 +119,33 @@ def test_agent_raises_framework_error_without_leaking_api_key(
     with pytest.raises(AgentExecutionError, match="provider rejected request") as error:
         agent.run(prompt="answer", system_prompt="system", cwd=tmp_path)
     assert "secret-token" not in str(error.value)
+
+
+def test_agent_preserves_api_status_when_cli_exits_after_error_result(
+    tmp_path: Path,
+) -> None:
+    async def fake_query(*, prompt, options):
+        del prompt, options
+        yield ResultMessage(
+            subtype="success",
+            duration_ms=10,
+            duration_api_ms=5,
+            is_error=True,
+            num_turns=1,
+            session_id="test-session",
+            result=None,
+            api_error_status=529,
+        )
+        raise Exception("Claude Code returned an error result: success")
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig(
+            base_url="https://gateway.example",
+            api_key="secret-token",
+            model="test-model",
+        ),
+        query_fn=fake_query,
+    )
+
+    with pytest.raises(AgentExecutionError, match="API status 529"):
+        agent.run(prompt="answer", system_prompt="system", cwd=tmp_path)

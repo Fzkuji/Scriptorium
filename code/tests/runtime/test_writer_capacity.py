@@ -383,7 +383,7 @@ def test_probe_evaluation_reports_an_unfinished_agent_run_separately(tmp_path: P
     assert result["round_limit_reached"] is True
 
 
-def test_build_uses_calibration_to_pack_complete_messages(tmp_path: Path, monkeypatch):
+def test_build_caps_calibrated_input_at_explicit_limit(tmp_path: Path, monkeypatch):
     from src import build
     from src.management.api import render_writer_input, writer_protocol_sha256
     from src.runtime.tokenization import TokenCounter
@@ -414,12 +414,13 @@ def test_build_uses_calibration_to_pack_complete_messages(tmp_path: Path, monkey
         }]))
         for turn, ref in zip(sessions[0]["turns"], sessions[0]["refs"])
     )
+    full_batch_tokens = counter.count(render_writer_input(sessions))
     calibration = tmp_path / "calibration.json"
     calibration.write_text(json.dumps({
         "schema": "nativemem-writer-capacity-v3",
         "model": "test-model",
         "writer_protocol_sha256": writer_protocol_sha256(),
-        "safe_input_tokens": one_message_tokens,
+        "safe_input_tokens": full_batch_tokens,
         "tokenizer": counter.identity,
     }), encoding="utf-8")
     batch_message_counts = []
@@ -439,6 +440,7 @@ def test_build_uses_calibration_to_pack_complete_messages(tmp_path: Path, monkey
         config=build.BuildConfig(
             session_batch=99,
             calibration_path=str(calibration),
+            writer_input_token_cap=one_message_tokens,
             verify_writes=False,
             final_manage=False,
         ),
