@@ -140,7 +140,7 @@ def _usage(result: Any) -> tuple[int, int, int, float]:
         int(getattr(result, "input_tokens", 0) or 0),
         int(getattr(result, "output_tokens", 0) or 0),
         int(getattr(result, "num_turns", 0) or 0),
-        float(getattr(result, "total_cost_usd", 0) or 0),
+        float(getattr(result, "anthropic_equivalent_cost_usd", 0) or 0),
     )
 
 
@@ -436,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
-                "reported_cost_usd": round(sum(
+                "anthropic_equivalent_cost_usd": round(sum(
                     value[3] for value in usage
                 ), 6),
                 "elapsed_seconds": round(time.monotonic() - started, 3),

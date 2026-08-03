@@ -20,23 +20,39 @@ def summarize_usage(
                 "calls": 0,
                 "input_tokens": 0,
                 "output_tokens": 0,
-                "reported_cost_usd": 0.0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "anthropic_equivalent_cost_usd": 0.0,
             },
         )
         value["calls"] += int(record.get("calls", 1) or 0)
         value["input_tokens"] += int(record.get("prompt_tokens", 0) or 0)
         value["output_tokens"] += int(record.get("completion_tokens", 0) or 0)
-        value["reported_cost_usd"] += float(
-            record.get("total_cost_usd", 0) or 0
+        value["cache_write_tokens"] += int(
+            record.get("cache_write_tokens", 0) or 0
+        )
+        value["cache_read_tokens"] += int(
+            record.get("cache_read_tokens", 0) or 0
+        )
+        value["anthropic_equivalent_cost_usd"] += float(
+            record.get("anthropic_equivalent_cost_usd", 0) or 0
         )
     for value in by_phase.values():
+        # Cache writes and reads are billed at different rates per provider;
+        # without those rates they are reported as volume only, and priced
+        # here at the plain input rate.
+        billable_input = (
+            value["input_tokens"]
+            + value["cache_write_tokens"]
+            + value["cache_read_tokens"]
+        )
         value["estimated_cost_usd"] = round(
-            value["input_tokens"] / 1_000_000 * input_usd_per_million
+            billable_input / 1_000_000 * input_usd_per_million
             + value["output_tokens"] / 1_000_000 * output_usd_per_million,
             8,
         )
-        value["reported_cost_usd"] = round(
-            value["reported_cost_usd"], 8
+        value["anthropic_equivalent_cost_usd"] = round(
+            value["anthropic_equivalent_cost_usd"], 8
         )
     return {
         "totals": {
@@ -45,8 +61,10 @@ def summarize_usage(
                 "calls",
                 "input_tokens",
                 "output_tokens",
+                "cache_write_tokens",
+                "cache_read_tokens",
                 "estimated_cost_usd",
-                "reported_cost_usd",
+                "anthropic_equivalent_cost_usd",
             )
         },
         "by_phase": by_phase,

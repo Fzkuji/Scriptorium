@@ -49,7 +49,12 @@ def test_agent_uses_isolated_bare_nonpersistent_claude_code(
             num_turns=2,
             session_id="test-session",
             total_cost_usd=0.002,
-            usage={"input_tokens": 11, "output_tokens": 3},
+            usage={
+                "input_tokens": 11,
+                "output_tokens": 3,
+                "cache_creation_input_tokens": 40,
+                "cache_read_input_tokens": 900,
+            },
             result="done",
         )
 
@@ -75,7 +80,10 @@ def test_agent_uses_isolated_bare_nonpersistent_claude_code(
     assert result.num_turns == 2
     assert result.input_tokens == 11
     assert result.output_tokens == 3
-    assert result.total_cost_usd == 0.002
+    # Cached prefixes are billable input and must survive the SDK boundary.
+    assert result.cache_creation_input_tokens == 40
+    assert result.cache_read_input_tokens == 900
+    assert result.anthropic_equivalent_cost_usd == 0.002
     assert options.tools == []
     assert options.allowed_tools == []
     assert options.setting_sources == []

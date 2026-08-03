@@ -66,7 +66,9 @@ def _run_agent(
             "rounds": result.num_turns,
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
-            "cost_usd": result.total_cost_usd,
+            "anthropic_equivalent_cost_usd": (
+                result.anthropic_equivalent_cost_usd
+            ),
         })
         return audit
     finally:

@@ -90,6 +90,12 @@ class Runtime:
     ) -> None:
         prompt_tokens = int(getattr(result, "input_tokens", 0) or 0)
         completion_tokens = int(getattr(result, "output_tokens", 0) or 0)
+        cache_write_tokens = int(
+            getattr(result, "cache_creation_input_tokens", 0) or 0
+        )
+        cache_read_tokens = int(
+            getattr(result, "cache_read_input_tokens", 0) or 0
+        )
         calls = int(getattr(result, "num_turns", 0) or 0)
         duration_ms = int(getattr(result, "duration_ms", 0) or 0)
         with self._usage_lock:
@@ -97,8 +103,12 @@ class Runtime:
                 "phase": phase,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
+                "cache_write_tokens": cache_write_tokens,
+                "cache_read_tokens": cache_read_tokens,
                 "calls": calls,
-                "total_cost_usd": getattr(result, "total_cost_usd", None),
+                "anthropic_equivalent_cost_usd": getattr(
+                    result, "anthropic_equivalent_cost_usd", None
+                ),
                 "duration_ms": duration_ms,
                 "duration_api_ms": int(
                     getattr(result, "duration_api_ms", 0) or 0

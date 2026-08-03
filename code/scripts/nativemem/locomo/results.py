@@ -36,8 +36,16 @@ def build_record(
         "output_tokens": sum(
             record["completion_tokens"] for record in build_calls
         ),
-        "reported_cost_usd": round(sum(
-            float(record.get("total_cost_usd", 0) or 0)
+        "cache_write_tokens": sum(
+            int(record.get("cache_write_tokens", 0) or 0)
+            for record in build_calls
+        ),
+        "cache_read_tokens": sum(
+            int(record.get("cache_read_tokens", 0) or 0)
+            for record in build_calls
+        ),
+        "anthropic_equivalent_cost_usd": round(sum(
+            float(record.get("anthropic_equivalent_cost_usd", 0) or 0)
             for record in build_calls
         ), 8),
         "memory_dir": str(memory_dir),

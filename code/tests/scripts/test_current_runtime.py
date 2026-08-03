@@ -125,14 +125,14 @@ def test_nativemem_locomo_usage_summary_reports_phase_and_cost():
             "calls": 3,
             "prompt_tokens": 1_000_000,
             "completion_tokens": 2_000_000,
-            "total_cost_usd": 0.75,
+            "anthropic_equivalent_cost_usd": 0.75,
         },
         {
             "phase": "query",
             "calls": 2,
             "prompt_tokens": 500_000,
             "completion_tokens": 250_000,
-            "total_cost_usd": 0.25,
+            "anthropic_equivalent_cost_usd": 0.25,
         },
     ]
 
@@ -146,10 +146,40 @@ def test_nativemem_locomo_usage_summary_reports_phase_and_cost():
         "calls": 5,
         "input_tokens": 1_500_000,
         "output_tokens": 2_250_000,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 0,
         "estimated_cost_usd": 6.0,
-        "reported_cost_usd": 1.0,
+        "anthropic_equivalent_cost_usd": 1.0,
     }
     assert summary["by_phase"]["build"]["calls"] == 3
+
+
+def test_nativemem_locomo_usage_summary_prices_cached_input_tokens():
+    from scripts.nativemem import run_locomo
+
+    summary = run_locomo.summarize_usage(
+        [
+            {
+                "phase": "build",
+                "calls": 1,
+                "prompt_tokens": 1_000_000,
+                "completion_tokens": 0,
+                "cache_write_tokens": 2_000_000,
+                "cache_read_tokens": 3_000_000,
+                "anthropic_equivalent_cost_usd": 99.0,
+            },
+        ],
+        input_usd_per_million=1.0,
+        output_usd_per_million=2.0,
+    )
+
+    # Cached prefixes are real billable input; pricing only the uncached
+    # prompt tokens is what made estimated cost implausibly low.
+    assert summary["totals"]["estimated_cost_usd"] == 6.0
+    assert summary["totals"]["cache_write_tokens"] == 2_000_000
+    assert summary["totals"]["cache_read_tokens"] == 3_000_000
+    # The SDK figure is prices-as-Anthropic, never the amount billed.
+    assert summary["totals"]["anthropic_equivalent_cost_usd"] == 99.0
 
 
 def test_nativemem_locomo_cli_uses_explicit_credentials(tmp_path: Path):

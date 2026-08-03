@@ -48,7 +48,12 @@ class AgentResult:
     num_turns: int
     input_tokens: int
     output_tokens: int
-    total_cost_usd: float | None
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    # Priced by the SDK against Anthropic's own rate table. When the run is
+    # routed elsewhere via ANTHROPIC_BASE_URL this is not the amount billed;
+    # it is only "what this token volume would cost on Anthropic".
+    anthropic_equivalent_cost_usd: float | None
     duration_ms: int
     duration_api_ms: int
     stop_reason: str | None
@@ -189,7 +194,13 @@ class ClaudeCodeAgent:
                 num_turns=int(final.num_turns),
                 input_tokens=int(usage.get("input_tokens", 0) or 0),
                 output_tokens=int(usage.get("output_tokens", 0) or 0),
-                total_cost_usd=final.total_cost_usd,
+                cache_creation_input_tokens=int(
+                    usage.get("cache_creation_input_tokens", 0) or 0
+                ),
+                cache_read_input_tokens=int(
+                    usage.get("cache_read_input_tokens", 0) or 0
+                ),
+                anthropic_equivalent_cost_usd=final.total_cost_usd,
                 duration_ms=int(final.duration_ms),
                 duration_api_ms=int(final.duration_api_ms),
                 stop_reason=final.stop_reason,

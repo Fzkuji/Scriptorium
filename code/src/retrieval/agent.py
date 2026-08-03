@@ -75,6 +75,6 @@ def collect_answer(
         "source_verification": config.verify_sources,
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,
-        "cost_usd": result.total_cost_usd,
+        "anthropic_equivalent_cost_usd": result.anthropic_equivalent_cost_usd,
     })
     return evidence, result.num_turns, answer or "Insufficient information.", trace
