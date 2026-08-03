@@ -57,9 +57,9 @@ def build_server(workspace_dir: Path, *, git_commit: str = "auto") -> Any:
     root = Path(workspace_dir).resolve()
     if not root.is_dir():
         raise ValueError(
-            f"workspace is not a directory: {root} (run 'agent-memory init' first)"
+            f"workspace is not a directory: {root} (run 'scriptorium init' first)"
         )
-    server = FastMCP("agent-memory")
+    server = FastMCP("scriptorium")
 
     @server.tool(
         name="memory_status",

@@ -1,6 +1,6 @@
-# Agent Memory Harness
+# Scriptorium
 
-Agent Memory Harness uses model-managed Markdown files as external memory. The repository
+Scriptorium uses model-managed Markdown files as external memory. The repository
 contains the current implementation, benchmark runners, evaluation code,
 stored results, paper source, and third-party reproduction metadata.
 
@@ -19,10 +19,10 @@ There is no separate interactive memory format.
 ## Use from Claude Code
 
 ```bash
-pip install git+https://github.com/<owner>/Agent-Memory-Harness.git
-agent-memory init ~/memory
-claude mcp add --scope user agent-memory -- \
-  agent-memory mcp --workspace ~/memory
+pip install git+https://github.com/Fzkuji/scriptorium.git
+scriptorium init ~/memory
+claude mcp add --scope user scriptorium -- \
+  scriptorium mcp --workspace ~/memory
 ```
 
 The session gains six tools: `memory_status`, `memory_list`, `memory_read`,
@@ -32,7 +32,7 @@ writes, and it accepts a unified diff restricted to `topics/**/*.md` and
 commit as one transaction, after which the runtime rebuilds the timeline,
 recent-events and relations views.
 
-`agent-memory validate --workspace ~/memory` checks a workspace without
+`scriptorium validate --workspace ~/memory` checks a workspace without
 modifying it.
 
 ## Install for development
@@ -40,8 +40,8 @@ modifying it.
 Python 3.12 is the supported runtime.
 
 ```bash
-git clone <repository-url> Agent-Memory-Harness
-cd Agent-Memory-Harness
+git clone https://github.com/Fzkuji/scriptorium.git
+cd scriptorium
 ./setup.sh
 source .venv/bin/activate
 ```
@@ -62,15 +62,15 @@ Claude Code process; it does not modify the parent process environment.
 The complete local research directory also contains benchmark data, stored
 results, and third-party checkouts that are intentionally not committed to the
 main Git repository. To transfer the complete working state to another
-computer, copy the entire `model-aligned-wiki` directory. Do not copy `.venv`
+computer, copy the entire `scriptorium` directory. Do not copy `.venv`
 or `.venv-*`; run `./setup.sh` on the destination computer instead.
 
 ## Layout
 
 ```text
 code/
-  agent_memory_harness/       installable facade, CLI and MCP server
-  src/                        reusable Agent Memory Harness implementation
+  scriptorium/       installable facade, CLI and MCP server
+  src/                        reusable Scriptorium implementation
   scripts/                    runners, adapters, evaluation and analysis
     configs/                  frozen command inputs
     model_capacity/           Writer capacity calibration
@@ -109,7 +109,7 @@ Run commands from the repository root:
 # Layout and transfer check
 python scripts/verify_portable_layout.py
 
-# Current Agent Memory Harness tests
+# Current Scriptorium tests
 pytest -q \
   tests/management \
   tests/markdown \

@@ -1,4 +1,4 @@
-"""agent-memory command line: init, validate, mcp."""
+"""scriptorium command line: init, validate, mcp."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from src.retrieval import inspect
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="agent-memory",
+        prog="scriptorium",
         description="Model-managed Markdown files as external agent memory.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
@@ -76,7 +76,7 @@ def command_validate(workspace: str) -> int:
     if not root.is_dir():
         print(f"workspace is not a directory: {root}", file=sys.stderr)
         return 2
-    scratch = Path(tempfile.mkdtemp(prefix="agent-memory-validate-"))
+    scratch = Path(tempfile.mkdtemp(prefix="scriptorium-validate-"))
     try:
         # Rebuild into a scratch copy so a successful check never writes.
         copy = scratch / "memory"
@@ -112,7 +112,7 @@ def command_mcp(workspace: str, git_commit: str) -> int:
     if not root.is_dir():
         print(
             f"workspace is not a directory: {root}\n"
-            f"run: agent-memory init {root}",
+            f"run: scriptorium init {root}",
             file=sys.stderr,
         )
         return 2

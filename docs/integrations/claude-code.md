@@ -1,6 +1,6 @@
-# Using Agent Memory Harness from Claude Code
+# Using Scriptorium from Claude Code
 
-Agent Memory Harness stores memory as Markdown files you can read in an editor
+Scriptorium stores memory as Markdown files you can read in an editor
 and diff in Git. This page covers the interactive path: connecting a memory
 workspace to a Claude Code session over MCP, so the model you are already
 talking to can search and update memory directly.
@@ -12,15 +12,15 @@ the server described here.
 ## Install
 
 ```bash
-pip install git+https://github.com/<owner>/Agent-Memory-Harness.git
+pip install git+https://github.com/Fzkuji/scriptorium.git
 ```
 
-Replace `<owner>` with the repository owner. Python 3.12 or newer is required.
+Python 3.12 or newer is required.
 
 ## Create a workspace
 
 ```bash
-agent-memory init ~/memory
+scriptorium init ~/memory
 ```
 
 This creates `topics/`, `sources/`, `core.md` and `.nativemem/runtime.json`. If
@@ -30,14 +30,14 @@ changes nothing.
 ## Register the server
 
 ```bash
-claude mcp add --scope user agent-memory -- \
-  agent-memory mcp --workspace ~/memory
+claude mcp add --scope user scriptorium -- \
+  scriptorium mcp --workspace ~/memory
 ```
 
 Use an absolute path. Verify with:
 
 ```bash
-claude mcp get agent-memory
+claude mcp get scriptorium
 ```
 
 Start a new Claude Code session; the six `memory_*` tools become available.
@@ -167,7 +167,7 @@ A rejected transaction leaves the workspace byte-identical.
 ## Checking a workspace
 
 ```bash
-agent-memory validate --workspace ~/memory
+scriptorium validate --workspace ~/memory
 ```
 
 Parses every topic, checks source and block links, and rebuilds derived views
@@ -176,7 +176,7 @@ in a scratch copy. It reports problems without modifying the workspace.
 ## Removing
 
 ```bash
-claude mcp remove agent-memory
+claude mcp remove scriptorium
 ```
 
 The workspace is left in place; it is ordinary Markdown.

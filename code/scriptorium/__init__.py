@@ -1,4 +1,4 @@
-"""Agent Memory Harness: model-managed Markdown files as external memory.
+"""Scriptorium: model-managed Markdown files as external memory.
 
 Public facade so installed users need not import from the repository's
 internal ``src`` layout.

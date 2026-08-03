@@ -1,10 +1,10 @@
 {
-  "name": "agent-memory-harness",
-  "displayName": "Agent Memory Harness",
+  "name": "scriptorium",
+  "displayName": "Scriptorium",
   "version": "0.1.0",
-  "description": "Guidance for reading and updating a Markdown memory workspace over the agent-memory MCP server.",
+  "description": "Guidance for reading and updating a Markdown memory workspace over the scriptorium MCP server.",
   "author": {
-    "name": "Agent Memory Harness"
+    "name": "Scriptorium"
   },
   "license": "MIT",
   "keywords": ["memory", "markdown", "mcp"]

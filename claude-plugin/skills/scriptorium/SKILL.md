@@ -1,6 +1,6 @@
 ---
-name: agent-memory
-description: Read and update the user's Markdown memory workspace through the agent-memory MCP tools. Use when the user refers to something they told you before, asks what you remember, or states a durable fact about themselves, their projects, or their preferences that is worth keeping.
+name: scriptorium
+description: Read and update the user's Markdown memory workspace through the scriptorium MCP tools. Use when the user refers to something they told you before, asks what you remember, or states a durable fact about themselves, their projects, or their preferences that is worth keeping.
 ---
 
 # Agent Memory

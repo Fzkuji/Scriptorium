@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_memory_harness import cli
-from agent_memory_harness.mcp_server import TOOL_NAMES, build_server
+from scriptorium import cli
+from scriptorium.mcp_server import TOOL_NAMES, build_server
 from src.management import MemoryWorkspace
 
 TOPIC_LINES = [
@@ -197,5 +197,5 @@ def test_read_and_search_round_trip(server, tmp_path: Path):
 
 
 def test_build_server_rejects_missing_workspace(tmp_path: Path):
-    with pytest.raises(ValueError, match="agent-memory init"):
+    with pytest.raises(ValueError, match="scriptorium init"):
         build_server(tmp_path / "absent")

@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agent-memory-harness"
+name = "scriptorium"
 version = "0.1.0"
 description = "Model-managed Markdown files as external agent memory"
 readme = "README.md"
@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 dynamic = ["dependencies"]
 
 [project.scripts]
-agent-memory = "agent_memory_harness.cli:main"
+scriptorium = "scriptorium.cli:main"
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
@@ -21,7 +21,7 @@ package-dir = { "" = "code" }
 
 [tool.setuptools.packages.find]
 where = ["code"]
-include = ["agent_memory_harness*", "src*"]
+include = ["scriptorium*", "src*"]
 
 # pytest config stays in code/pytest.ini, which the documented test commands
 # already use; duplicating it here would silently change how tests resolve.

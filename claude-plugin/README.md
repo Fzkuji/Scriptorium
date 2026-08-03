@@ -1,6 +1,6 @@
-# Agent Memory Harness plugin
+# Scriptorium plugin
 
-Usage guidance for the `agent-memory` MCP server. The plugin is optional: it
+Usage guidance for the `scriptorium` MCP server. The plugin is optional: it
 adds a skill describing when to read and write memory, and nothing else. All
 capability comes from the server, which works without this plugin installed.
 
@@ -8,9 +8,9 @@ The plugin deliberately does not register an MCP server of its own. You
 register the server yourself, pointing at your workspace:
 
 ```bash
-agent-memory init ~/memory
-claude mcp add --scope user agent-memory -- \
-  agent-memory mcp --workspace ~/memory
+scriptorium init ~/memory
+claude mcp add --scope user scriptorium -- \
+  scriptorium mcp --workspace ~/memory
 ```
 
 Bundling a second server here would collide with that registration, and the
