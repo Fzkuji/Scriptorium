@@ -79,6 +79,7 @@ def test_agent_uses_isolated_bare_nonpersistent_claude_code(
     assert options.tools == []
     assert options.allowed_tools == []
     assert options.setting_sources == []
+    assert options.thinking == {"type": "disabled"}
     assert options.extra_args == {
         "bare": None,
         "no-session-persistence": None,

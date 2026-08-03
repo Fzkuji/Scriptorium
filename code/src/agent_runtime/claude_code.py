@@ -130,6 +130,7 @@ class ClaudeCodeAgent:
                 mcp_servers=mcp_servers,
                 permission_mode="dontAsk",
                 model=self.config.model,
+                thinking={"type": "disabled"},
                 max_turns=max_turns,
                 max_budget_usd=max_budget_usd,
                 cwd=cwd,
