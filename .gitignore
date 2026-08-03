@@ -40,6 +40,11 @@ paper/*.synctex.gz
 .env
 .venv/
 
+# Python 打包产物
+build/
+dist/
+*.egg-info/
+
 # paper/ 是独立 git 仓库（34+ commits 论文修订史），不作为子模块
 paper/
 

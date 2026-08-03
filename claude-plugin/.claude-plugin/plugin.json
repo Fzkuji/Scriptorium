@@ -1,0 +1,11 @@
+{
+  "name": "agent-memory-harness",
+  "displayName": "Agent Memory Harness",
+  "version": "0.1.0",
+  "description": "Guidance for reading and updating a Markdown memory workspace over the agent-memory MCP server.",
+  "author": {
+    "name": "Agent Memory Harness"
+  },
+  "license": "MIT",
+  "keywords": ["memory", "markdown", "mcp"]
+}

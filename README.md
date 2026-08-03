@@ -4,7 +4,38 @@ Agent Memory Harness uses model-managed Markdown files as external memory. The r
 contains the current implementation, benchmark runners, evaluation code,
 stored results, paper source, and third-party reproduction metadata.
 
-## Install
+The code runs in two modes over one shared implementation:
+
+- **Experiment.** Benchmark runners start isolated Claude Code subprocesses
+  with explicit models, endpoints and budgets, for LoCoMo, LongMemEval and
+  ablations.
+- **Interactive.** A local stdio MCP server exposes one memory workspace to a
+  Claude Code session you are already using. See
+  [`docs/integrations/claude-code.md`](docs/integrations/claude-code.md).
+
+Both paths share `code/src/management`, `markdown`, `retrieval` and `runtime`.
+There is no separate interactive memory format.
+
+## Use from Claude Code
+
+```bash
+pip install git+https://github.com/<owner>/Agent-Memory-Harness.git
+agent-memory init ~/memory
+claude mcp add --scope user agent-memory -- \
+  agent-memory mcp --workspace ~/memory
+```
+
+The session gains six tools: `memory_status`, `memory_list`, `memory_read`,
+`memory_grep`, `memory_search` and `memory_update`. Only `memory_update`
+writes, and it accepts a unified diff restricted to `topics/**/*.md` and
+`core.md`; no shell is exposed. New evidence and the topic edit citing it
+commit as one transaction, after which the runtime rebuilds the timeline,
+recent-events and relations views.
+
+`agent-memory validate --workspace ~/memory` checks a workspace without
+modifying it.
+
+## Install for development
 
 Python 3.12 is the supported runtime.
 
@@ -38,6 +69,7 @@ or `.venv-*`; run `./setup.sh` on the destination computer instead.
 
 ```text
 code/
+  agent_memory_harness/       installable facade, CLI and MCP server
   src/                        reusable Agent Memory Harness implementation
   scripts/                    runners, adapters, evaluation and analysis
     configs/                  frozen command inputs
@@ -52,6 +84,7 @@ code/
 paper/                        independent paper Git repository
 docs/
   Model-Aligned-Wiki.html     documentation entry and research overview
+  integrations/               Claude Code setup and tool reference
   related-work/               paper Related Work, survey, and evidence
   method/                     current method, design and reports
   experiments/                plans, protocols, results, studies, and runs
