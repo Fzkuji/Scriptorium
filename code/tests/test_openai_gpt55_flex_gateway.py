@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from scripts import audit_openai_gpt55_flex_gateway as auditor
+from scripts.gateways import audit_openai_gpt55_flex_gateway as auditor
 from scripts.gateways import openai_gpt55_flex_gateway as gateway_module
 
 

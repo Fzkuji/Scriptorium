@@ -70,11 +70,36 @@ module there; nothing else does.
 
 ## Still at the top level
 
-Eleven general tools that no single experiment owns: `analyze_run.py`,
-`analyze_nativemem_ablation.py`, `verify_portable_layout.py`,
-`generate_third_party_manifest.py`, `judge_showdown.py`,
-`evaluate_temporal_filter_retrieval.py`, `run_locked_locomo_eval_with_evidence.py`,
-`audit_readonly_nativemem_control.py`, the two gateway auditors, and
-`eval_full.py`, which is hash-locked and must not move.
+Eleven files, in four kinds.
+
+**Run these directly.**
+
+| Script | What it does |
+|---|---|
+| `analyze_run.py` | Summarize run directories: scores, memory statistics, cost |
+| `verify_portable_layout.py` | Check the repository layout and symlinks |
+| `generate_third_party_manifest.py` | Regenerate `third_party/manifest.json` after changing a checkout |
+
+**Analyses for one past question.** Each still has its study document and its
+stored results, so they are kept, but nothing calls them — run them by hand
+when revisiting that question.
+
+| Script | Question |
+|---|---|
+| `analyze_nativemem_ablation.py` | Paired LoCoMo and BEAM ablation |
+| `judge_showdown.py` | v8.8 against v9.0c, decided by `docs/experiments/studies/v9_research_protocol.md` |
+| `evaluate_temporal_filter_retrieval.py` | Retrieval without dates against an oracle date window |
+| `audit_readonly_nativemem_control.py` | R116 and R203 read-only view controls |
+
+**The locked LoCoMo path.**
+
+| Script | What it does |
+|---|---|
+| `eval_full.py` | The only permitted LoCoMo evaluator, hash-locked by `AGENTS.md` |
+| `run_locked_locomo_eval_with_evidence.py` | Runs that evaluator while recording HTTP evidence |
+
+**Forwarding modules**, for the two scripts still launched by their original
+path: `run_visible_token_budget_sanity.py` and `audit_visible_token_budget.py`.
+Both really live in `token_budget/`.
 
 Read a file's module docstring for what it does; every script has one.

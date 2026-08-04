@@ -15,6 +15,7 @@ from scripts.gateways import openrouter_gateway_evidence
 AUDIT_PATH = (
     Path(__file__).resolve().parents[1]
     / "scripts"
+    / "gateways"
     / "audit_openrouter_gpt4o_mini_gateway.py"
 )
 SPEC = importlib.util.spec_from_file_location("openrouter_gateway_audit", AUDIT_PATH)
