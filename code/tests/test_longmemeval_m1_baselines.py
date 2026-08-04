@@ -4,9 +4,9 @@ import os
 
 import pytest
 
-from scripts.longmemeval_m1 import audit_longmemeval_m1_baselines as auditor
-from scripts.longmemeval_m1 import longmemeval_m1_contract as contract
-from scripts.longmemeval_m1 import run_longmemeval_m1_baselines as runner
+from baselines.longmemeval_m1 import audit_longmemeval_m1_baselines as auditor
+from baselines.longmemeval_m1 import longmemeval_m1_contract as contract
+from baselines.longmemeval_m1 import run_longmemeval_m1_baselines as runner
 
 
 def _has_formal_runtime():

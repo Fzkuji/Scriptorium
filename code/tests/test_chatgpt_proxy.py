@@ -1,7 +1,7 @@
 import json
 
-import scripts.gateways.chatgpt_proxy as proxy
-from scripts.gateways.chatgpt_proxy import parse_responses_stream
+import baselines.gateways.chatgpt_proxy as proxy
+from baselines.gateways.chatgpt_proxy import parse_responses_stream
 
 
 class FakeResponse:

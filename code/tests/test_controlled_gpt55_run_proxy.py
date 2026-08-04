@@ -19,7 +19,7 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from scripts.controlled_locomo import controlled_gpt55_run_proxy as controlled  # noqa: E402
+from baselines.controlled_locomo import controlled_gpt55_run_proxy as controlled  # noqa: E402
 
 
 def _health() -> dict[str, object]:

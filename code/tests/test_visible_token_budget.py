@@ -318,7 +318,7 @@ def test_sanity_command_generates_audited_minimal_artifacts(tmp_path):
     result = subprocess.run(
         [
             sys.executable,
-            str(ROOT / "scripts" / "token_budget" / "run_visible_token_budget_sanity.py"),
+            str(ROOT / "baselines" / "token_budget" / "run_visible_token_budget_sanity.py"),
             "--output-dir",
             str(output),
             "--budget-tokens",
@@ -473,7 +473,7 @@ def test_published_private_tmp_sanity_command_shape_runs():
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "scripts" / "token_budget" / "run_visible_token_budget_sanity.py"),
+                str(ROOT / "baselines" / "token_budget" / "run_visible_token_budget_sanity.py"),
                 "--output-dir",
                 str(output),
                 "--budget-tokens",
@@ -497,7 +497,7 @@ def test_cli_help_examples_use_private_tmp_only():
         "audit_visible_token_budget.py",
     ):
         result = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "token_budget" / script), "--help"],
+            [sys.executable, str(ROOT / "baselines" / "token_budget" / script), "--help"],
             cwd=ROOT,
             check=True,
             capture_output=True,

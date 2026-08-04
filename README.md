@@ -71,15 +71,19 @@ or `.venv-*`; run `./setup.sh` on the destination computer instead.
 code/
   scriptorium/                installable facade, CLI and MCP server
   src/                        reusable Scriptorium implementation
-  scripts/                    run_experiment.sh plus experiment packages
+  scripts/                    run_experiment.sh plus our own method's runners
     nativemem/                LoCoMo, LongMemEval and ablation runners
     model_capacity/           Writer capacity calibration
     evaluation/               judges, metrics, and the locked evaluator
     analysis/                 summaries over stored runs
     configs/                  frozen command inputs
-  baselines/                  systems compared against
+  baselines/                  systems compared against, and controlled comparison
     adapters/                 one runnable module per system
     third_party/              their checkouts, restored from manifest.json
+    controlled_locomo/        shared answerer with an enforced prompt boundary
+    locomo_baselines/         retrieval-only LoCoMo rows
+    longmemeval_m1/           the same comparison on LongMemEval
+    gateways/                 budget-enforcing proxies for comparison runs
   tests/                      tests grouped by implementation responsibility
   benchmarks/                 local benchmark datasets
   figures/                    generated figures
@@ -175,9 +179,6 @@ For a real figure, read the provider's own usage dashboard.
 ## Other commands
 
 ```bash
-# Layout and transfer check
-python scripts/maintenance/verify_portable_layout.py
-
 # Tests
 pytest -q \
   tests/management tests/markdown tests/retrieval tests/runtime tests/scripts
@@ -198,7 +199,7 @@ the dataset directories.
 each external Git repository. Regenerate it after changing a checkout:
 
 ```bash
-python scripts/maintenance/generate_third_party_manifest.py
+python baselines/generate_third_party_manifest.py
 ```
 
 Third-party frameworks keep their own dependency files. Their old virtual

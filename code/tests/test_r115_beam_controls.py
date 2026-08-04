@@ -10,11 +10,11 @@ from typing import Any
 
 import pytest
 
-from scripts.beam_controls import audit_r115_beam_controls as auditor
-from scripts.beam_controls import r115_beam_control_contract as contract
-from scripts.beam_controls import run_r115_beam_controls as runner
-from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway
-from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence
+from baselines.beam_controls import audit_r115_beam_controls as auditor
+from baselines.beam_controls import r115_beam_control_contract as contract
+from baselines.beam_controls import run_r115_beam_controls as runner
+from baselines.gateways import openai_gpt55_flex_gateway as flex_gateway
+from baselines.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence
 from scripts.evaluation import durable_model_ledger as durable
 from scripts.evaluation import visible_token_budget as visible
 

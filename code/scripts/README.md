@@ -64,24 +64,11 @@ section in the top-level `README.md`.
 | `model_capacity/` | Writer input-capacity calibration |
 | `evaluation/` | Judges, metrics, LLM clients, and `eval_full.py` |
 | `analysis/` | `analyze_run.py` and one-question analyses |
-| `adapters/` | One module per external memory system, for baseline comparison |
-| `gateways/` | Budget-enforcing HTTP proxies that cap what a run can spend |
-| `maintenance/` | Layout check, third-party manifest |
 | `configs/` | Frozen command inputs and examples |
 
-## Experiment packages
-
-Each formal experiment keeps its contract, runner and auditor together: the
-contract defines what an artifact must contain, the runner produces it, and the
-auditor re-derives it with separate code so a result is checked by something
-that did not produce it.
-
-`locomo_baselines/`, `controlled_locomo/`, `longmemeval_m1/`, `m4_statistics/`,
-`beam_controls/`, `token_budget/`, `human_agreement/`, `readonly_control/`.
-
-Within one, the prefix gives the role: `*_contract.py` fixes the shape,
-`run_*.py` produces, `audit_*.py` re-derives and fails on mismatch, and
-`freeze_*.py` pins inputs once audits pass.
+Everything here runs our own method. Code that runs a system we compare
+against, or that measures one under a controlled condition, lives in
+`baselines/` — see `baselines/README.md`.
 
 ## Locked evaluator
 

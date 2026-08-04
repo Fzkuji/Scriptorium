@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from scripts.gateways import audit_openai_gpt55_flex_gateway as auditor
-from scripts.gateways import openai_gpt55_flex_gateway as gateway_module
+from baselines.gateways import audit_openai_gpt55_flex_gateway as auditor
+from baselines.gateways import openai_gpt55_flex_gateway as gateway_module
 
 
 class FakeTransport:

@@ -14,12 +14,12 @@ except importlib.metadata.PackageNotFoundError:
         allow_module_level=True,
     )
 
-from scripts.longmemeval_m1 import audit_longmemeval_m1_backends as auditor
-from scripts.longmemeval_m1 import longmemeval_m1_backend_contract as backend_contract
-from scripts.longmemeval_m1 import longmemeval_m1_contract as contract
-from scripts.longmemeval_m1 import longmemeval_shared_answer_contract as shared_contract
-from scripts.longmemeval_m1 import run_longmemeval_m1_backends as runner
-from scripts.longmemeval_m1 import run_longmemeval_m1_baselines as base_runner
+from baselines.longmemeval_m1 import audit_longmemeval_m1_backends as auditor
+from baselines.longmemeval_m1 import longmemeval_m1_backend_contract as backend_contract
+from baselines.longmemeval_m1 import longmemeval_m1_contract as contract
+from baselines.longmemeval_m1 import longmemeval_shared_answer_contract as shared_contract
+from baselines.longmemeval_m1 import run_longmemeval_m1_backends as runner
+from baselines.longmemeval_m1 import run_longmemeval_m1_baselines as base_runner
 from scripts.evaluation import durable_model_ledger as durable
 
 

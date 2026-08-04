@@ -24,11 +24,11 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-from scripts.longmemeval_m1 import audit_longmemeval_shared_answers as auditor  # noqa: E402
-from scripts.controlled_locomo import controlled_locomo_answer_contract as answer_contract  # noqa: E402
-from scripts.longmemeval_m1 import longmemeval_m1_contract as input_contract  # noqa: E402
-from scripts.longmemeval_m1 import longmemeval_shared_answer_contract as contract  # noqa: E402
-from scripts.longmemeval_m1 import run_longmemeval_shared_answers as runner  # noqa: E402
+from baselines.longmemeval_m1 import audit_longmemeval_shared_answers as auditor  # noqa: E402
+from baselines.controlled_locomo import controlled_locomo_answer_contract as answer_contract  # noqa: E402
+from baselines.longmemeval_m1 import longmemeval_m1_contract as input_contract  # noqa: E402
+from baselines.longmemeval_m1 import longmemeval_shared_answer_contract as contract  # noqa: E402
+from baselines.longmemeval_m1 import run_longmemeval_shared_answers as runner  # noqa: E402
 
 
 @pytest.fixture(scope="module")

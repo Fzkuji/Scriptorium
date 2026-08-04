@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from scripts.gateways.anthropic_openai_compat import _messages
+from baselines.gateways.anthropic_openai_compat import _messages
 
 
 def test_openai_tool_roundtrip_becomes_anthropic_blocks():

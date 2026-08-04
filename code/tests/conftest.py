@@ -27,7 +27,7 @@ class _FakeTransport:
         self.calls = 0
 
     def send(self, payload):
-        from scripts.gateways import openai_gpt55_flex_gateway as gateway
+        from baselines.gateways import openai_gpt55_flex_gateway as gateway
 
         self.calls += 1
         request = json.loads(payload)
@@ -58,7 +58,7 @@ class _FakeTransport:
 
 class FakeFlexEvidenceProvider:
     def __init__(self, root: Path):
-        from scripts.gateways import openai_gpt55_flex_gateway as gateway
+        from baselines.gateways import openai_gpt55_flex_gateway as gateway
 
         self.gateway = gateway.GPT55FlexGateway(
             result_root=root / "fake-flex-gateway",
@@ -86,8 +86,8 @@ class FakeFlexEvidenceProvider:
 
     def close_window(self, request_label: str | None = None):
         """Create a valid local-only provider window for integration fixtures."""
-        from scripts.gateways import openai_gpt55_flex_gateway as gateway
-        from scripts.gateways import openai_gpt55_flex_gateway_evidence as evidence
+        from baselines.gateways import openai_gpt55_flex_gateway as gateway
+        from baselines.gateways import openai_gpt55_flex_gateway_evidence as evidence
 
         start = evidence.capture_start(self.root)
         response = None
@@ -125,8 +125,8 @@ class FakeFlexEvidenceProvider:
         }
 
     def attach(self, run_dir: Path, manifest: dict, run_id: str):
-        from scripts.gateways import openai_gpt55_flex_gateway as gateway
-        from scripts.gateways import openai_gpt55_flex_gateway_evidence as evidence
+        from baselines.gateways import openai_gpt55_flex_gateway as gateway
+        from baselines.gateways import openai_gpt55_flex_gateway_evidence as evidence
 
         start = evidence.capture_start(self.root)
         status, response = self.gateway.handle({

@@ -8,13 +8,13 @@ from typing import Any
 
 import pytest
 
-from scripts.gateways import openrouter_gpt4o_mini_gateway as gateway
-from scripts.gateways import openrouter_gateway_evidence
+from baselines.gateways import openrouter_gpt4o_mini_gateway as gateway
+from baselines.gateways import openrouter_gateway_evidence
 
 
 AUDIT_PATH = (
     Path(__file__).resolve().parents[1]
-    / "scripts"
+    / "baselines"
     / "gateways"
     / "audit_openrouter_gpt4o_mini_gateway.py"
 )
