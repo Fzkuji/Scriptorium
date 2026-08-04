@@ -26,8 +26,8 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-import audit_gpt55_locomo_baselines as baseline_auditor  # noqa: E402
-import controlled_locomo_answer_contract as contract  # noqa: E402
+from scripts.locomo_baselines import audit_gpt55_locomo_baselines as baseline_auditor  # noqa: E402
+from scripts.controlled_locomo import controlled_locomo_answer_contract as contract  # noqa: E402
 from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
 from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
 from scripts.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
@@ -1494,7 +1494,7 @@ def _run(args: argparse.Namespace) -> int:
         run_id = manifest["run_id"]
         _recover_interrupted_proxies(args.output_dir, run_id)
         if (args.output_dir / "complete.json").exists():
-            from audit_controlled_locomo_answers import audit_run  # noqa: PLC0415
+            from scripts.controlled_locomo.audit_controlled_locomo_answers import audit_run  # noqa: PLC0415
 
             final_report = audit_run(args.output_dir, require_complete_manifest=True)
             contract.atomic_json_replace(args.output_dir / "audit.json", final_report)
@@ -1502,7 +1502,7 @@ def _run(args: argparse.Namespace) -> int:
             return 0
         run_ledger_path = args.output_dir / "run_ledger.jsonl"
         with contract.DurableLedger(run_ledger_path, run_id=run_id) as run_ledger:
-            from audit_controlled_locomo_answers import (  # noqa: PLC0415
+            from scripts.controlled_locomo.audit_controlled_locomo_answers import (  # noqa: PLC0415
                 _load_proxy_entries,
                 audit_question,
             )
@@ -1616,7 +1616,7 @@ def _run(args: argparse.Namespace) -> int:
             raise contract.ControlledAnswerError(
                 f"answer inventory incomplete: {len(completed)}/{contract.EXPECTED_QUESTIONS}"
             )
-        from audit_controlled_locomo_answers import audit_run  # noqa: PLC0415
+        from scripts.controlled_locomo.audit_controlled_locomo_answers import audit_run  # noqa: PLC0415
 
         report = audit_run(args.output_dir, require_complete_manifest=False)
         if report.get("status") != "passed":

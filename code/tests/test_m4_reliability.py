@@ -7,16 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from scripts.build_locomo_human_packet import (
+from scripts.human_agreement.build_locomo_human_packet import (
     allocate_categories,
     build_payloads,
     write_packet,
 )
-from scripts.freeze_m4_paired_inputs import calculate as calculate_pairings
-from scripts.run_m4_failure_analysis import RULE_VERSION, calculate as calculate_failures
-from scripts.run_m4_statistics import calculate as calculate_statistics
-from scripts.run_m4_statistics import atomic_json_no_clobber
-from scripts.score_locomo_human_agreement import calculate as calculate_agreement
+from scripts.m4_statistics.freeze_m4_paired_inputs import calculate as calculate_pairings
+from scripts.m4_statistics.run_m4_failure_analysis import RULE_VERSION, calculate as calculate_failures
+from scripts.m4_statistics.run_m4_statistics import calculate as calculate_statistics
+from scripts.m4_statistics.run_m4_statistics import atomic_json_no_clobber
+from scripts.human_agreement.score_locomo_human_agreement import calculate as calculate_agreement
 from scripts.evaluation.m4_reliability import (
     ReliabilityError,
     analyze_comparison,
@@ -352,9 +352,9 @@ def test_human_agreement_requires_two_complete_label_sets(tmp_path: Path) -> Non
 def test_independent_auditors_roundtrip(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from scripts.audit_locomo_human_packet import main as audit_packet_main
-    from scripts.audit_m4_failure_analysis import main as audit_failure_main
-    from scripts.audit_m4_statistics import main as audit_statistics_main
+    from scripts.human_agreement.audit_locomo_human_packet import main as audit_packet_main
+    from scripts.m4_statistics.audit_m4_failure_analysis import main as audit_failure_main
+    from scripts.m4_statistics.audit_m4_statistics import main as audit_statistics_main
 
     paired_source = tmp_path / "paired.json"
     write_json(

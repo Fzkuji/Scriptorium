@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.run_m4_statistics import calculate, read_json, sha256_file  # noqa: E402
+from scripts.m4_statistics.run_m4_statistics import calculate, read_json, sha256_file  # noqa: E402
 from scripts.evaluation.m4_reliability import ReliabilityError  # noqa: E402
 
 
@@ -57,7 +57,7 @@ def main() -> int:
             "holm_within_family",
         ],
     }
-    from scripts.run_m4_statistics import atomic_json_no_clobber
+    from scripts.m4_statistics.run_m4_statistics import atomic_json_no_clobber
 
     atomic_json_no_clobber(audit_path, audit)
     print(json.dumps(audit))

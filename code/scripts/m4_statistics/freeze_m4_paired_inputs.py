@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.run_m4_statistics import (  # noqa: E402
+from scripts.m4_statistics.run_m4_statistics import (  # noqa: E402
     atomic_json_no_clobber,
     read_json,
     sha256_file,

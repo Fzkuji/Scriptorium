@@ -17,9 +17,9 @@ from typing import Any, Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 
-import controlled_locomo_answer_contract as answer_contract  # noqa: E402
-import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
-import longmemeval_m1_contract as input_contract  # noqa: E402
+from scripts.controlled_locomo import controlled_locomo_answer_contract as answer_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_contract as input_contract  # noqa: E402
 
 
 RUN_SCHEMA = "longmemeval-m1-shared-answer-run-v1"

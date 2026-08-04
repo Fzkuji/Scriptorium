@@ -16,8 +16,8 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-import controlled_locomo_answer_contract as contract  # noqa: E402
-import run_controlled_locomo_answers as runner  # noqa: E402
+from scripts.controlled_locomo import controlled_locomo_answer_contract as contract  # noqa: E402
+from scripts.controlled_locomo import run_controlled_locomo_answers as runner  # noqa: E402
 
 
 GOLD_CANARY = "CANARY_GOLD_MUST_NOT_REACH_PROMPT"

@@ -16,12 +16,12 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-import audit_longmemeval_m1_backends as backend_input_auditor  # noqa: E402
-import audit_longmemeval_m1_baselines as base_input_auditor  # noqa: E402
-import controlled_locomo_answer_contract as answer_contract  # noqa: E402
-import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
-import longmemeval_m1_contract as input_contract  # noqa: E402
-import longmemeval_shared_answer_contract as contract  # noqa: E402
+from scripts.longmemeval_m1 import audit_longmemeval_m1_backends as backend_input_auditor  # noqa: E402
+from scripts.longmemeval_m1 import audit_longmemeval_m1_baselines as base_input_auditor  # noqa: E402
+from scripts.controlled_locomo import controlled_locomo_answer_contract as answer_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_contract as input_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_shared_answer_contract as contract  # noqa: E402
 from scripts.evaluation.durable_model_ledger import (  # noqa: E402
     DurableLedgerError,
     read_proxy_events,

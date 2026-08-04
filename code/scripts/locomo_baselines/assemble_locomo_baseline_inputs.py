@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import locomo_baseline_contract as contract
+from scripts.locomo_baselines import locomo_baseline_contract as contract
 
 
 ROOT = Path(__file__).resolve().parents[2]

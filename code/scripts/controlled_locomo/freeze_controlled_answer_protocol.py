@@ -16,8 +16,8 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-import audit_gpt55_locomo_baselines as baseline_auditor  # noqa: E402
-import controlled_locomo_answer_contract as contract  # noqa: E402
+from scripts.locomo_baselines import audit_gpt55_locomo_baselines as baseline_auditor  # noqa: E402
+from scripts.controlled_locomo import controlled_locomo_answer_contract as contract  # noqa: E402
 
 
 DEFAULT_INPUT_ROOT = ROOT / "results/gpt55-locomo-baselines-20260714"

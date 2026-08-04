@@ -30,15 +30,15 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-import audit_longmemeval_m1_backends as backend_input_auditor  # noqa: E402
-import audit_longmemeval_m1_baselines as base_input_auditor  # noqa: E402
-import controlled_locomo_answer_contract as answer_contract  # noqa: E402
-import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
-import longmemeval_m1_contract as input_contract  # noqa: E402
-import longmemeval_shared_answer_contract as contract  # noqa: E402
-import run_controlled_locomo_answers as shared_answer  # noqa: E402
-import run_longmemeval_m1_backends as backend_runner  # noqa: E402
-import run_longmemeval_m1_baselines as base_input_runner  # noqa: E402
+from scripts.longmemeval_m1 import audit_longmemeval_m1_backends as backend_input_auditor  # noqa: E402
+from scripts.longmemeval_m1 import audit_longmemeval_m1_baselines as base_input_auditor  # noqa: E402
+from scripts.controlled_locomo import controlled_locomo_answer_contract as answer_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_contract as input_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_shared_answer_contract as contract  # noqa: E402
+from scripts.controlled_locomo import run_controlled_locomo_answers as shared_answer  # noqa: E402
+from scripts.longmemeval_m1 import run_longmemeval_m1_backends as backend_runner  # noqa: E402
+from scripts.longmemeval_m1 import run_longmemeval_m1_baselines as base_input_runner  # noqa: E402
 from scripts.evaluation.durable_model_ledger import (  # noqa: E402
     DurableLedgerError,
     proxy_evidence,
@@ -1450,7 +1450,7 @@ def run_answer_inventory(
         if manifest.get("status") == "complete":
             if not publish_audit:
                 return manifest
-            from audit_longmemeval_shared_answers import audit_answer_run  # noqa: PLC0415
+            from scripts.longmemeval_m1.audit_longmemeval_shared_answers import audit_answer_run  # noqa: PLC0415
 
             report = audit_answer_run(output_dir)
             _publish_audit_no_clobber(output_dir / "audit.json", report)
@@ -1489,7 +1489,7 @@ def run_answer_inventory(
         )
     if not publish_audit:
         return complete_manifest
-    from audit_longmemeval_shared_answers import audit_answer_run  # noqa: PLC0415
+    from scripts.longmemeval_m1.audit_longmemeval_shared_answers import audit_answer_run  # noqa: PLC0415
 
     report = audit_answer_run(output_dir)
     _publish_audit_no_clobber(output_dir / "audit.json", report)
@@ -1660,7 +1660,7 @@ def run_formal_answers(
     if existing_manifest.is_file():
         existing = contract.read_json(existing_manifest)
         if isinstance(existing, Mapping) and existing.get("status") == "complete":
-            from audit_longmemeval_shared_answers import audit_answer_run  # noqa: PLC0415
+            from scripts.longmemeval_m1.audit_longmemeval_shared_answers import audit_answer_run  # noqa: PLC0415
 
             return audit_answer_run(output_dir)
         raise contract.SharedAnswerError(
@@ -1765,7 +1765,7 @@ def run_formal_answers(
         postflight["descriptor"] == source["descriptor"],
         "formal source descriptor changed between preflight and postflight",
     )
-    from audit_longmemeval_shared_answers import audit_answer_run  # noqa: PLC0415
+    from scripts.longmemeval_m1.audit_longmemeval_shared_answers import audit_answer_run  # noqa: PLC0415
 
     report = audit_answer_run(output_dir)
     _publish_audit_no_clobber(output_dir / "audit.json", report)
@@ -1780,7 +1780,7 @@ def run_synthetic_matrix(output_dir: Path) -> dict[str, Any]:
             raise contract.SharedAnswerError(
                 "existing synthetic output is incomplete; use a new root"
             )
-        from audit_longmemeval_shared_answers import audit_synthetic_matrix  # noqa: PLC0415
+        from scripts.longmemeval_m1.audit_longmemeval_shared_answers import audit_synthetic_matrix  # noqa: PLC0415
 
         return audit_synthetic_matrix(output_dir)
     output_dir.mkdir(parents=True)
@@ -1855,7 +1855,7 @@ def run_synthetic_matrix(output_dir: Path) -> dict[str, Any]:
         "backend_plan_isolation": plan_isolation,
     }
     answer_contract.atomic_json_no_clobber(output_dir / "complete.json", complete)
-    from audit_longmemeval_shared_answers import audit_synthetic_matrix  # noqa: PLC0415
+    from scripts.longmemeval_m1.audit_longmemeval_shared_answers import audit_synthetic_matrix  # noqa: PLC0415
 
     report = audit_synthetic_matrix(output_dir)
     _publish_audit_no_clobber(output_dir / "audit.json", report)

@@ -18,8 +18,8 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-import audit_gpt55_locomo_baselines as baseline_auditor  # noqa: E402
-import controlled_locomo_answer_contract as contract  # noqa: E402
+from scripts.locomo_baselines import audit_gpt55_locomo_baselines as baseline_auditor  # noqa: E402
+from scripts.controlled_locomo import controlled_locomo_answer_contract as contract  # noqa: E402
 from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
 from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
 from scripts.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402

@@ -20,7 +20,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-import run_gpt55_locomo_baselines as runner  # noqa: E402
+from scripts.locomo_baselines import run_gpt55_locomo_baselines as runner  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -18,8 +18,8 @@ if str(ROOT) not in sys.path:
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
-import longmemeval_m1_contract as contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_backend_contract as backend_contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_contract as contract  # noqa: E402
 from scripts.evaluation import durable_model_ledger as durable  # noqa: E402
 from scripts.evaluation.visible_token_audit import audit_visible_token_trace  # noqa: E402
 from scripts.evaluation.visible_token_budget import snapshot_memory_path  # noqa: E402

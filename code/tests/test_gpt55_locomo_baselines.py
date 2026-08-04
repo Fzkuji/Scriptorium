@@ -19,8 +19,8 @@ SCRIPTS = Path(__file__).parents[1] / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import audit_gpt55_locomo_baselines as auditor  # noqa: E402
-import run_gpt55_locomo_baselines as runner  # noqa: E402
+from scripts.locomo_baselines import audit_gpt55_locomo_baselines as auditor  # noqa: E402
+from scripts.locomo_baselines import run_gpt55_locomo_baselines as runner  # noqa: E402
 from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
 
 

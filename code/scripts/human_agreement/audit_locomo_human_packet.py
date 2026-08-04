@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.build_locomo_human_packet import (  # noqa: E402
+from scripts.human_agreement.build_locomo_human_packet import (  # noqa: E402
     build_payloads,
     csv_bytes,
     json_bytes,
@@ -83,7 +83,7 @@ def main() -> int:
             "two_independent_blank_templates",
         ],
     }
-    from scripts.run_m4_statistics import atomic_json_no_clobber
+    from scripts.m4_statistics.run_m4_statistics import atomic_json_no_clobber
 
     atomic_json_no_clobber(output, audit)
     print(json.dumps(audit))

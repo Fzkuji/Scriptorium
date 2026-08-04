@@ -19,7 +19,7 @@ from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
-import gpt55_run_proxy as base
+from scripts.controlled_locomo import gpt55_run_proxy as base
 
 
 HEALTH_SCHEMA = "openai-gpt55-flex-health/v1"

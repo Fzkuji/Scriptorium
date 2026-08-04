@@ -27,7 +27,7 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-from scripts import r115_beam_control_contract as contract  # noqa: E402
+from scripts.beam_controls import r115_beam_control_contract as contract  # noqa: E402
 from scripts.gateways import openai_gpt55_flex_gateway as flex_gateway  # noqa: E402
 from scripts.gateways import openai_gpt55_flex_gateway_evidence as flex_evidence  # noqa: E402
 from scripts.evaluation import durable_model_ledger as durable  # noqa: E402

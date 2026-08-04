@@ -30,7 +30,7 @@ for entry in (ROOT, SCRIPTS):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-from scripts import longmemeval_m1_contract as contract  # noqa: E402
+from scripts.longmemeval_m1 import longmemeval_m1_contract as contract  # noqa: E402
 
 
 DEFAULT_OUTPUT_ROOT = ROOT / "results/gpt55-longmemeval-m1-baselines-20260714"
