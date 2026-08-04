@@ -12,7 +12,7 @@ the server described here.
 ## Install
 
 ```bash
-pip install git+https://github.com/Fzkuji/scriptorium.git
+pip install git+https://github.com/Fzkuji/Scriptorium.git
 ```
 
 Python 3.12 or newer is required.

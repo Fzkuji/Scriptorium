@@ -19,7 +19,7 @@ There is no separate interactive memory format.
 ## Use from Claude Code
 
 ```bash
-pip install git+https://github.com/Fzkuji/scriptorium.git
+pip install git+https://github.com/Fzkuji/Scriptorium.git
 scriptorium init ~/memory
 claude mcp add --scope user scriptorium -- \
   scriptorium mcp --workspace ~/memory
@@ -40,8 +40,8 @@ modifying it.
 Python 3.12 is the supported runtime.
 
 ```bash
-git clone https://github.com/Fzkuji/scriptorium.git
-cd scriptorium
+git clone https://github.com/Fzkuji/Scriptorium.git
+cd Scriptorium
 ./setup.sh
 source .venv/bin/activate
 ```
@@ -62,14 +62,14 @@ Claude Code process; it does not modify the parent process environment.
 The complete local research directory also contains benchmark data, stored
 results, and third-party checkouts that are intentionally not committed to the
 main Git repository. To transfer the complete working state to another
-computer, copy the entire `scriptorium` directory. Do not copy `.venv`
+computer, copy the entire repository directory. Do not copy `.venv`
 or `.venv-*`; run `./setup.sh` on the destination computer instead.
 
 ## Layout
 
 ```text
 code/
-  scriptorium/       installable facade, CLI and MCP server
+  scriptorium/                installable facade, CLI and MCP server
   src/                        reusable Scriptorium implementation
   scripts/                    runners, adapters, evaluation and analysis
     configs/                  frozen command inputs
