@@ -1,25 +1,37 @@
 #!/usr/bin/env bash
-# Build memory for one or more LoCoMo conversations, evaluate, and summarize.
+# Build memory, evaluate, and summarize — for one run or a sweep.
 #
 # Usage:
-#   scripts/run_experiment.sh CONFIG [SAMPLE_ID ...]
+#   scripts/run_experiment.sh CONFIG                      one run, as configured
+#   scripts/run_experiment.sh CONFIG --samples A B C      one run per conversation
+#   scripts/run_experiment.sh CONFIG --caps 4096 8192     one run per input size
 #
-# With no sample ids the config's own sample_id is used. Each sample is retried
-# once, and a sample that still fails is skipped rather than ending the run.
+# --caps sweeps writer_input_token_cap, which is how much conversation the
+# Writer sees at once. Each variant is retried once; a variant that still fails
+# is skipped rather than ending the sweep. Success is decided by whether
+# eval_full.json was written, not by an exit code.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON="${PYTHON:-$REPO/.venv/bin/python}"
 RUNNER="$REPO/code/scripts/nativemem/run_locomo.py"
+SUMMARY="$REPO/code/scripts/analysis/analyze_run.py"
+
+usage() {
+    sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+    exit 2
+}
 
 CONFIG="${1:-}"
-if [[ -z "$CONFIG" || ! -f "$CONFIG" ]]; then
-    echo "usage: $0 CONFIG [SAMPLE_ID ...]" >&2
-    [[ -n "$CONFIG" ]] && echo "config not found: $CONFIG" >&2
-    exit 2
-fi
+[[ -z "$CONFIG" || ! -f "$CONFIG" ]] && usage
 shift
-SAMPLES=("$@")
+
+MODE="" ; VALUES=()
+case "${1:-}" in
+    --samples|--caps) MODE="$1"; shift; VALUES=("$@") ;;
+    "") ;;
+    *) echo "unknown option: $1" >&2; usage ;;
+esac
 
 OUT_BASE="$("$PYTHON" -c "import json,sys;print(json.load(open(sys.argv[1])).get('output_dir',''))" "$CONFIG")"
 if [[ -z "$OUT_BASE" ]]; then
@@ -27,38 +39,36 @@ if [[ -z "$OUT_BASE" ]]; then
     exit 2
 fi
 
-run_one() {
-    local args=("--config" "$CONFIG") out="$OUT_BASE"
-    if [[ -n "${1:-}" ]]; then
-        args+=("--sample-id" "$1" "--output-dir" "${OUT_BASE}-$1")
-        out="${OUT_BASE}-$1"
+run_one() {  # $1 = label ("" for none), $2.. = extra runner args
+    local label="$1"; shift
+    local out="$OUT_BASE" ; local args=("--config" "$CONFIG" "$@")
+    if [[ -n "$label" ]]; then
+        out="${OUT_BASE}-${label}"
+        args+=("--output-dir" "$out")
     fi
     for attempt in 1 2; do
-        echo "===== ${1:-default} attempt $attempt $(date +%H:%M:%S)"
+        echo "===== ${label:-run} attempt $attempt $(date +%H:%M:%S)"
         "$PYTHON" "$RUNNER" "${args[@]}"
-        # Trust the artifact, not the exit code: a runner can fail after
-        # writing partial output, and a wrapper's $? is easy to read wrong.
         if [[ -f "$out/eval_full.json" ]]; then
-            echo "===== ${1:-default} ok"
+            echo "===== ${label:-run} ok"
+            DONE+=("$out")
             return 0
         fi
-        echo "===== ${1:-default} failed (attempt $attempt)" >&2
+        echo "===== ${label:-run} failed (attempt $attempt)" >&2
     done
-    echo "===== ${1:-default} skipped after 2 attempts" >&2
+    echo "===== ${label:-run} skipped after 2 attempts" >&2
     return 1
 }
 
 DONE=()
-if [[ ${#SAMPLES[@]} -eq 0 ]]; then
-    run_one "" && DONE+=("$OUT_BASE")
-else
-    for s in "${SAMPLES[@]}"; do
-        run_one "$s" && DONE+=("${OUT_BASE}-$s")
-    done
-fi
+case "$MODE" in
+    --samples) for v in "${VALUES[@]}"; do run_one "$v" --sample-id "$v"; done ;;
+    --caps)    for v in "${VALUES[@]}"; do run_one "cap$v" --writer-input-token-cap "$v"; done ;;
+    *)         run_one "" ;;
+esac
 
 if [[ ${#DONE[@]} -gt 0 ]]; then
     echo
     echo "===== summary"
-    "$PYTHON" "$REPO/code/scripts/analysis/analyze_run.py" "${DONE[@]}"
+    "$PYTHON" "$SUMMARY" "${DONE[@]}"
 fi

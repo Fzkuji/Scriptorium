@@ -7,13 +7,20 @@ Anything you run by hand is either `run_experiment.sh` or a module invoked with
 ## Run an experiment
 
 ```bash
-scripts/run_experiment.sh scripts/configs/my-run.json                # one run
-scripts/run_experiment.sh scripts/configs/my-run.json conv-50 conv-51  # a sweep
+# one run, exactly as the config says
+scripts/run_experiment.sh scripts/configs/my-run.json
+
+# one run per conversation
+scripts/run_experiment.sh scripts/configs/my-run.json --samples conv-50 conv-51
+
+# one run per input size, to see how much the Writer should see at once
+scripts/run_experiment.sh scripts/configs/my-run.json --caps 4096 8192 16384 32768
 ```
 
-Each sample is retried once, and a sample that still fails is skipped rather
-than ending the sweep. Success is decided by whether `eval_full.json` exists,
-not by an exit code. When it finishes, the surviving runs are summarized.
+`--caps` sweeps `writer_input_token_cap`. Each variant is retried once, and a
+variant that still fails is skipped rather than ending the sweep. Success is
+decided by whether `eval_full.json` was written, not by an exit code. When it
+finishes, the surviving runs are summarized side by side.
 
 ## Packages
 
