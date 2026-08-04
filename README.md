@@ -93,7 +93,6 @@ docs/
   method/                     current method, design and reports
   experiments/                plans, protocols, results, studies, and runs
   prompts/                    prompt references
-  archive/                    superseded historical documents
   internal/                   research analysis and development records
 ```
 
