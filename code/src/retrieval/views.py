@@ -15,7 +15,7 @@ def memory_files(
     root = memory_dir.resolve()
     views = CONDITION_VIEWS.get(condition)
     if condition != "native" and views is None:
-        raise ValueError(f"unknown NativeMem condition: {condition}")
+        raise ValueError(f"unknown Scriptorium condition: {condition}")
     result = [
         path
         for path in root.rglob("*.md")
@@ -70,7 +70,7 @@ def read_memory_file(
 
 def tools_for(condition: str) -> list[dict[str, Any]]:
     if condition != "native" and condition not in CONDITION_VIEWS:
-        raise ValueError(f"unknown NativeMem condition: {condition}")
+        raise ValueError(f"unknown Scriptorium condition: {condition}")
     return [
         tool
         for tool in TOOL_DEFINITIONS

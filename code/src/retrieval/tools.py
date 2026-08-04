@@ -1,4 +1,4 @@
-"""Dispatch NativeMem retrieval tool calls."""
+"""Dispatch Scriptorium retrieval tool calls."""
 
 from pathlib import Path
 from typing import Any

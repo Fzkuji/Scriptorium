@@ -1,4 +1,4 @@
-"""Public NativeMem retrieval API."""
+"""Public Scriptorium retrieval API."""
 
 from .agent import collect_answer
 from .config import QueryConfig

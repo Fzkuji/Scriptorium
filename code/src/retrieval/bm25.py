@@ -1,4 +1,4 @@
-"""Local event-level BM25 retrieval for NativeMem.
+"""Local event-level BM25 retrieval for Scriptorium.
 
 The index is deliberately lexical: it uses no embedding model or vector store.
 Topic and source files are indexed; timeline files are excluded because they

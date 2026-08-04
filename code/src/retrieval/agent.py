@@ -1,4 +1,4 @@
-"""Agent-controlled NativeMem retrieval through Claude Code."""
+"""Agent-controlled Scriptorium retrieval through Claude Code."""
 
 from __future__ import annotations
 

@@ -20,10 +20,15 @@ There is no separate interactive memory format.
 
 ```bash
 pip install git+https://github.com/Fzkuji/Scriptorium.git
-scriptorium init ~/memory
 claude mcp add --scope user scriptorium -- \
-  scriptorium mcp --workspace ~/memory
+  scriptorium mcp --workspace project=.memory --workspace global=~/memory
 ```
+
+No init step: a missing workspace is created when a session first starts.
+The `project` layer lands at the repository root of wherever the session
+opened (its `.gitignore` of `*` keeps it out of the repository); the
+`global` layer is the same directory in every project. A single
+`--workspace PATH` serves one unlayered memory instead.
 
 The session gains six tools: `memory_status`, `memory_list`, `memory_read`,
 `memory_grep`, `memory_search` and `memory_update`. Only `memory_update`

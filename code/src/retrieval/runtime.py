@@ -150,7 +150,7 @@ class Runtime:
 
     def build_memory(self, conv: dict[str, Any], memory_dir: str):
         if self.build_config is None:
-            raise RuntimeError("NativeMem build_config was not supplied")
+            raise RuntimeError("Scriptorium build_config was not supplied")
         result = adapter.build_memory(
             conv,
             memory_dir,

@@ -1,4 +1,4 @@
-"""NativeMem memory-build orchestration."""
+"""Scriptorium memory-build orchestration."""
 
 import json
 import time

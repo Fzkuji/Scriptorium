@@ -1,4 +1,4 @@
-"""Public NativeMem core API."""
+"""Public Scriptorium core API."""
 
 from .build import BuildConfig, build_memory
 from .management import MemoryConfig, MemoryWorkspace

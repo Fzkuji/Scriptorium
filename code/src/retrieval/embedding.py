@@ -1,4 +1,4 @@
-"""Read-only event-level embedding retrieval for NativeMem."""
+"""Read-only event-level embedding retrieval for Scriptorium."""
 
 from __future__ import annotations
 

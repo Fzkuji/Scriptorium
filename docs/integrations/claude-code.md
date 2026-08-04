@@ -17,7 +17,12 @@ pip install git+https://github.com/Fzkuji/Scriptorium.git
 
 Python 3.12 or newer is required.
 
-## Create a workspace
+## Create a workspace (optional)
+
+The server creates any missing workspace when it starts, so there is no
+required init step. To create one explicitly — for example to inspect the
+layout before registering, or to keep it under your own ignore rules rather
+than the automatic self-ignoring `.gitignore` —
 
 ```bash
 scriptorium init ~/memory

@@ -1,4 +1,4 @@
-"""NativeMem memory-writing API."""
+"""Scriptorium memory-writing API."""
 
 from .api import manage_memory, organize_topics, write_session, write_sessions
 from .config import MemoryConfig

@@ -1,4 +1,4 @@
-"""LoCoMo conversation conversion and source lookup for NativeMem."""
+"""LoCoMo conversation conversion and source lookup for Scriptorium."""
 
 import hashlib
 import re
@@ -24,7 +24,7 @@ def _turn_text(turn: dict[str, Any]) -> str:
 
 
 def benchmark_source_id(dia_id: str) -> str:
-    """Map a LoCoMo evidence label to the opaque NativeMem Source ID."""
+    """Map a LoCoMo evidence label to the opaque Scriptorium Source ID."""
     match = re.fullmatch(r"D(\d+):(\d+)", str(dia_id))
     if not match:
         return str(dia_id)
@@ -38,7 +38,7 @@ def benchmark_source_id(dia_id: str) -> str:
 
 
 def add_benchmark_source_ids(turn_index):
-    """Allow source resolution by benchmark labels and NativeMem Source IDs."""
+    """Allow source resolution by benchmark labels and Scriptorium Source IDs."""
     augmented = dict(turn_index)
     augmented.update({
         benchmark_source_id(dia_id): turn
@@ -48,7 +48,7 @@ def add_benchmark_source_ids(turn_index):
 
 
 def build_turn_index(conv: dict[str, Any]) -> dict[str, Any]:
-    """Index source turns by the stable IDs written into NativeMem."""
+    """Index source turns by the stable IDs written into Scriptorium."""
     result: dict[str, Any] = {}
     order = 0
     session_number = 1

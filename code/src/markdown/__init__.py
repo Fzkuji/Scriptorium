@@ -1,4 +1,4 @@
-"""Authoritative NativeMem Topic Markdown API."""
+"""Authoritative Scriptorium Topic Markdown API."""
 
 from .models import (
     BLOCK_ID,

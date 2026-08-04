@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -144,17 +145,22 @@ def command_validate(workspace: str) -> int:
     return 0
 
 
+LAYER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+
+
 def parse_workspaces(values: list[str]) -> list[tuple[str, Path]]:
     """`NAME=PATH` entries into named layers; a lone bare path stays plain.
 
     Order matters: the first workspace receives writes that name no layer,
-    so put the narrowest (the project) first.
+    so put the narrowest (the project) first. A name is a plain identifier;
+    anything else is read as a path, so a filename containing `=` still
+    works in the single-workspace form.
     """
     layered = len(values) > 1
     workspaces: list[tuple[str, Path]] = []
     for value in values:
         name, sep, path = value.partition("=")
-        if sep and name and "/" not in name and "~" not in name:
+        if sep and LAYER_NAME.fullmatch(name):
             workspaces.append((name, Path(path).expanduser()))
         elif layered:
             raise ValueError(
