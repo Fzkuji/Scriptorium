@@ -42,6 +42,37 @@ claude mcp get scriptorium
 
 Start a new Claude Code session; the six `memory_*` tools become available.
 
+### Layers: one global memory plus one per project
+
+A single workspace serves one memory. Passing several `--workspace NAME=PATH`
+arguments serves them as layers of one memory:
+
+```bash
+scriptorium init ~/my-repo/.memory
+claude mcp add --scope project scriptorium -- \
+  scriptorium mcp \
+  --workspace project=/absolute/path/to/my-repo/.memory \
+  --workspace global=~/memory
+```
+
+- **Reads span every layer.** `memory_list`, `memory_grep` and
+  `memory_search` return results from all layers, each path qualified with
+  its layer: `global:topics/person.md`. Search interleaves layers by rank,
+  so a small project memory is not buried under a large global one.
+- **A write lands in exactly one layer**, chosen by `memory_update`'s
+  `layer` argument; without it, the first workspace on the command line
+  receives the write. Put the project first: facts about this repository
+  default there, and facts about the person are written with
+  `layer="global"`.
+- **Layers never merge on disk.** Each stays a complete workspace that
+  `validate` accepts and that can be moved with its repository. Registering
+  with `--scope project` keeps the pairing local to the repo; the global
+  layer is the same directory in every project.
+- `memory_status` reports each layer and one combined revision string;
+  updates accept that combined string, so a stale layer is still rejected.
+  A layer that cannot be read (an unmounted volume) is reported as
+  `unreadable` and skipped; the remaining layers keep working.
+
 ### Git commits
 
 `--git-commit` controls whether each successful update also commits:

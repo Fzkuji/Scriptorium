@@ -32,6 +32,13 @@ writes, and it accepts a unified diff restricted to `topics/**/*.md` and
 commit as one transaction, after which the runtime rebuilds the timeline,
 recent-events and relations views.
 
+Several `--workspace NAME=PATH` arguments serve layered memory — typically a
+per-repository `project` layer plus one `global` layer shared by every
+project. Reads span all layers with qualified paths
+(`global:topics/person.md`); a write lands in the layer named by
+`memory_update`, defaulting to the first workspace given. See
+[`docs/integrations/claude-code.md`](docs/integrations/claude-code.md).
+
 `scriptorium validate --workspace ~/memory` checks a workspace without
 modifying it.
 

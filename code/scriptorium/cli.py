@@ -31,7 +31,17 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--workspace", required=True)
 
     mcp = commands.add_parser("mcp", help="run the stdio MCP server")
-    mcp.add_argument("--workspace", required=True)
+    mcp.add_argument(
+        "--workspace",
+        action="append",
+        required=True,
+        metavar="[NAME=]PATH",
+        help=(
+            "memory workspace; repeat for layers. With several, each needs a "
+            "name and the first receives writes by default: "
+            "--workspace project=.memory --workspace global=~/memory"
+        ),
+    )
     mcp.add_argument(
         "--git-commit",
         choices=("auto", "on", "off"),
@@ -105,18 +115,46 @@ def command_validate(workspace: str) -> int:
     return 0
 
 
-def command_mcp(workspace: str, git_commit: str) -> int:
+def parse_workspaces(values: list[str]) -> list[tuple[str, Path]]:
+    """`NAME=PATH` entries into named layers; a lone bare path stays plain.
+
+    Order matters: the first workspace receives writes that name no layer,
+    so put the narrowest (the project) first.
+    """
+    layered = len(values) > 1
+    workspaces: list[tuple[str, Path]] = []
+    for value in values:
+        name, sep, path = value.partition("=")
+        if sep and name and "/" not in name and "~" not in name:
+            workspaces.append((name, Path(path).expanduser()))
+        elif layered:
+            raise ValueError(
+                f"with several workspaces each needs a name: NAME=PATH, got {value!r}"
+            )
+        else:
+            workspaces.append(("memory", Path(value).expanduser()))
+    return workspaces
+
+
+def command_mcp(workspace_values: list[str], git_commit: str) -> int:
     from .mcp_server import run
 
-    root = Path(workspace).expanduser().resolve()
-    if not root.is_dir():
-        print(
-            f"workspace is not a directory: {root}\n"
-            f"run: scriptorium init {root}",
-            file=sys.stderr,
-        )
+    try:
+        workspaces = parse_workspaces(workspace_values)
+        for _name, path in workspaces:
+            root = path.resolve()
+            if not root.is_dir():
+                raise ValueError(
+                    f"workspace is not a directory: {root}\n"
+                    f"run: scriptorium init {root}"
+                )
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
         return 2
-    run(root, git_commit=git_commit)
+    if len(workspaces) == 1:
+        run(workspaces[0][1].resolve(), git_commit=git_commit)
+    else:
+        run(workspaces, git_commit=git_commit)
     return 0
 
 
@@ -126,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         return command_init(args.workspace)
     if args.command == "validate":
         return command_validate(args.workspace)
-    return command_mcp(args.workspace, args.git_commit)
+    return command_mcp(list(args.workspace), args.git_commit)
 
 
 if __name__ == "__main__":
