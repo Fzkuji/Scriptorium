@@ -148,11 +148,26 @@ same command skips completed work.
 
 ### Reading the cost numbers
 
-`performance.json` reports two different things. `estimated_cost_usd` uses the
-prices you supplied and is the one to trust. `anthropic_equivalent_cost_usd`
-comes from the Claude Agent SDK, which prices every trajectory at Anthropic's
-rates even when `base_url` points somewhere else — it is not what you were
-billed.
+`performance.json` reports two figures, and neither is a bill.
+
+`estimated_cost_usd` is the token counts in `call_log.json` multiplied by the
+prices you passed on the command line. It is only as good as those inputs, so
+two things will silently distort it:
+
+- **Cache rates.** Providers bill a cache read far below fresh input —
+  deepseek-v4-flash on packyapi charges $0.005/M against $0.25/M. Pass
+  `--cache-read-usd-per-million`; omit it and cache reads are priced as input,
+  which on a cache-heavy run overstates cost several fold.
+- **Provider token accounting.** Different gateways count the same work
+  differently. The same conversation recorded 4.11M input tokens on one
+  provider and 26M on another, so costs from two providers are not comparable
+  no matter how correct the prices are.
+
+`anthropic_equivalent_cost_usd` comes from the Claude Agent SDK, which prices
+every trajectory at Anthropic's rates even when `base_url` points elsewhere. It
+is never what you were billed.
+
+For a real figure, read the provider's own usage dashboard.
 
 ## Other commands
 

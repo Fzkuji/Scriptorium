@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Agent Memory Harness — Research Execution Plan</title>
+<title>Scriptorium — Research Execution Plan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;900&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
 <div id="progress-bar"></div>
 <div class="document-shell">
   <aside class="document-sidebar">
-    <p class="document-sidebar-brand">Agent Memory Harness</p>
+    <p class="document-sidebar-brand">Scriptorium</p>
     <nav id="toc" aria-label="页内目录">
       <a class="toc-link" href="#current-state">1. 当前进度</a>
       <a class="toc-link" href="#remaining-work">2. 剩余研究任务</a>
@@ -28,7 +28,7 @@
     <article class="document-content">
       <nav class="document-breadcrumb" aria-label="当前位置">
         <span>LLM Agent Memory</span><span class="separator">/</span>
-        <a href="../Model-Aligned-Wiki.html">Agent-Memory-Harness</a><span class="separator">/</span>
+        <a href="../Model-Aligned-Wiki.html">scriptorium</a><span class="separator">/</span>
         <span>docs</span><span class="separator">/</span>
         <span>research</span><span class="separator">/</span>
         <span aria-current="page">research-plan.html</span>
@@ -36,7 +36,7 @@
 
       <header class="document-header">
         <p class="document-eyebrow">Research Execution Plan</p>
-        <h1>Agent Memory Harness 研究执行计划</h1>
+        <h1>Scriptorium 研究执行计划</h1>
         <p class="document-lead">记录项目当前进度、剩余研究任务、依赖关系和执行顺序；不按论文结构组织。</p>
         <p class="document-meta">updated 2026-08-03</p>
       </header>
@@ -46,7 +46,7 @@
 
       <h3 id="completed">已经完成</h3>
       <ul>
-        <li>Agent Memory Harness 的 Source Memory、Topical View、Temporal View、source references、文件导航和运行时约束已经实现。</li>
+        <li>Scriptorium 的 Source Memory、Topical View、Temporal View、source references、文件导航和运行时约束已经实现。</li>
         <li>Writer、Manager、verification 和 query 已迁移到隔离的 Claude Agent SDK runtime；旧运行中的 DSML 文本化工具调用不再出现。</li>
         <li>DeepSeek V4 Flash 已完成固定 20-session workload 的 4K–32K 校准，以及 Conv-50 的 30-session、204-question 诊断；主问题锁定 judge accuracy 为 96.2%（152/158）。</li>
         <li>LoCoMo 已有完整 1,540 题结果：v8.8+calendar 使用 GPT-5.5 得到 90.84%，早期 GPT-4o-mini 配置得到 78.05%。</li>
@@ -57,7 +57,7 @@
 
       <h3 id="not-completed">尚未完成</h3>
       <ul>
-        <li>Agent Memory Harness 与主要 baseline 在同一 answerer、judge、题集和资源统计口径下的完整比较。</li>
+        <li>Scriptorium 与主要 baseline 在同一 answerer、judge、题集和资源统计口径下的完整比较。</li>
         <li>当前 SDK 配置的时间与模型轮次仍高于旧实现，需要在 development conversation 上确定 Writer 输入上限和局部整理频率后再冻结全量配置。</li>
         <li>Topical View、Temporal View 和 Source Resolution 的正式全量消融。</li>
         <li>同一连续记忆在不同历史增长位置上的任务质量与成本评估。</li>
@@ -67,7 +67,7 @@
       <h2 id="remaining-work">2. 剩余研究任务</h2>
 
       <h3 id="controlled-comparison">任务 A：统一协议整体比较</h3>
-      <p>在 LoCoMo 和 LongMemEval-S 上完成 Agent Memory Harness、Full Context、BM25、Mem0 和 Graphiti 的统一比较。所有可控条件使用相同问题集合、answerer、judge 和成本统计范围。异构论文自报结果只作为外部参考，不参与统一排名。</p>
+      <p>在 LoCoMo 和 LongMemEval-S 上完成 Scriptorium、Full Context、BM25、Mem0 和 Graphiti 的统一比较。所有可控条件使用相同问题集合、answerer、judge 和成本统计范围。异构论文自报结果只作为外部参考，不参与统一排名。</p>
       <p><strong>输出：</strong>完整任务结果，以及构建调用、构建 token、查询调用、查询 token、延迟和存储规模。</p>
 
       <h3 id="component-study">任务 B：多视图与来源组件实验</h3>
@@ -84,7 +84,7 @@
       <h2 id="execution-order">3. 执行顺序</h2>
       <ol>
         <li><strong>先冻结任务 A 的正式配置。</strong>在 Conv-50 development run 上只比较局部整理开关/频率与更高 Writer 输入上限，保留质量、构建时间、轮次和成本共同满足要求的配置。</li>
-        <li><strong>再完成任务 A 的全量运行。</strong>统一整体比较决定 Agent Memory Harness 的实际性能和成本位置，也是后续分析的共同参照。</li>
+        <li><strong>再完成任务 A 的全量运行。</strong>统一整体比较决定 Scriptorium 的实际性能和成本位置，也是后续分析的共同参照。</li>
         <li><strong>再完成任务 B。</strong>整体系统结果确定后，使用 R203 判断多视图和 Source Resolution 是否产生可测作用。</li>
         <li><strong>然后完成任务 C。</strong>使用已经确定的完整方法评估持续增长，避免在增长实验中继续改变基础配置。</li>
         <li><strong>最后完成任务 D。</strong>所有主要答案和 trace 固定后，再统一计算统计区间、judge sensitivity、人工一致性和失败类型。</li>
@@ -96,7 +96,7 @@
         <thead><tr><th>研究任务</th><th>现有执行单元</th><th>当前状态</th><th>前置依赖</th></tr></thead>
         <tbody>
           <tr><td>统一整体比较</td><td>R100–R116</td><td>SDK Runner、Conv-50 诊断与审计已完成；效率配置和全量产物未冻结</td><td>完成局部整理频率与 Writer 输入上限的 development ablation</td></tr>
-          <tr><td>多视图与来源组件</td><td>R203</td><td>Protocol 与离线审计就绪，正式运行待执行</td><td>完整且通过审计的 all-ten Agent Memory Harness source</td></tr>
+          <tr><td>多视图与来源组件</td><td>R203</td><td>Protocol 与离线审计就绪，正式运行待执行</td><td>完整且通过审计的 all-ten Scriptorium source</td></tr>
           <tr><td>增量增长</td><td>R403</td><td>Builder、checkpoint evaluator 与审计就绪，正式运行待执行</td><td>统一正式配置</td></tr>
           <tr><td>统计与可靠性</td><td>R500、R501、R600–R602</td><td>工具就绪，等待正式答案和 trace</td><td>任务 A–C 完整产物</td></tr>
         </tbody>
@@ -104,7 +104,7 @@
 
       <h2 id="decision-gates">5. 结果决策</h2>
       <ul>
-        <li>如果 Agent Memory Harness 在统一协议下没有质量优势，继续报告文件状态、证据保留和成本结果，但不宣称普遍性能领先。</li>
+        <li>如果 Scriptorium 在统一协议下没有质量优势，继续报告文件状态、证据保留和成本结果，但不宣称普遍性能领先。</li>
         <li>如果移除某个视图没有稳定影响，该视图保留为系统接口，不写成已经验证的效果来源。</li>
         <li>如果 Source Resolution 产生稳定收益，保留 source-grounded memory 作为主要设计；否则检查其成本是否仍有保留价值。</li>
         <li>如果增长过程中 QA 通过明显增加查询调用才能保持稳定，必须同时报告质量和成本变化。</li>

@@ -1,4 +1,4 @@
-# Agent Memory Harness 方法文档
+# Scriptorium 方法文档
 
 > 更新：2026-08-03。本文件说明方法目录的内容边界和证据状态；当前方法正文以 `nativemem-method.html` 为准。
 
@@ -26,7 +26,7 @@
 
 ## 当前方法概览
 
-Agent Memory Harness 是一个 file-native、multi-view 的外部记忆系统。Source、Topic 和 Core 是需要保存的权威文本；Timeline、Recent、Relations 与检索索引从这些状态重建。LLM 负责 Topic/Core 的语义内容、组织、证据日期和检索决策，Runtime 负责 ID、来源解析、路径、派生视图、预算和事务边界。
+Scriptorium 是一个 file-native、multi-view 的外部记忆系统。Source、Topic 和 Core 是需要保存的权威文本；Timeline、Recent、Relations 与检索索引从这些状态重建。LLM 负责 Topic/Core 的语义内容、组织、证据日期和检索决策，Runtime 负责 ID、来源解析、路径、派生视图、预算和事务边界。
 
 当前设计包含六类状态：
 

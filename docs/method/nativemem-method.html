@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Agent Memory Harness — File-Native Multi-View Memory</title>
+<title>Scriptorium — File-Native Multi-View Memory</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
@@ -21,7 +21,7 @@
 <div id="progress-bar"></div>
 <div class="document-shell">
 <aside class="document-sidebar">
-  <p class="document-sidebar-brand">Agent Memory Harness</p>
+  <p class="document-sidebar-brand">Scriptorium</p>
   <nav id="toc">
     <a class="toc-link" href="#overview">§1 Method Overview</a>
     <a class="toc-link" href="#architecture">§2 Memory Architecture</a>
@@ -45,20 +45,20 @@
 <article class="document-content">
   <nav class="document-breadcrumb" aria-label="当前位置">
     <span>LLM Agent Memory</span><span class="separator">/</span>
-    <a href="../Model-Aligned-Wiki.html">Agent-Memory-Harness</a><span class="separator">/</span>
+    <a href="../Model-Aligned-Wiki.html">scriptorium</a><span class="separator">/</span>
     <span>docs</span><span class="separator">/</span>
     <span>method</span><span class="separator">/</span>
     <span aria-current="page">nativemem-method.html</span>
   </nav>
   <header class="document-header">
     <p class="document-eyebrow">Current Method Specification</p>
-    <h1>Agent Memory Harness: File-Native, Source-Grounded Multi-View Memory</h1>
-    <p class="document-lead">Agent Memory Harness 将 Source、Topic、Timeline、Recent、Core 和索引关系组织为一个文件式记忆状态。Topic 是可编辑的主要语义状态；Timeline、Recent 与索引由 Runtime 从 Topic 确定性生成。LLM 负责语义选择和组织，Runtime 负责身份、校验、同步与事务。</p>
+    <h1>Scriptorium: File-Native, Source-Grounded Multi-View Memory</h1>
+    <p class="document-lead">Scriptorium 将 Source、Topic、Timeline、Recent、Core 和索引关系组织为一个文件式记忆状态。Topic 是可编辑的主要语义状态；Timeline、Recent 与索引由 Runtime 从 Topic 确定性生成。LLM 负责语义选择和组织，Runtime 负责身份、校验、同步与事务。</p>
     <p class="document-meta">updated 2026-08-03 · current implementation and online contract</p>
   </header>
 
   <figure class="figure architecture-figure">
-    <img src="../../code/figures/nativemem_overview.svg" alt="Agent Memory Harness 多视图状态中心架构">
+    <img src="../../code/figures/nativemem_overview.svg" alt="Scriptorium 多视图状态中心架构">
     <figcaption>Source 提供原始证据，Topic 保存主要语义状态，Runtime 从 Topic 同步 Timeline、Recent 和关系索引；Core 由 LLM 独立维护。</figcaption>
   </figure>
 
@@ -188,7 +188,7 @@ Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
   <p>如果证据只能确定年份或月份，Writer 分别在 footnote 中写 <code>YYYY</code> 或 <code>YYYY-MM</code>；只有无法确定任何日历年份时才写 <code>undated</code>。如果同一事实由多个来源支持，则在 <code>Sources:</code> 后写多个完整 handle，并用逗号分隔。Runtime 不从正文时间字符串自动补充精度，而是直接按 <code>Time</code> 字段的原始精度生成 Timeline。</p>
 
   <h3 id="writer-capacity">3.1 Writer Capacity Calibration</h3>
-  <p>不同模型即使声明相同的上下文窗口，也可能在多 session 记忆写入中表现出不同的来源覆盖率、格式稳定性和工具调用完成率。因此，Agent Memory Harness 在正式构建前对每个 <strong>model + Writer protocol</strong> 组合执行一次轻量校准。该过程测量当前 Writer 系统提示、批量写入提示、Claude Agent SDK 和工具契约共同作用下的有效输入容量，不把模型声明的最大上下文长度直接作为写入批量。</p>
+  <p>不同模型即使声明相同的上下文窗口，也可能在多 session 记忆写入中表现出不同的来源覆盖率、格式稳定性和工具调用完成率。因此，Scriptorium 在正式构建前对每个 <strong>model + Writer protocol</strong> 组合执行一次轻量校准。该过程测量当前 Writer 系统提示、批量写入提示、Claude Agent SDK 和工具契约共同作用下的有效输入容量，不把模型声明的最大上下文长度直接作为写入批量。</p>
   <div class="table-scroll"><table tabindex="0">
     <thead><tr><th>步骤</th><th>处理</th><th>判定</th></tr></thead>
     <tbody>
