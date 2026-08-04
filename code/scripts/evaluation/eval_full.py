@@ -19,7 +19,12 @@ import re
 import glob
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(
+    0,
+    os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ),
+)
 
 RUN_DIR = sys.argv[1]
 ANS_MODEL = sys.argv[2]

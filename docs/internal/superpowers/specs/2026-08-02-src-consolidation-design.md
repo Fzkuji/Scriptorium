@@ -176,7 +176,7 @@ code/results/model_capacity/<provider>--<model>/<run-id>/calibration.json
    retrieval agent 和 LoCoMo/LongMemEval runner 测试通过。
 3. `scripts/eval_full.py` 的 SHA-256 保持
    `f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd`。
-4. `python scripts/verify_portable_layout.py`、导入检查和 `git diff --check` 通过。
+4. `python scripts/maintenance/verify_portable_layout.py`、导入检查和 `git diff --check` 通过。
 5. 清理前已经位于 `results/` 的文件、benchmark 数据和 memory 产物保持不变；
    新迁移或生成的文件只进入 `results/analysis/` 和 `results/model_capacity/`。
 6. 模型长度校准脚本可以使用本地伪 client 完成边界选择，并将结果写入指定的

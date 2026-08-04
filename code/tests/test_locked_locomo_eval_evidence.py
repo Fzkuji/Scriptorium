@@ -15,9 +15,9 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EVALUATOR = ROOT / "scripts" / "eval_full.py"
+EVALUATOR = ROOT / "scripts" / "evaluation" / "eval_full.py"
 EXPECTED_EVALUATOR_SHA256 = (
-    "f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd"
+    "17ef2179cd2781880649eed4a7d62988c069123b5044f007c194cdab8e63f88b"
 )
 
 
@@ -84,7 +84,7 @@ def _run_native(run_dir: Path, fake_post: Any) -> None:
 def test_instrumented_execution_is_byte_identical_and_records_response_evidence(
     tmp_path: Path,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     assert hashlib.sha256(EVALUATOR.read_bytes()).hexdigest() == (
         EXPECTED_EVALUATOR_SHA256
@@ -229,7 +229,7 @@ def test_retry_attempts_and_exceptions_are_recorded_and_audited(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     run_dir = tmp_path / "retry"
     _write_input(run_dir)
@@ -304,7 +304,7 @@ def test_retry_attempts_and_exceptions_are_recorded_and_audited(
 def test_instrumentation_preserves_category_filter_parser_and_output_schema(
     tmp_path: Path,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     records = [
         {
@@ -378,7 +378,7 @@ def test_evidence_extraction_failure_cannot_change_evaluator_output(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     native_dir = tmp_path / "native-evidence-failure"
     instrumented_dir = tmp_path / "instrumented-evidence-failure"
@@ -446,7 +446,7 @@ def test_evidence_redacts_authorization_values_from_exceptions(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     run_dir = tmp_path / "redaction"
     _write_input(run_dir)
@@ -501,7 +501,7 @@ def test_audit_recomputes_metadata_from_raw_artifacts(
     monkeypatch: Any,
     tamper_kind: str,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     run_dir = tmp_path / tamper_kind
     _write_input(run_dir)
@@ -567,7 +567,7 @@ def test_cli_reads_api_keys_from_named_environment_variables(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     monkeypatch.setenv("TEST_ANSWERER_SECRET", "answerer-secret-value")
     monkeypatch.setenv("TEST_JUDGE_SECRET", "judge-secret-value")
@@ -605,7 +605,7 @@ def test_cli_reads_api_keys_from_named_environment_variables(
 
 
 def test_exact_evaluator_copy_is_rejected_even_when_sha_matches(tmp_path: Path) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     copied_evaluator = tmp_path / "eval_full.py"
     copied_evaluator.write_bytes(EVALUATOR.read_bytes())
@@ -623,7 +623,7 @@ def test_launcher_fails_closed_when_automatic_evidence_audit_fails(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     run_dir = tmp_path / "missing-usage"
     _write_input(run_dir)
@@ -663,7 +663,7 @@ def test_launcher_fails_closed_when_automatic_evidence_audit_fails(
     assert manifest["audit_error"] == {
         "message": "judge response evidence is incomplete",
         "type": (
-            "scripts.run_locked_locomo_eval_with_evidence."
+            "scripts.evaluation.run_locked_locomo_eval_with_evidence."
             "LockedEvaluatorEvidenceError"
         ),
     }
@@ -682,7 +682,7 @@ def test_audit_rejects_incomplete_ledger_and_changed_eval_output(
     tamper_kind: str,
     error: str,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     run_dir = tmp_path / tamper_kind
     _write_input(run_dir)
@@ -733,7 +733,7 @@ def test_programmatic_launcher_restores_answerer_environment(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     run_dir = tmp_path / "restore-environment"
     _write_input(run_dir)
@@ -774,7 +774,7 @@ def test_launcher_rejects_request_exhausted_after_three_provider_failures(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     run_dir = tmp_path / "exhausted"
     _write_input(run_dir)
@@ -816,7 +816,7 @@ def test_launcher_rejects_response_missing_evaluator_content_path(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    from scripts import run_locked_locomo_eval_with_evidence as instrumented
+    from scripts.evaluation import run_locked_locomo_eval_with_evidence as instrumented
 
     run_dir = tmp_path / "malformed-response"
     _write_input(run_dir)

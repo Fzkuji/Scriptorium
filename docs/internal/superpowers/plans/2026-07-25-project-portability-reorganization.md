@@ -26,7 +26,7 @@
 - Create: `requirements.txt`
 - Create: `requirements-dev.txt`
 - Create: `setup.sh`
-- Create: `scripts/verify_portable_layout.py`
+- Create: `scripts/maintenance/verify_portable_layout.py`
 - Test: `tests/test_portable_layout.py`
 
 **Interfaces:**
@@ -36,7 +36,7 @@
 - [ ] Write a test that requires Python setup files, relative compatibility links, required project directories, and credential-free dependency files.
 - [ ] Run `pytest -q tests/test_portable_layout.py` and confirm it fails before the files exist.
 - [ ] Add pinned direct dependencies used by core NativeMem, evaluation, plotting, and tests.
-- [ ] Add `setup.sh` to create `.venv` with Python 3.12, install both requirement files, and run `python scripts/verify_portable_layout.py`.
+- [ ] Add `setup.sh` to create `.venv` with Python 3.12, install both requirement files, and run `python scripts/maintenance/verify_portable_layout.py`.
 - [ ] Add the verification script without third-party dependencies.
 - [ ] Run the focused test and the verification script.
 
@@ -65,7 +65,7 @@
 - [ ] Create relative symlinks for every former root path.
 - [ ] Update `.gitignore` for canonical paths and local `.venv`.
 - [ ] Update the experiment-page link in `Model-Aligned-Wiki.html`.
-- [ ] Run `python scripts/verify_portable_layout.py`.
+- [ ] Run `python scripts/maintenance/verify_portable_layout.py`.
 - [ ] Confirm post-move result directory and file counts match the pre-move counts.
 
 ### Task 3: Third-party reproducibility

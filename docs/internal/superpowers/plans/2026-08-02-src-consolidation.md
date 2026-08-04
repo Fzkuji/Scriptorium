@@ -205,7 +205,7 @@ git commit -m "refactor: separate core from executable infrastructure"
 - Rename: `code/scripts/reanswer_longmemeval_existing_memory.py` → `code/scripts/nativemem/reanswer_longmemeval.py`
 - Delete: `code/src/nativemem.py`, `code/src/v8_memory.py`, `code/src/v10_memory.py`, `code/src/nativemem_versions/`, `code/src/legacy/`, `code/scripts/adapters/run_nativemem.py`, and the old NativeMem version tests and scripts defined below
 - Rename retained current tests into `code/tests/management/`, `code/tests/markdown/`, `code/tests/retrieval/`, `code/tests/runtime/`, and `code/tests/scripts/`
-- Modify: `code/scripts/verify_portable_layout.py`
+- Modify: `code/scripts/maintenance/verify_portable_layout.py`
 
 **Interfaces:**
 - Consumes: `src` and `scripts.*` packages from Tasks 1–2.
@@ -290,7 +290,7 @@ git commit -m "refactor: remove superseded NativeMem versions"
 - Rename: analysis files and artifacts → `code/results/analysis/<study-name>/`
 - Delete: `code/experiments/*/code/`, caches, `.pyc`, and `.DS_Store`
 - Delete: root `experiments` symlink
-- Modify: `README.md`, `code/scripts/verify_portable_layout.py`, and current references outside `docs/internal/`
+- Modify: `README.md`, `code/scripts/maintenance/verify_portable_layout.py`, and current references outside `docs/internal/`
 - Test: `code/tests/test_code_layout.py`
 
 **Interfaces:**
@@ -546,7 +546,7 @@ Run:
 
 ```bash
 pytest -q code/tests/test_document_pages.py code/tests/test_portable_layout.py
-python scripts/verify_portable_layout.py
+python scripts/maintenance/verify_portable_layout.py
 ```
 
 Expected: PASS with no missing local links.
@@ -603,7 +603,7 @@ Expected: PASS.
 Run:
 
 ```bash
-python scripts/verify_portable_layout.py
+python scripts/maintenance/verify_portable_layout.py
 python -c "from src import BuildConfig, MemoryWorkspace, QueryConfig; print('imports ok')"
 git diff --check
 git status --short

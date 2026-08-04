@@ -25,10 +25,10 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 import requests
 
 
-ROOT = Path(__file__).resolve().parents[1]
-LOCKED_EVALUATOR = ROOT / "scripts" / "eval_full.py"
+ROOT = Path(__file__).resolve().parents[2]
+LOCKED_EVALUATOR = ROOT / "scripts" / "evaluation" / "eval_full.py"
 LOCKED_EVALUATOR_SHA256 = (
-    "f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd"
+    "17ef2179cd2781880649eed4a7d62988c069123b5044f007c194cdab8e63f88b"
 )
 
 
@@ -111,7 +111,7 @@ def verify_locked_evaluator(path: Path = LOCKED_EVALUATOR) -> str:
     actual = sha256_file(path)
     if actual != LOCKED_EVALUATOR_SHA256:
         raise LockedEvaluatorEvidenceError(
-            "scripts/eval_full.py changed; LoCoMo evaluation is blocked "
+            "scripts/evaluation/eval_full.py changed; LoCoMo evaluation is blocked "
             f"(expected {LOCKED_EVALUATOR_SHA256}, got {actual})"
         )
     return actual
@@ -949,7 +949,7 @@ def run_locked_evaluator(
         )
     if sha256_after != LOCKED_EVALUATOR_SHA256:
         raise LockedEvaluatorEvidenceError(
-            "scripts/eval_full.py changed while the evaluator was executing"
+            "scripts/evaluation/eval_full.py changed while the evaluator was executing"
         )
     if recorder.recording_errors:
         raise LockedEvaluatorEvidenceError(

@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 THIRD_PARTY = ROOT / "code" / "third_party"
 
 

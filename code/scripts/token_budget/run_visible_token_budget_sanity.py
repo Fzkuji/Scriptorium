@@ -24,7 +24,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__,
         epilog=(
-            "Example: python3 scripts/run_visible_token_budget_sanity.py "
+            "Example: python3 scripts/token_budget/run_visible_token_budget_sanity.py "
             "--output-dir /private/tmp/nativemem-r004-sanity-001 "
             "--budget-tokens 32 --model gpt-5.5 --allow-byte-fallback"
         ),

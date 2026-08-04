@@ -9,8 +9,8 @@ from scripts.nativemem.common import sha256_file
 
 
 CODE_ROOT = Path(__file__).resolve().parents[3]
-EVALUATOR = CODE_ROOT / "scripts" / "eval_full.py"
-EVALUATOR_SHA256 = "f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd"
+EVALUATOR = CODE_ROOT / "scripts" / "evaluation" / "eval_full.py"
+EVALUATOR_SHA256 = "17ef2179cd2781880649eed4a7d62988c069123b5044f007c194cdab8e63f88b"
 
 
 def verify_evaluator() -> None:

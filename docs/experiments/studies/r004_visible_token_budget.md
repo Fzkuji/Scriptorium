@@ -58,7 +58,7 @@ stored in its trace.
 Run from the repository root with a new output path:
 
 ```bash
-python3 scripts/run_visible_token_budget_sanity.py \
+python3 scripts/token_budget/run_visible_token_budget_sanity.py \
   --output-dir /private/tmp/nativemem-r004-sanity-001 \
   --budget-tokens 32 \
   --model gpt-5.5 \
@@ -73,7 +73,7 @@ nonzero if the audit fails.
 The saved trace can be audited again with:
 
 ```bash
-python3 scripts/audit_visible_token_budget.py \
+python3 scripts/token_budget/audit_visible_token_budget.py \
   --trace /private/tmp/nativemem-r004-sanity-001/visible-token-trace.jsonl \
   --memory-before /private/tmp/nativemem-r004-sanity-001/memory-before \
   --memory-after /private/tmp/nativemem-r004-sanity-001/memory-after \

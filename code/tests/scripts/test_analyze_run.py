@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "analyze_run.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "analysis" / "analyze_run.py"
 
 EVAL = {
     "records": [

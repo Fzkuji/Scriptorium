@@ -98,7 +98,7 @@ Root-level `src`, `scripts`, `tests`, `benchmarks`, `figures`, `gold_memory`,
 code is classified under `scripts/`; generated analysis is stored under
 `results/analysis/`. There is no separate code-level `experiments/` directory.
 `code/src/evaluation` is a compatibility link to `code/scripts/evaluation`
-for the hash-locked `code/scripts/eval_full.py`; evaluation implementation is
+for the hash-locked `code/scripts/evaluation/eval_full.py`; evaluation implementation is
 maintained only under `code/scripts/evaluation`.
 
 ## Running an experiment
@@ -173,7 +173,7 @@ For a real figure, read the provider's own usage dashboard.
 
 ```bash
 # Layout and transfer check
-python scripts/verify_portable_layout.py
+python scripts/maintenance/verify_portable_layout.py
 
 # Tests
 pytest -q \
@@ -195,7 +195,7 @@ the dataset directories.
 each external Git repository. Regenerate it after changing a checkout:
 
 ```bash
-python scripts/generate_third_party_manifest.py
+python scripts/maintenance/generate_third_party_manifest.py
 ```
 
 Third-party frameworks keep their own dependency files. Their old virtual
