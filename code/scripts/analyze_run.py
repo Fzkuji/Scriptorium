@@ -23,6 +23,28 @@ def analyze(run_dir):
             cats.setdefault(c, [0, 0]); cats[c][0] += ok; cats[c][1] += 1
         print(f"  分数: n={n} 标准={std/n*100:.1f} 严格={strict/n*100:.1f} 弃答={ab}")
         print("  分项:", {CAT.get(c, c): f"{a/b*100:.1f}" for c, (a, b) in sorted(cats.items())})
+    # LongMemEval 用 avg_score + results,分项按 question_type 而非数字类别。
+    for lf in sorted(glob.glob(os.path.join(run_dir, "eval_*.json"))):
+        if os.path.basename(lf) == "eval_full.json":
+            continue
+        try:
+            d = json.load(open(lf))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(d, dict) or "avg_score" not in d:
+            continue
+        rows = d.get("results") or []
+        types = {}
+        for r in rows:
+            t = r.get("question_type") or r.get("type") or "unknown"
+            ok = float(r.get("score") or r.get("judge_score") or 0) >= 1
+            types.setdefault(t, [0, 0])
+            types[t][0] += ok
+            types[t][1] += 1
+        print(f"  [{os.path.basename(lf)}] avg={d['avg_score']:.1f} "
+              f"n={len(rows)} found={d.get('found', '-')}")
+        if len(types) > 1:
+            print("  分项:", {t: f"{a/b*100:.1f}" for t, (a, b) in sorted(types.items())})
     # 旧格式:build 统计塞在 sample*_questions.json 的 _build_stats 记录里。
     for qf in sorted(glob.glob(os.path.join(run_dir, "sample*_questions.json"))):
         recs = json.load(open(qf))

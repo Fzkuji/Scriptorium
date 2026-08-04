@@ -16,11 +16,7 @@ from .prompts import (
     VERIFICATION_REPAIR_TASK,
     VERIFICATION_RETRIEVAL_TASK,
 )
-
-# Structured output through a gateway is probabilistic, and one miss should not
-# discard a build that is already an hour in.
-STRUCTURED_OUTPUT_ATTEMPTS = 3
-
+from .retrying import STRUCTURED_OUTPUT_ATTEMPTS
 
 _PROBE_SCHEMA = {
     "type": "object",

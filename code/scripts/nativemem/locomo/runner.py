@@ -14,6 +14,8 @@ from scripts.nativemem.common import atomic_json, read_json, tree_sha256, utc_no
 from .config import parse_args
 from .data import load_sample, sample_inventory
 from .evaluation import run_evaluator, verify_evaluator
+from src.runtime.billing import read_spend, spend_delta
+
 from .metrics import latency_summary, memory_inventory, summarize_usage
 from .query import answer_question
 from .results import build_record, load_completed, write_questions
@@ -57,6 +59,9 @@ def main(argv: list[str] | None = None) -> int:
         max_budget_usd=args.max_budget_usd,
         verify_sources=args.verify_sources,
     )
+    # Read the provider's spend counter before any request, so the run can
+    # report what it actually cost rather than only a price-times-tokens guess.
+    spend_before = read_spend(args.base_url, args.api_key)
     backend = retrieval.create_runtime(
         args.base_url,
         model=args.model,
@@ -229,6 +234,11 @@ def main(argv: list[str] | None = None) -> int:
             cache_write_usd_per_million=args.cache_write_usd_per_million,
         ),
         "memory": memory_inventory(memory_dir),
+        # What the provider's own counter moved by, which does not depend on
+        # the prices passed in or on how this gateway counts tokens.
+        "provider_spend": spend_delta(
+            spend_before, read_spend(args.base_url, args.api_key)
+        ),
         "config": {"build": asdict(build_config), "query": asdict(query_config)},
         "finished_at": utc_now(),
     }

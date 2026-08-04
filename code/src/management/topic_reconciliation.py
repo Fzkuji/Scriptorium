@@ -12,6 +12,7 @@ from .reconciliation import (
     classify_topic_diff,
 )
 from ..markdown import parse_topic_tree, render_definition, topic_prose
+from .retrying import RECONCILIATION_ATTEMPTS
 
 
 class TopicReconciliationMixin:
@@ -55,7 +56,7 @@ class TopicReconciliationMixin:
                 r"<!-- source-id:([^>]+) -->",
                 source.read_text(encoding="utf-8"),
             ))
-        for attempt in range(2):
+        for attempt in range(RECONCILIATION_ATTEMPTS):
             result = self.reconciler(
                 edited_text, old_units, candidate_sources
             )
@@ -69,7 +70,7 @@ class TopicReconciliationMixin:
                 )
                 break
             except ReconciliationError:
-                if attempt == 1:
+                if attempt == RECONCILIATION_ATTEMPTS - 1:
                     raise
         self._materialize_reconciliation(result, old_units)
 

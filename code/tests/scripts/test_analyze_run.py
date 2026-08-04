@@ -69,3 +69,33 @@ def test_missing_build_artifacts_do_not_crash(tmp_path: Path):
     out = run(tmp_path)
 
     assert "n=2" in out
+
+
+def test_reads_longmemeval_results(tmp_path: Path):
+    """LongMemEval reports avg_score/results, not overall/records."""
+    (tmp_path / "eval_30.json").write_text(json.dumps({
+        "avg_score": 73.33, "found": 29,
+        "results": [
+            {"question_type": "temporal-reasoning", "score": 1},
+            {"question_type": "multi-session", "score": 0},
+        ],
+    }))
+
+    out = run(tmp_path)
+
+    assert "avg=73.3" in out
+    assert "found=29" in out
+    assert "temporal-reasoning" in out
+
+
+def test_locomo_and_longmemeval_can_coexist(tmp_path: Path):
+    (tmp_path / "eval_full.json").write_text(json.dumps(EVAL))
+    (tmp_path / "eval_30.json").write_text(json.dumps({
+        "avg_score": 50.0, "found": 1,
+        "results": [{"question_type": "x", "score": 1}],
+    }))
+
+    out = run(tmp_path)
+
+    assert "n=2" in out
+    assert "avg=50.0" in out
