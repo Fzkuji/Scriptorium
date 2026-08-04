@@ -13,7 +13,7 @@
 - `code/src/` contains only reusable NativeMem core code.
 - No environment variable may configure NativeMem core, calibration, or current benchmark runners.
 - A Writer batch never splits a session.
-- Files already under `code/results/`, `code/benchmarks/`, `code/third_party/`, `paper/`, and generated memory directories are not deleted or renamed; migrated analysis files may be added under `code/results/analysis/`.
+- Files already under `code/results/`, `code/benchmarks/`, `code/baselines/third_party/`, `paper/`, and generated memory directories are not deleted or renamed; migrated analysis files may be added under `code/results/analysis/`.
 - `scripts/eval_full.py` remains unchanged with SHA-256 `f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd`.
 - Old implementations remain recoverable through Git commit `31cc34c`.
 - Do not add a new LoCoMo evaluator or report calibration output as a LoCoMo score.
@@ -118,7 +118,7 @@ git commit -m "refactor: promote NativeMem core into src"
 ### Task 2: Keep executable infrastructure outside `src/`
 
 **Files:**
-- Rename: `code/src/adapters/` → `code/scripts/adapters/`
+- Rename: `code/src/adapters/` → `code/baselines/adapters/`
 - Rename: `code/src/evaluation/` → `code/scripts/evaluation/`
 - Rename: `code/src/eval_standard.py` → `code/scripts/evaluation/standard.py`
 - Rename: `code/src/run_judge.py` → `code/scripts/evaluation/run_judge.py`
@@ -130,7 +130,7 @@ The gateway move covers `anthropic_openai_compat.py`, `chatgpt_proxy.py`, `codeb
 
 **Interfaces:**
 - Consumes: the direct `src` API from Task 1.
-- Produces: `scripts.adapters`, `scripts.evaluation`, and `scripts.gateways` executable support packages.
+- Produces: `baselines.adapters`, `scripts.evaluation`, and `scripts.gateways` executable support packages.
 
 - [ ] **Step 1: Write the layout test**
 
@@ -161,7 +161,7 @@ Expected: FAIL on the existing `src/adapters` and `src/evaluation` directories.
 Replace current imports as follows throughout active scripts and retained tests:
 
 ```text
-src.adapters       -> scripts.adapters
+src.adapters       -> baselines.adapters
 src.evaluation     -> scripts.evaluation
 src.chatgpt_proxy  -> scripts.gateways.chatgpt_proxy
 src.openai_gpt55_flex_gateway -> scripts.gateways.openai_gpt55_flex_gateway
@@ -203,7 +203,7 @@ git commit -m "refactor: separate core from executable infrastructure"
 - Rename: `code/scripts/run_v11_locomo.py` → `code/scripts/nativemem/run_locomo.py`
 - Rename: `code/scripts/run_v11_gpt55_frontier_longmemeval.py` → `code/scripts/nativemem/run_longmemeval.py`
 - Rename: `code/scripts/reanswer_longmemeval_existing_memory.py` → `code/scripts/nativemem/reanswer_longmemeval.py`
-- Delete: `code/src/nativemem.py`, `code/src/v8_memory.py`, `code/src/v10_memory.py`, `code/src/nativemem_versions/`, `code/src/legacy/`, `code/scripts/adapters/run_nativemem.py`, and the old NativeMem version tests and scripts defined below
+- Delete: `code/src/nativemem.py`, `code/src/v8_memory.py`, `code/src/v10_memory.py`, `code/src/nativemem_versions/`, `code/src/legacy/`, `code/baselines/adapters/run_nativemem.py`, and the old NativeMem version tests and scripts defined below
 - Rename retained current tests into `code/tests/management/`, `code/tests/markdown/`, `code/tests/retrieval/`, `code/tests/runtime/`, and `code/tests/scripts/`
 - Modify: `code/scripts/maintenance/verify_portable_layout.py`
 
@@ -222,7 +222,7 @@ def test_no_active_version_router_or_old_native_memory_modules():
         "src/v10_memory.py",
         "src/nativemem_versions",
         "src/legacy",
-        "scripts/adapters/run_nativemem.py",
+        "baselines/adapters/run_nativemem.py",
     ):
         assert not (root / relative).exists()
 ```

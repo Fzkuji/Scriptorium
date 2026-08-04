@@ -61,7 +61,7 @@ experiments -> code/experiments
 figures -> code/figures
 gold_memory -> code/gold_memory
 results -> code/results
-third_party -> code/third_party
+third_party -> code/baselines/third_party
 experiment-plan.html -> docs/experiment-plan.html
 ```
 

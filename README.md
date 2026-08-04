@@ -71,16 +71,20 @@ or `.venv-*`; run `./setup.sh` on the destination computer instead.
 code/
   scriptorium/                installable facade, CLI and MCP server
   src/                        reusable Scriptorium implementation
-  scripts/                    runners, adapters, evaluation and analysis
-    configs/                  frozen command inputs
-    model_capacity/           Writer capacity calibration
+  scripts/                    run_experiment.sh plus experiment packages
     nativemem/                LoCoMo, LongMemEval and ablation runners
+    model_capacity/           Writer capacity calibration
+    evaluation/               judges, metrics, and the locked evaluator
+    analysis/                 summaries over stored runs
+    configs/                  frozen command inputs
+  baselines/                  systems compared against
+    adapters/                 one runnable module per system
+    third_party/              their checkouts, restored from manifest.json
   tests/                      tests grouped by implementation responsibility
   benchmarks/                 local benchmark datasets
   figures/                    generated figures
   gold_memory/                curated memory fixtures
   results/                    formal runs, analysis and capacity artifacts
-  third_party/                external framework checkouts
 paper/                        independent paper Git repository
 docs/
   Model-Aligned-Wiki.html     documentation entry and research overview
@@ -94,7 +98,7 @@ docs/
 ```
 
 Root-level `src`, `scripts`, `tests`, `benchmarks`, `figures`, `gold_memory`,
-`results`, and `third_party` are relative compatibility symlinks. Executable
+`results`, `baselines`, and `third_party` are relative compatibility symlinks. Executable
 code is classified under `scripts/`; generated analysis is stored under
 `results/analysis/`. There is no separate code-level `experiments/` directory.
 `code/src/evaluation` is a compatibility link to `code/scripts/evaluation`
@@ -191,7 +195,7 @@ Benchmark datasets remain under `code/benchmarks` and are accessed through the
 root `benchmarks` link. Their upstream repositories and licenses remain inside
 the dataset directories.
 
-`code/third_party/manifest.json` records the remote URL and exact commit for
+`code/baselines/third_party/manifest.json` records the remote URL and exact commit for
 each external Git repository. Regenerate it after changing a checkout:
 
 ```bash
@@ -200,7 +204,7 @@ python scripts/maintenance/generate_third_party_manifest.py
 
 Third-party frameworks keep their own dependency files. Their old virtual
 environments are not portable and are replaced by frozen package inventories
-under `code/third_party/environments`.
+under `code/baselines/third_party/environments`.
 
 ## Results
 

@@ -1,9 +1,9 @@
 # 外部仓库克隆（清单入库，源码按清单重新 clone）
-code/third_party/*
-!code/third_party/README.md
-!code/third_party/manifest.json
-!code/third_party/environments/
-!code/third_party/environments/*.txt
+code/baselines/third_party/*
+!code/baselines/third_party/README.md
+!code/baselines/third_party/manifest.json
+!code/baselines/third_party/environments/
+!code/baselines/third_party/environments/*.txt
 
 # Benchmark 数据（体积大，按 README 说明下载）
 code/benchmarks/

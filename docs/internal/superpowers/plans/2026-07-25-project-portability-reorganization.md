@@ -51,7 +51,7 @@
 - Move: `figures/` to `code/figures/`
 - Move: `gold_memory/` to `code/gold_memory/`
 - Move: `results/` to `code/results/`
-- Move: `third_party/` to `code/third_party/`
+- Move: `third_party/` to `code/baselines/third_party/`
 - Move: `experiment-plan.html` to `docs/experiment-plan.html`
 - Modify: `.gitignore`
 - Modify: `Model-Aligned-Wiki.html`
@@ -71,8 +71,8 @@
 ### Task 3: Third-party reproducibility
 
 **Files:**
-- Create: `code/third_party/manifest.json`
-- Create: `code/third_party/README.md`
+- Create: `code/baselines/third_party/manifest.json`
+- Create: `code/baselines/third_party/README.md`
 - Create: `code/scripts/capture_third_party_manifest.py`
 
 **Interfaces:**

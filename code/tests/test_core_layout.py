@@ -50,7 +50,7 @@ def test_no_active_version_router_or_old_native_memory_modules():
         "src/v10_memory.py",
         "src/nativemem_versions",
         "src/legacy",
-        "scripts/adapters/run_nativemem.py",
+        "baselines/adapters/run_nativemem.py",
     ):
         assert not (CODE_ROOT / relative).exists()
 
