@@ -77,13 +77,10 @@ code/
     evaluation/               judges, metrics, and the locked evaluator
     analysis/                 summaries over stored runs
     configs/                  frozen command inputs
-  baselines/                  systems compared against, and controlled comparison
+  baselines/                  systems compared against
+    run_comparison.sh         score other systems under our own condition
     adapters/                 one runnable module per system
     third_party/              their checkouts, restored from manifest.json
-    controlled_locomo/        shared answerer with an enforced prompt boundary
-    locomo_baselines/         retrieval-only LoCoMo rows
-    longmemeval_m1/           the same comparison on LongMemEval
-    gateways/                 budget-enforcing proxies for comparison runs
   tests/                      tests grouped by implementation responsibility
   benchmarks/                 local benchmark datasets
   figures/                    generated figures

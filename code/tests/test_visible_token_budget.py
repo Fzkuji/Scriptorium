@@ -313,38 +313,6 @@ def test_byte_fallback_identity_is_explicitly_non_provider_exact():
     assert "not a provider" in tokenizer.identity["counting_note"]
 
 
-def test_sanity_command_generates_audited_minimal_artifacts(tmp_path):
-    output = tmp_path / "sanity"
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(ROOT / "baselines" / "token_budget" / "run_visible_token_budget_sanity.py"),
-            "--output-dir",
-            str(output),
-            "--budget-tokens",
-            "32",
-            "--model",
-            "gpt-5.5",
-            "--allow-byte-fallback",
-        ],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr + result.stdout
-    summary = json.loads(result.stdout)
-    assert summary["audit_status"] == "pass"
-    assert summary["decisions"] == [
-        "delivered",
-        "delivered",
-        "truncated",
-        "rejected_budget_exhausted",
-    ]
-    assert summary["source_resolution_tokens"] > 0
-    assert summary["cumulative_visible_tokens"] == 32
-    assert json.loads((output / "audit.json").read_text())["audit_status"] == "pass"
-
 
 def test_manifest_cannot_alias_derived_lock_path(tmp_path):
     before, _ = _memory_snapshots(tmp_path)
@@ -464,44 +432,4 @@ def test_copy_snapshot_rejects_source_tree_symlink_before_copy(tmp_path):
     assert not destination.exists()
 
 
-def test_published_private_tmp_sanity_command_shape_runs():
-    private_tmp = Path("/private/tmp")
-    if not private_tmp.is_dir():
-        pytest.skip("/private/tmp is not available on this platform")
-    with tempfile.TemporaryDirectory(prefix="r004-command-", dir=private_tmp) as parent:
-        output = Path(parent) / "sanity"
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "baselines" / "token_budget" / "run_visible_token_budget_sanity.py"),
-                "--output-dir",
-                str(output),
-                "--budget-tokens",
-                "32",
-                "--model",
-                "gpt-5.5",
-                "--allow-byte-fallback",
-            ],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, result.stderr + result.stdout
-        assert json.loads(result.stdout)["audit_status"] == "pass"
 
-
-def test_cli_help_examples_use_private_tmp_only():
-    for script in (
-        "run_visible_token_budget_sanity.py",
-        "audit_visible_token_budget.py",
-    ):
-        result = subprocess.run(
-            [sys.executable, str(ROOT / "baselines" / "token_budget" / script), "--help"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        assert "/private/tmp/nativemem-r004" in result.stdout
-        assert " --output-dir /tmp/" not in result.stdout

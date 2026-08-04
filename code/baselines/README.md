@@ -9,32 +9,35 @@ drives them.
 | `adapters/` | One module per system, each a runnable entry point that builds memory and answers questions through that system's own API. |
 | `generate_third_party_manifest.py` | Records every checkout's remote and commit into `third_party/manifest.json`. |
 
-## Running a controlled comparison
+## Running a comparison
 
 The paper's main table cites each system's own reported numbers, which were
-produced under different answerers, prompts and judges. The packages below exist
-to replace those with numbers measured under one shared condition, should a
-reviewer ask.
+produced under different answerers, prompts and judges. To measure them under
+one shared condition instead:
 
-| | |
-|---|---|
-| `controlled_locomo/` | One shared answerer after retrieval, with the memory-to-prompt boundary enforced so dataset gold, evidence and category cannot reach the final prompt |
-| `locomo_baselines/` | Retrieval-only LoCoMo rows: assemble inputs, run, audit |
-| `longmemeval_m1/` | The same comparison on LongMemEval |
-| `beam_controls/` | BEAM control conditions |
-| `token_budget/` | Holds compared systems to an equal visible-token budget |
-| `gateways/` | Budget-enforcing HTTP proxies that cap what a comparison run can spend |
-| `m4_statistics/` | Paired significance tests over a frozen comparison inventory |
-| `human_agreement/` | Blinded annotation packet, and human-versus-judge agreement over it |
-| `readonly_control/` | Artifact auditor that re-derives results without producing them |
+```bash
+baselines/run_comparison.sh --list          # what can be run
+baselines/run_comparison.sh 0 mem0 zep naive
+```
 
-Within one package the prefix gives the role: `*_contract.py` fixes the shape,
-`run_*.py` produces, `audit_*.py` re-derives with separate code and fails on
-mismatch, and `freeze_*.py` pins inputs once audits pass. An auditor never
-shares code with the runner it checks.
+Each system retrieves with its own API. Every system's retrieved memories then
+go through the same answerer and the same judge
+(`scripts/evaluation/evaluate.py`), so the only thing that differs between rows
+is retrieval.
 
-These are held apart from the method itself: none of them import `src/`, and
-`scripts/run_experiment.sh` never calls them.
+Gold answers cannot leak into a prompt, because the answerer's entry point is
+`generate_answer(question, memories)` — the dataset's answer is not one of its
+arguments and never enters that scope.
+
+Results land in `results/comparison-s<N>/<system>/`, holding `retrieved.json`
+and `eval.json`. A system whose run dies partway is reported and skipped; the
+others still finish. Success means the evaluation file contains judged records,
+not merely that it exists — `evaluate.py` writes partial output as it goes, so
+a file being present proves nothing. `read_score.py` makes that distinction and
+is what the summary and the skip logic both use.
+
+Each system pins its own dependencies, and most need an API key. A system with
+neither installed will fail at the retrieval step and be skipped.
 
 Regenerate the manifest after changing a checkout, so a reported baseline number
 stays traceable to the exact commit that produced it:
