@@ -39,7 +39,7 @@ CHILD_LOG_NAME = "child_proxy_requests.jsonl"
 WINDOW_NAME = "gateway_window.json"
 INVOCATION_NAME = "invocation.json"
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CHILD_PROXY = REPO_ROOT / "scripts" / "gpt55_run_proxy.py"
+CHILD_PROXY = REPO_ROOT / "scripts" / "controlled_locomo" / "gpt55_run_proxy.py"
 
 
 class EvidenceError(RuntimeError):

@@ -18,11 +18,13 @@ SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import controlled_locomo_answer_contract as contract  # noqa: E402
-import audit_controlled_locomo_answers as answer_auditor  # noqa: E402
-import freeze_controlled_answer_protocol as freezer  # noqa: E402
-import run_controlled_locomo_answer_sanity as sanity  # noqa: E402
-import run_controlled_locomo_answers as runner  # noqa: E402
+from scripts.controlled_locomo import (  # noqa: E402
+    audit_controlled_locomo_answers as answer_auditor,
+    controlled_locomo_answer_contract as contract,
+    freeze_controlled_answer_protocol as freezer,
+    run_controlled_locomo_answer_sanity as sanity,
+    run_controlled_locomo_answers as runner,
+)
 from scripts.evaluation.answerer import format_memories  # noqa: E402
 from scripts.evaluation.visible_token_budget import TokenCounter  # noqa: E402
 
@@ -515,7 +517,7 @@ def test_exclusive_proxy_logs_question_usage_upstream_attempts_and_hashes(tmp_pa
     process = subprocess.Popen(
         [
             sys.executable,
-            str(ROOT / "scripts/controlled_gpt55_run_proxy.py"),
+            str(ROOT / "scripts/controlled_locomo/controlled_gpt55_run_proxy.py"),
             "--upstream",
             f"http://127.0.0.1:{upstream.server_port}",
             "--log",
@@ -626,7 +628,7 @@ def test_http_client_accounts_for_failed_then_successful_proxy_attempts(tmp_path
     process = subprocess.Popen(
         [
             sys.executable,
-            str(ROOT / "scripts/controlled_gpt55_run_proxy.py"),
+            str(ROOT / "scripts/controlled_locomo/controlled_gpt55_run_proxy.py"),
             "--upstream",
             f"http://127.0.0.1:{upstream.server_port}",
             "--log",
@@ -833,9 +835,9 @@ def test_interrupted_proxy_recovery_is_immutable_and_auditable(
     log_path = proxy_dir / "requests.jsonl"
     process_log = proxy_dir / "process.log"
     start_path = proxy_dir / "start.json"
-    base_sha = contract.sha256_file(ROOT / "scripts/gpt55_run_proxy.py")
+    base_sha = contract.sha256_file(ROOT / "scripts/controlled_locomo/gpt55_run_proxy.py")
     controlled_sha = contract.sha256_file(
-        ROOT / "scripts/controlled_gpt55_run_proxy.py"
+        ROOT / "scripts/controlled_locomo/controlled_gpt55_run_proxy.py"
     )
     provider_window = runner.flex_evidence.capture_start(fake_flex_provider.root)
     provider_contract = provider_window["contract"]
@@ -1029,8 +1031,8 @@ def test_full_run_auditor_checks_inventory_proxy_and_complete_manifest(
     start_path = proxy_dir / "start.json"
     process_log = proxy_dir / "process.log"
     process_log.write_text("")
-    base_sha = contract.sha256_file(ROOT / "scripts/gpt55_run_proxy.py")
-    controlled_sha = contract.sha256_file(ROOT / "scripts/controlled_gpt55_run_proxy.py")
+    base_sha = contract.sha256_file(ROOT / "scripts/controlled_locomo/gpt55_run_proxy.py")
+    controlled_sha = contract.sha256_file(ROOT / "scripts/controlled_locomo/controlled_gpt55_run_proxy.py")
     upstream_sha = contract.sha256_file(
         ROOT / "scripts/gateways/openai_gpt55_flex_gateway.py"
     )

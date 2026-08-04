@@ -137,7 +137,7 @@ def test_public_pages_share_the_document_shell() -> None:
         for class_name in REQUIRED_SHELL_CLASSES:
             assert document.class_count[class_name] == 1, f"{relative_path}: {class_name}"
         assert document.current_page_link_count == 1, relative_path
-        assert "Agent-Memory-Harness" in " ".join(document.text), relative_path
+        assert "scriptorium" in " ".join(document.text), relative_path
         assert document.tag_count["h1"] == 1, relative_path
 
 

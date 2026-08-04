@@ -3,9 +3,9 @@
 Executable entry points. Nothing here is imported by `src/`; the dependency
 runs the other way.
 
-Paths in stored results and HTML reports point at these filenames, so scripts
-are not moved or renamed once a formal run has referenced them. New work goes
-into the packages below rather than into another top-level file.
+Stored results and HTML reports reference these scripts by path, so a script
+that a formal run has referenced keeps a module at its original location even
+after the file moves into an experiment directory.
 
 ## Start here
 
@@ -39,18 +39,40 @@ override it. See `configs/locomo.example.json`.
 evaluator. Do not edit, wrap with changed semantics, or add a second scorer.
 Verify its SHA-256 before any LoCoMo scoring run.
 
-## The rest of the top level
+## Experiment directories
 
-The remaining files support specific formal experiments and follow a naming
-convention:
+Each formal experiment keeps its contract, runner and auditor together, because
+those three files only make sense as a set: the contract defines what an
+artifact must contain, the runner produces it, and the auditor re-derives it
+independently.
 
-- `*_contract.py` — a frozen, strict input/output contract shared by a runner
-  and its auditor. These define what an artifact must contain.
-- `run_*.py` — execute one experiment or stage.
-- `audit_*.py` — independently re-derive an artifact and fail on mismatch.
-  Auditors are deliberately separate from runners so a result is checked by
-  code that did not produce it.
-- `freeze_*.py` — pin inputs after audits pass, so later stages cannot drift.
-- `analyze_*.py`, `score_*.py` — post-hoc analysis over stored results.
+| Directory | Experiment |
+|---|---|
+| `locomo_baselines/` | Retrieval-only LoCoMo baselines |
+| `controlled_locomo/` | Controlled LoCoMo answering, its budget proxies and audits |
+| `longmemeval_m1/` | LongMemEval-S M1 baselines, backends and shared answers |
+| `m4_statistics/` | Preregistered paired M4 statistics and failure analysis |
+| `beam_controls/` | R115 BEAM controlled rows |
+| `token_budget/` | R004/G0.2 visible-token budget checks |
+| `human_agreement/` | R501 annotation packet and agreement scoring |
+
+Within a directory the prefixes tell you the role: `*_contract.py` freezes the
+shape of an artifact, `run_*.py` produces one, `audit_*.py` re-derives it and
+fails on mismatch, and `freeze_*.py` pins inputs once audits pass. Auditors are
+deliberately separate from runners so a result is checked by code that did not
+produce it.
+
+A module of the same name remains at the top level and forwards to the moved
+file, because stored results and HTML reports reference these scripts by their
+original path. Import the real module (`scripts.<group>.<name>`) in new code:
+patching a name on the forwarding module does not affect the real one.
+
+## Still at the top level
+
+General tools that no single experiment owns: `analyze_run.py`,
+`analyze_nativemem_ablation.py`, `verify_portable_layout.py`,
+`generate_third_party_manifest.py`, `judge_showdown.py`,
+`evaluate_temporal_filter_retrieval.py`, the two gateway auditors, and
+`eval_full.py`, which is hash-locked and must not move.
 
 Read a file's module docstring for what it does; every script has one.
