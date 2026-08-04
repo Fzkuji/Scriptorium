@@ -33,6 +33,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-budget-usd", type=float)
     parser.add_argument("--input-usd-per-million", type=float, required=True)
     parser.add_argument("--output-usd-per-million", type=float, required=True)
+    # Cache reads are billed far below fresh input; omit to price them
+    # at the input rate, which overstates cost on cache-heavy runs.
+    parser.add_argument("--cache-read-usd-per-million", type=float)
+    parser.add_argument("--cache-write-usd-per-million", type=float)
     parser.add_argument("--session-batch", type=int, default=5)
     parser.add_argument("--writer-calibration", type=Path)
     parser.add_argument("--writer-input-token-cap", type=int)

@@ -225,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
             backend.call_log,
             input_usd_per_million=args.input_usd_per_million,
             output_usd_per_million=args.output_usd_per_million,
+            cache_read_usd_per_million=args.cache_read_usd_per_million,
+            cache_write_usd_per_million=args.cache_write_usd_per_million,
         ),
         "memory": memory_inventory(memory_dir),
         "config": {"build": asdict(build_config), "query": asdict(query_config)},

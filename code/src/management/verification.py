@@ -17,6 +17,10 @@ from .prompts import (
     VERIFICATION_RETRIEVAL_TASK,
 )
 
+# Structured output through a gateway is probabilistic, and one miss should not
+# discard a build that is already an hour in.
+STRUCTURED_OUTPUT_ATTEMPTS = 3
+
 
 _PROBE_SCHEMA = {
     "type": "object",
@@ -46,20 +50,27 @@ def _structured(
     usage_logger: Any | None,
     config: MemoryConfig,
 ) -> dict[str, Any]:
-    result = agent.run(
-        prompt=prompt,
-        system_prompt="Return the requested structured result.",
-        cwd=cwd,
-        tools=[],
-        max_turns=config.max_turns,
-        max_budget_usd=config.max_budget_usd,
-        output_schema=schema,
+    # Models reached through a gateway return structured output only most of
+    # the time. A single miss used to abort the whole build, discarding memory
+    # that had already been written correctly, so retry before giving up.
+    for _attempt in range(STRUCTURED_OUTPUT_ATTEMPTS):
+        result = agent.run(
+            prompt=prompt,
+            system_prompt="Return the requested structured result.",
+            cwd=cwd,
+            tools=[],
+            max_turns=config.max_turns,
+            max_budget_usd=config.max_budget_usd,
+            output_schema=schema,
+        )
+        if usage_logger is not None:
+            usage_logger(result)
+        if isinstance(result.structured_output, dict):
+            return result.structured_output
+    raise ValueError(
+        "verification did not return structured output after "
+        f"{STRUCTURED_OUTPUT_ATTEMPTS} attempts"
     )
-    if usage_logger is not None:
-        usage_logger(result)
-    if not isinstance(result.structured_output, dict):
-        raise ValueError("verification did not return structured output")
-    return result.structured_output
 
 
 def _verification_retrieve(

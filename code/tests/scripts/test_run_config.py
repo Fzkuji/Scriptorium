@@ -126,3 +126,30 @@ def test_runner_still_works_without_a_config(tmp_path: Path):
 
     assert args.api_key == "k"
     assert args.config is None
+
+
+def test_cache_reads_are_priced_at_their_own_rate():
+    """Cache reads cost a fraction of fresh input; pricing them as input
+    overstated cost by orders of magnitude on cache-heavy runs."""
+    from scripts.nativemem.run_locomo import summarize_usage
+
+    records = [{
+        "phase": "build",
+        "calls": 1,
+        "prompt_tokens": 1_000_000,
+        "completion_tokens": 0,
+        "cache_read_tokens": 10_000_000,
+    }]
+
+    priced = summarize_usage(
+        records,
+        input_usd_per_million=0.25,
+        output_usd_per_million=0.50,
+        cache_read_usd_per_million=0.005,
+    )
+    naive = summarize_usage(
+        records, input_usd_per_million=0.25, output_usd_per_million=0.50
+    )
+
+    assert priced["totals"]["estimated_cost_usd"] == 0.30
+    assert naive["totals"]["estimated_cost_usd"] == 2.75

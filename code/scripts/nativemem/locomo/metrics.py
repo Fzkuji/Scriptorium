@@ -10,6 +10,8 @@ def summarize_usage(
     *,
     input_usd_per_million: float,
     output_usd_per_million: float,
+    cache_read_usd_per_million: float | None = None,
+    cache_write_usd_per_million: float | None = None,
 ) -> dict[str, Any]:
     by_phase: dict[str, dict[str, int | float]] = {}
     for record in records:
@@ -38,16 +40,24 @@ def summarize_usage(
             record.get("anthropic_equivalent_cost_usd", 0) or 0
         )
     for value in by_phase.values():
-        # Cache writes and reads are billed at different rates per provider;
-        # without those rates they are reported as volume only, and priced
-        # here at the plain input rate.
-        billable_input = (
-            value["input_tokens"]
-            + value["cache_write_tokens"]
-            + value["cache_read_tokens"]
+        # Cache reads are billed far below fresh input (packyapi charges
+        # $0.005/M against $0.25/M, a 50x difference), so pricing them at the
+        # input rate overstates cost by orders of magnitude on cache-heavy
+        # runs. Fall back to the input rate only when no cache rate is given.
+        read_rate = (
+            input_usd_per_million
+            if cache_read_usd_per_million is None
+            else cache_read_usd_per_million
+        )
+        write_rate = (
+            input_usd_per_million
+            if cache_write_usd_per_million is None
+            else cache_write_usd_per_million
         )
         value["estimated_cost_usd"] = round(
-            billable_input / 1_000_000 * input_usd_per_million
+            value["input_tokens"] / 1_000_000 * input_usd_per_million
+            + value["cache_write_tokens"] / 1_000_000 * write_rate
+            + value["cache_read_tokens"] / 1_000_000 * read_rate
             + value["output_tokens"] / 1_000_000 * output_usd_per_million,
             8,
         )
