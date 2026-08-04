@@ -54,18 +54,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def command_init(workspace: str) -> int:
-    root = Path(workspace).expanduser().resolve()
+def ensure_workspace(root: Path, *, self_ignore: bool = False) -> bool:
+    """Create the workspace skeleton if it is not there. True when created.
+
+    Never overwrites memory that already exists. With self_ignore, an
+    auto-created workspace also carries a `.gitignore` of `*` (the venv
+    convention), so personal memory landing inside a repository is never
+    accidentally committed to it.
+    """
     existing = root.is_dir() and any(
         (root / name).exists()
         for name in ("core.md", "topics", "sources")
     )
     root.mkdir(parents=True, exist_ok=True)
     if existing:
-        # Never overwrite memory that is already there.
-        print(f"workspace already initialized: {root}")
-        print(json.dumps(inspect.status(root), ensure_ascii=False, indent=2))
-        return 0
+        return False
     (root / "topics").mkdir(exist_ok=True)
     (root / "sources").mkdir(exist_ok=True)
     core = root / "core.md"
@@ -76,6 +79,32 @@ def command_init(workspace: str) -> int:
     runtime_json = runtime / "runtime.json"
     if not runtime_json.exists():
         runtime_json.write_text("{}\n", encoding="utf-8")
+    if self_ignore:
+        ignore = root / ".gitignore"
+        if not ignore.exists():
+            ignore.write_text("*\n", encoding="utf-8")
+    return True
+
+
+def project_root(start: Path) -> Path:
+    """Nearest ancestor holding `.git`, else start itself.
+
+    MCP servers inherit the directory the session opened in, which may be a
+    subdirectory of the repository; one repository must map to one project
+    memory no matter where inside it the session started.
+    """
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return start
+
+
+def command_init(workspace: str) -> int:
+    root = Path(workspace).expanduser().resolve()
+    if not ensure_workspace(root):
+        print(f"workspace already initialized: {root}")
+        print(json.dumps(inspect.status(root), ensure_ascii=False, indent=2))
+        return 0
     print(f"initialized workspace: {root}")
     print(f"revision: {workspace_revision(root)}")
     return 0
@@ -136,25 +165,45 @@ def parse_workspaces(values: list[str]) -> list[tuple[str, Path]]:
     return workspaces
 
 
+def prepare_layers(
+    workspace_values: list[str], cwd: Path
+) -> list[tuple[str, Path]]:
+    """Resolve, and create when missing, every workspace for the server.
+
+    A relative path resolves against the project root of `cwd`, so the first
+    session opened anywhere in a repository brings that repository's memory
+    into being. A workspace that cannot be created is dropped with a note —
+    an unwritable volume costs that layer, not the session.
+    """
+    base = project_root(cwd)
+    layers: list[tuple[str, Path]] = []
+    for name, path in parse_workspaces(workspace_values):
+        root = (path if path.is_absolute() else base / path).resolve()
+        try:
+            if ensure_workspace(root, self_ignore=True):
+                print(f"initialized {name} workspace: {root}", file=sys.stderr)
+        except OSError as exc:
+            print(f"skipping {name} workspace: {exc}", file=sys.stderr)
+            continue
+        layers.append((name, root))
+    return layers
+
+
 def command_mcp(workspace_values: list[str], git_commit: str) -> int:
     from .mcp_server import run
 
     try:
-        workspaces = parse_workspaces(workspace_values)
-        for _name, path in workspaces:
-            root = path.resolve()
-            if not root.is_dir():
-                raise ValueError(
-                    f"workspace is not a directory: {root}\n"
-                    f"run: scriptorium init {root}"
-                )
+        layers = prepare_layers(workspace_values, Path.cwd())
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return 2
-    if len(workspaces) == 1:
-        run(workspaces[0][1].resolve(), git_commit=git_commit)
+    if not layers:
+        print("no workspace could be prepared", file=sys.stderr)
+        return 2
+    if len(layers) == 1:
+        run(layers[0][1], git_commit=git_commit)
     else:
-        run(workspaces, git_commit=git_commit)
+        run(layers, git_commit=git_commit)
     return 0
 
 

@@ -229,3 +229,55 @@ def test_parse_named_layers_keep_order(tmp_path: Path):
 def test_parse_rejects_unnamed_among_several(tmp_path: Path):
     with pytest.raises(ValueError, match="NAME=PATH"):
         cli.parse_workspaces([f"project={tmp_path}", str(tmp_path)])
+
+
+# --- auto-creation at server start ---
+
+def test_first_session_in_a_repo_creates_its_memory(tmp_path: Path):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    subdir = repo / "src" / "deep"
+    subdir.mkdir(parents=True)
+
+    layers = cli.prepare_layers(
+        ["project=.memory", f"global={tmp_path}/global"], subdir
+    )
+
+    # Resolved to the repository root, not the subdirectory the session
+    # opened in — one repo, one memory.
+    assert layers[0] == ("project", repo / ".memory")
+    assert (repo / ".memory" / "core.md").is_file()
+    assert not (subdir / ".memory").exists()
+    # Auto-created memory inside a repo must never be committed to it.
+    assert (repo / ".memory" / ".gitignore").read_text() == "*\n"
+    # The global layer was created too (fresh machine case).
+    assert (tmp_path / "global" / "core.md").is_file()
+
+
+def test_outside_any_repo_memory_lands_in_the_folder_itself(tmp_path: Path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    layers = cli.prepare_layers([".memory"], plain)
+    assert layers == [("memory", plain / ".memory")]
+
+
+def test_existing_memory_is_never_reinitialized(tmp_path: Path):
+    cli.main(["init", str(tmp_path / ".memory")])
+    (tmp_path / ".memory" / "core.md").write_text("# Keep me\n")
+
+    cli.prepare_layers([".memory"], tmp_path)
+
+    assert (tmp_path / ".memory" / "core.md").read_text() == "# Keep me\n"
+    # Explicit init does not self-ignore; auto-create must not add it later.
+    assert not (tmp_path / ".memory" / ".gitignore").exists()
+
+
+def test_uncreatable_layer_is_dropped_not_fatal(tmp_path: Path):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("a file where a directory must go")
+
+    layers = cli.prepare_layers(
+        [f"project={blocker}/.memory", f"global={tmp_path}/global"], tmp_path
+    )
+
+    assert [name for name, _ in layers] == ["global"]

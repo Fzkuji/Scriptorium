@@ -34,7 +34,10 @@ recent-events and relations views.
 
 Several `--workspace NAME=PATH` arguments serve layered memory — typically a
 per-repository `project` layer plus one `global` layer shared by every
-project. Reads span all layers with qualified paths
+project. A missing workspace is created at server start, and a relative path
+resolves against the session's repository root, so one user-scope
+registration covers every project and the first session anywhere brings that
+project's memory into being. Reads span all layers with qualified paths
 (`global:topics/person.md`); a write lands in the layer named by
 `memory_update`, defaulting to the first workspace given. See
 [`docs/integrations/claude-code.md`](docs/integrations/claude-code.md).

@@ -45,16 +45,26 @@ Start a new Claude Code session; the six `memory_*` tools become available.
 ### Layers: one global memory plus one per project
 
 A single workspace serves one memory. Passing several `--workspace NAME=PATH`
-arguments serves them as layers of one memory:
+arguments serves them as layers of one memory. One user-scope registration
+covers every project:
 
 ```bash
-scriptorium init ~/my-repo/.memory
-claude mcp add --scope project scriptorium -- \
+claude mcp add --scope user scriptorium -- \
   scriptorium mcp \
-  --workspace project=/absolute/path/to/my-repo/.memory \
+  --workspace project=.memory \
   --workspace global=~/memory
 ```
 
+- **Workspaces come into being on first use.** At server start, a missing
+  workspace is created. A relative path like `.memory` resolves against the
+  project root of the session — the nearest ancestor directory holding
+  `.git`, so every session inside one repository shares one memory no matter
+  which subdirectory it opened in. The first session in any project brings
+  that project's layer into being; no `init` step is needed.
+- **Auto-created workspaces never leak into the repository.** They carry a
+  `.gitignore` of `*` (the virtualenv convention). A workspace created by an
+  explicit `scriptorium init` is left alone — delete or keep its ignore
+  rules yourself.
 - **Reads span every layer.** `memory_list`, `memory_grep` and
   `memory_search` return results from all layers, each path qualified with
   its layer: `global:topics/person.md`. Search interleaves layers by rank,
@@ -65,13 +75,11 @@ claude mcp add --scope project scriptorium -- \
   default there, and facts about the person are written with
   `layer="global"`.
 - **Layers never merge on disk.** Each stays a complete workspace that
-  `validate` accepts and that can be moved with its repository. Registering
-  with `--scope project` keeps the pairing local to the repo; the global
-  layer is the same directory in every project.
+  `validate` accepts and that moves with its repository.
 - `memory_status` reports each layer and one combined revision string;
   updates accept that combined string, so a stale layer is still rejected.
-  A layer that cannot be read (an unmounted volume) is reported as
-  `unreadable` and skipped; the remaining layers keep working.
+  A layer that cannot be read or created (an unmounted volume, a read-only
+  directory) costs that layer, not the session; the rest keep working.
 
 ### Git commits
 
