@@ -217,6 +217,56 @@ def judge_locomo_cat5(question, gold, answer, *, abstention):
     return judge_locomo(question, gold, answer, category=5)
 
 
+def judge_beam(question, gold, answer, *, rubric=None, abstention=False):
+    """BEAM judge. Returns (score, raw_judge_text, usage).
+
+    BEAM ships a rubric with each question — the specific facts an answer has
+    to contain. Where one exists it is the standard, because the gold text is
+    one phrasing of many that satisfy it. Abstention questions are judged the
+    way LoCoMo's are: declining is right, asserting an unsupported fact is not.
+    """
+    if abstention:
+        return judge_locomo_abstention(question, gold, answer)
+    checklist = "\n".join(f"- {item}" for item in (rubric or []) if str(item).strip())
+    prompt = (
+        "Judge whether the generated answer is CORRECT or WRONG for the "
+        "question. Judge meaning, not wording: a different phrasing, order or "
+        "level of detail is fine, and equivalent date formats are equal "
+        "('2024-03-15' = '15 March 2024'). Mark WRONG when a required fact is "
+        "missing, contradicted, or replaced by a different value. Return "
+        'exactly a JSON object with one field: {"label": "CORRECT"} or '
+        '{"label": "WRONG"}.\n\n'
+        f"Question: {question}\n"
+        f"Reference answer: {gold}\n"
+        + (f"Required by the rubric:\n{checklist}\n" if checklist else "")
+        + f"Generated answer: {answer}"
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an evaluator for long-conversation memory. Judge only "
+                "whether the answer conveys what the reference and rubric "
+                "require."
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
+    usage_total = _new_usage_total()
+    last_error = None
+    for _ in range(3):
+        try:
+            text, usage = judge_chat(messages)
+        except LLMCallError as exc:
+            _raise_with_failed_usage(usage_total, exc)
+        _accumulate_usage(usage_total, usage)
+        try:
+            return _parse_or_record(_parse_label, text, usage_total), text, usage_total
+        except ValueError as exc:
+            last_error = exc
+    raise JudgeCallError(str(last_error), usage_total) from last_error
+
+
 def _parse_yes_no_strict(text):
     """Parse an exact yes/no verdict from the first non-empty line."""
     first_line = next(

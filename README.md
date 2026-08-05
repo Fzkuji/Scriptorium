@@ -161,6 +161,34 @@ done
 `run_longmemeval.py` accepts `--config` the same way. Run
 `python scripts/nativemem/run_locomo.py --help` for the full option list.
 
+### BEAM, for conversations long enough to strain a Writer
+
+A LoCoMo conversation is about 23K tokens, so a Writer input cap above that
+never binds. BEAM ships whole conversations of 100K, 500K and 1M tokens, each
+probed by twenty questions across ten categories — enough length to make every
+cap bind, and enough questions per build to be worth the build.
+
+```bash
+# Convert one conversation into what the runner reads
+python -m scripts.nativemem.beam.convert --size 100K --conversation 1 \
+  --output benchmarks/beam/converted/beam100K-1.json
+
+# Build and answer, with the locked LoCoMo evaluator turned off
+python scripts/nativemem/run_locomo.py --config my-beam-run.json \
+  --data benchmarks/beam/converted/beam100K-1.json \
+  --sample-id beam100K-1 --no-evaluate \
+  --writer-input-token-cap 16384
+
+# Judge with the rubric each BEAM question carries
+python -m scripts.evaluation.evaluate --benchmark beam \
+  --input <run>/sample0_questions.json --output <run>/eval.json \
+  --metrics judge
+```
+
+Set `verify_every_sessions` and `local_reorg_every_sessions` to 1: BEAM has a
+handful of very large sessions, so LoCoMo's every-fifth-session cadence would
+never fire.
+
 A run writes `status.json`, `build.json`, `call_log.json`, `performance.json`
 and `eval_full.json` into its output directory, and is resumable: rerunning the
 same command skips completed work.

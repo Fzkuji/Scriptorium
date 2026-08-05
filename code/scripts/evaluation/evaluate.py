@@ -42,7 +42,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from scripts.evaluation.metrics import compute_lexical
 from scripts.evaluation.answerer import generate_answer
-from scripts.evaluation.judges import judge_locomo, judge_longmemeval
+from scripts.evaluation.judges import judge_beam, judge_locomo, judge_longmemeval
 from scripts.evaluation.llm_clients import (ANSWERER_BASE, ANSWERER_MODEL,
                                         JUDGE_BASE, JUDGE_MODEL)
 
@@ -178,6 +178,10 @@ def run_judge(records, benchmark, out_path, meta):
             score, raw, usage = judge_locomo(
                 r["question"], r.get("gold", ""), r["answer"],
                 category=r.get("category"))
+        elif benchmark == "beam":
+            score, raw, usage = judge_beam(
+                r["question"], r.get("gold", ""), r["answer"],
+                rubric=r.get("rubric"), abstention=bool(r.get("abstention")))
         else:
             score, raw, usage = judge_longmemeval(
                 r.get("question_type", "multi-session"), r["question"],
@@ -285,6 +289,37 @@ def aggregate_locomo(records):
     return out
 
 
+def aggregate_beam(records):
+    """Ten categories, plus abstention reported on its own.
+
+    Overall is the micro average over every question; the categories carry
+    equal question counts, so it is also the macro average.
+    """
+    qs = [r for r in records if r.get("question_id") != "_build_stats"]
+    out = {"n": len(qs), "by_category": {}}
+
+    def block(rs):
+        b = {}
+        if any("judge_score" in r for r in rs):
+            b["judge"] = _mean(r["judge_score"] for r in rs if "judge_score" in r)
+        lex_keys = set()
+        for r in rs:
+            lex_keys.update(r.get("lexical", {}).keys())
+        for k in sorted(lex_keys):
+            b[k] = _mean(r["lexical"][k] for r in rs if k in r.get("lexical", {}))
+        return b
+
+    for name in sorted({str(r.get("beam_category", "")) for r in qs} - {""}):
+        rs = [r for r in qs if r.get("beam_category") == name]
+        out["by_category"][name] = {"n": len(rs), **block(rs)}
+    out["overall"] = block(qs)
+    abstention = [r for r in qs if r.get("abstention")]
+    if abstention:
+        out["n_abstention"] = len(abstention)
+        out["answerable_only"] = block([r for r in qs if not r.get("abstention")])
+    return out
+
+
 def aggregate_longmemeval(records):
     """6 types + task-avg (macro) + overall (micro) + abstention separate."""
     abs_qs = [r for r in records if r.get("abstention")]
@@ -327,7 +362,8 @@ def print_report(agg, benchmark, meta):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--benchmark", required=True, choices=["locomo", "longmemeval"])
+    ap.add_argument("--benchmark", required=True,
+                    choices=["locomo", "longmemeval", "beam"])
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--label", default="run")
@@ -380,8 +416,11 @@ def main(argv=None):
             if "judge" in args.metrics and not args.skip_judge:
                 run_judge(records, args.benchmark, output_path, meta)
 
-            agg = (aggregate_locomo(records) if args.benchmark == "locomo"
-                   else aggregate_longmemeval(records))
+            agg = {
+                "locomo": aggregate_locomo,
+                "beam": aggregate_beam,
+                "longmemeval": aggregate_longmemeval,
+            }[args.benchmark](records)
             agg["efficiency"] = aggregate_efficiency(records)
             meta["aggregate"] = agg
             meta["status"] = "complete"

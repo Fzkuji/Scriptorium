@@ -27,14 +27,19 @@ def sample_inventory(sample: dict[str, Any]) -> dict[str, Any]:
         for key, value in conversation.items()
         if re.fullmatch(r"session_[0-9]+", key)
     ]
-    categories = [int(question["category"]) for question in sample["qa"]]
+    questions = sample["qa"]
+    # LoCoMo marks its unanswerable questions as category 5; other benchmarks
+    # carry an explicit flag. Counting either keeps the tally honest for a
+    # sample whose categories do not stop at five.
+    unanswerable = sum(
+        bool(question.get("abstention")) or int(question["category"]) == 5
+        for question in questions
+    )
     return {
         "sample_id": sample["sample_id"],
         "sessions": len(sessions),
         "messages": sum(len(session) for session in sessions),
-        "questions": len(categories),
-        "primary_questions": sum(
-            category in {1, 2, 3, 4} for category in categories
-        ),
-        "adversarial_questions": sum(category == 5 for category in categories),
+        "questions": len(questions),
+        "primary_questions": len(questions) - unanswerable,
+        "adversarial_questions": unanswerable,
     }

@@ -1,10 +1,15 @@
-"""Answer one LoCoMo question from a frozen NativeMem workspace."""
+"""Answer one benchmark question from a frozen Scriptorium workspace."""
 
 import time
 from pathlib import Path
 from typing import Any
 
 from src import retrieval
+
+# Fields a benchmark may attach to a question that the judge needs later.
+# An allowlist, not a copy of everything: the question's own `answer` is the
+# gold and must never become the record's `answer`.
+CARRIED_FIELDS = ("beam_category", "rubric", "abstention", "difficulty")
 
 
 def answer_question(
@@ -35,6 +40,11 @@ def answer_question(
             question.get("answer", question.get("adversarial_answer", ""))
         ),
         "category": int(question["category"]),
+        **{
+            field: question[field]
+            for field in CARRIED_FIELDS
+            if field in question
+        },
         "memories": memories,
         "answer": str(answer).strip(),
         "retrieval": {
