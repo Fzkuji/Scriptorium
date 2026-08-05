@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..markdown import parse_topic_tree, topic_prose
+from ..markdown import parse_topic_tree
 from ..runtime.state import RuntimeStateStore, SourceRecord
 from ..workspace_layout import RUNTIME_DIR_NAMES, is_runtime_name, runtime_dir
 
