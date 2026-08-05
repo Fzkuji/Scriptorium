@@ -2,8 +2,12 @@
 
 A workspace holds the memory — `core.md`, `topics/`, `sources/` and the
 derived views — and beside it a small runtime area: cursors, the write lock,
-staged backups, retrieval caches. The runtime area is not memory. It is hidden
-from listings, left out of the revision, and never writable by a patch.
+staged backups, retrieval caches. A workspace kept under version control also
+holds that tool's own directory. Neither is memory: both are hidden from
+listings, left out of the revision, and never writable by a patch.
+
+The runtime area is top level. A file inside `topics/` is authored memory
+whatever it is called, so it lists and it counts toward the revision.
 
 Workspaces built before the project took its current name carry the runtime
 directory under its former name. They keep it: a stored run's hash covers
@@ -20,6 +24,9 @@ from pathlib import Path
 RUNTIME_DIR = ".scriptorium"
 LEGACY_RUNTIME_DIRS = (".nativemem",)
 RUNTIME_DIR_NAMES = (RUNTIME_DIR, *LEGACY_RUNTIME_DIRS)
+STATE_FILE = "runtime.json"
+# A workspace may be a repository of its own; `--git-commit on` expects that.
+VERSION_CONTROL_DIRS = (".git",)
 
 TEMPORARY_PREFIX = "scriptorium-"
 
@@ -32,12 +39,26 @@ def is_runtime_name(name: str) -> bool:
     )
 
 
-def is_runtime_path(relative: Path) -> bool:
-    """True for a workspace-relative path that belongs to the runtime."""
+def is_internal_path(relative: Path) -> bool:
+    """True for a workspace-relative path that holds no memory."""
     parts = relative.parts
     if not parts:
         return False
-    return is_runtime_name(parts[0]) or is_runtime_name(relative.name)
+    return is_runtime_name(parts[0]) or parts[0] in VERSION_CONTROL_DIRS
+
+
+def is_state_file(relative: Path) -> bool:
+    """True for the cursor file, the one runtime file a revision counts.
+
+    A moved cursor is a change in what has been written, so it belongs to the
+    revision even though the rest of the runtime area does not.
+    """
+    parts = relative.parts
+    return (
+        len(parts) == 2
+        and parts[0] in RUNTIME_DIR_NAMES
+        and parts[1] == STATE_FILE
+    )
 
 
 def runtime_dir(memory_dir: Path | str) -> Path:
@@ -47,3 +68,9 @@ def runtime_dir(memory_dir: Path | str) -> Path:
         if (root / legacy).is_dir():
             return root / legacy
     return root / RUNTIME_DIR
+
+
+def has_runtime_dir(memory_dir: Path | str) -> bool:
+    """True when this directory already carries a runtime area."""
+    root = Path(memory_dir)
+    return any((root / name).is_dir() for name in RUNTIME_DIR_NAMES)

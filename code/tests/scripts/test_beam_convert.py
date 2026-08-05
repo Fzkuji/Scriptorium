@@ -151,3 +151,71 @@ def test_inventory_counts_abstention_beyond_locomo_categories():
     assert inventory["questions"] == 2
     assert inventory["primary_questions"] == 1
     assert inventory["adversarial_questions"] == 1
+
+
+def test_benchmark_and_sample_shape_must_agree():
+    """A BEAM sample scored as LoCoMo keeps four questions and renames them."""
+    from scripts.runners.conversation.data import check_benchmark
+
+    beam = {
+        "sample_id": "beam100K-1",
+        "conversation": convert_conversation(ROW, "beam100K-1"),
+        "qa": convert_questions(ROW),
+    }
+    locomo = {"sample_id": "conv-50", "qa": [
+        {"question": "q", "answer": "a", "category": 1},
+        {"question": "q5", "adversarial_answer": "d", "category": 5},
+    ]}
+
+    check_benchmark(beam, "beam")
+    check_benchmark(locomo, "locomo")
+    with pytest.raises(ValueError, match="needs questions carrying beam_category"):
+        check_benchmark(locomo, "beam")
+    with pytest.raises(ValueError, match="run it with --benchmark beam"):
+        check_benchmark(beam, "locomo")
+
+
+def test_inventory_counts_beam_abstention_not_beam_category_five():
+    """BEAM's fifth category is contradiction resolution, not abstention."""
+    from scripts.runners.conversation.data import sample_inventory
+
+    row = dict(ROW, probing_questions=str({
+        "information_extraction": [
+            {"question": "a", "answer": "a", "rubric": "['x']"}],
+        "contradiction_resolution": [
+            {"question": "b", "ideal_answer": "b", "rubric": "['x']"}],
+        "abstention": [
+            {"question": "c", "ideal_response": "no record", "rubric": "['x']"}],
+    }))
+    questions = convert_questions(row)
+    assert [q["category"] for q in questions if q["beam_category"] ==
+            "contradiction_resolution"] == [5]
+
+    inventory = sample_inventory({
+        "sample_id": "beam100K-1",
+        "conversation": convert_conversation(row, "beam100K-1"),
+        "qa": questions,
+    })
+
+    assert inventory["adversarial_questions"] == 1
+    assert inventory["primary_questions"] == 2
+
+
+def test_a_string_rubric_is_not_split_into_characters():
+    from scripts.evaluation import judges
+
+    captured = {}
+
+    def fake_chat(messages):
+        captured["prompt"] = messages[-1]["content"]
+        return '{"label": "CORRECT"}', {"prompt_tokens": 1, "completion_tokens": 1}
+
+    original = judges.judge_chat
+    judges.judge_chat = fake_chat
+    try:
+        judges.judge_beam("q", "gold", "answer", rubric="must state March 29")
+    finally:
+        judges.judge_chat = original
+
+    assert "- must state March 29" in captured["prompt"]
+    assert "- m\n- u" not in captured["prompt"]

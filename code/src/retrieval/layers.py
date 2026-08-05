@@ -148,13 +148,15 @@ class LayeredMemory:
         targets, within = self._targets(prefix)
         files: list[dict[str, Any]] = []
         total = 0
+        error: Exception | None = None
         for layer in targets:
             try:
                 data = inspect.list_files(
                     layer.root, prefix=within,
                     include_derived=include_derived, limit=limit,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                error = exc
                 continue
             total += data.get("total", len(data.get("files", [])))
             for entry in data.get("files", []):
@@ -162,6 +164,10 @@ class LayeredMemory:
                 entry["path"] = self.qualify(layer, entry["path"])
                 entry["layer"] = layer.name
                 files.append(entry)
+        if not files and error is not None:
+            # A bad argument must reach the caller. Only a layer that failed
+            # while another answered is passed over.
+            raise error
         return {
             "files": files[:limit],
             "total": total,
@@ -169,6 +175,8 @@ class LayeredMemory:
         }
 
     def read_file(self, path: str, **kwargs: Any) -> dict[str, Any]:
+        if self.single:
+            return inspect.read_file(self.default.root, path, **kwargs)
         layer, within = self.split(path)
         data = inspect.read_file(layer.root, within, **kwargs)
         if not self.single:
@@ -185,10 +193,12 @@ class LayeredMemory:
         limit = int(kwargs.get("limit", 50))
         matches: list[dict[str, Any]] = []
         total = 0
+        error: Exception | None = None
         for layer in targets:
             try:
                 data = inspect.grep(layer.root, query, prefix=within, **kwargs)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                error = exc
                 continue
             total += data.get("total", 0)
             for match in data.get("matches", []):
@@ -196,6 +206,8 @@ class LayeredMemory:
                 match["path"] = self.qualify(layer, match["path"])
                 match["layer"] = layer.name
                 matches.append(match)
+        if not matches and error is not None:
+            raise error
         return {
             "matches": matches[:limit],
             "total": total,

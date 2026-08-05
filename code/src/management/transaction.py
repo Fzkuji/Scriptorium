@@ -20,7 +20,7 @@ from typing import Any
 
 from ..markdown import parse_topic_tree
 from ..runtime.state import RuntimeStateStore, SourceRecord
-from ..workspace_layout import RUNTIME_DIR_NAMES, is_runtime_name, runtime_dir
+from ..workspace_layout import is_internal_path, is_state_file, runtime_dir
 
 WRITABLE_PREFIX = "topics/"
 WRITABLE_FILES = {"core.md"}
@@ -90,13 +90,7 @@ def workspace_revision(memory_dir: Path) -> str:
         # Retrieval caches are derived and may be rewritten by a read, and the
         # write lock is touched by every transaction. Neither is memory state,
         # so neither may look like a concurrent write.
-        parts = relative.parts
-        if parts and is_runtime_name(parts[0]):
-            # The cursor file is the one part of the runtime area that counts:
-            # a moved cursor is a change in what has been written.
-            if parts[0] not in RUNTIME_DIR_NAMES or parts[1:] != ("runtime.json",):
-                continue
-        elif is_runtime_name(relative.name):
+        if is_internal_path(relative) and not is_state_file(relative):
             continue
         digest.update(relative.as_posix().encode("utf-8"))
         digest.update(b"\0")

@@ -10,8 +10,11 @@ query and evaluation path unchanged.
     python -m scripts.runners.beam.convert --size 100K --conversation 1 \
         --output benchmarks/beam/converted/beam100K-1.json
 
-The result is a one-sample list, so `run_conversation.py --data <file>
---sample-id beam100K-1` runs it.
+The result is a one-sample list. Name the benchmark when running it, so the
+questions reach the evaluator that scores them:
+
+    python scripts/runners/run_conversation.py --config <config> \
+        --benchmark beam --data <file> --sample-id beam100K-1
 """
 
 from __future__ import annotations
@@ -176,7 +179,10 @@ def convert(size: str, conversation_id: str) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--size", choices=SIZES, default="100K")
     parser.add_argument("--conversation", default="1")
     parser.add_argument("--output", type=Path, required=True)

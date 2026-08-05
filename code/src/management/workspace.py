@@ -29,7 +29,7 @@ from .transaction import (
     workspace_revision,
     workspace_write_lock,
 )
-from ..workspace_layout import TEMPORARY_PREFIX, is_runtime_name, runtime_dir
+from ..workspace_layout import TEMPORARY_PREFIX, is_internal_path, runtime_dir
 
 
 class MemoryWorkspace(
@@ -75,9 +75,9 @@ class MemoryWorkspace(
         if core.exists():
             shutil.copy2(core, self.stage_dir / core.name)
         runtime = runtime_dir(self.memory_dir) / "runtime.json"
+        staged_runtime = self.stage_dir / runtime.parent.name / "runtime.json"
+        staged_runtime.parent.mkdir(parents=True, exist_ok=True)
         if runtime.exists():
-            staged_runtime = self.stage_dir / runtime.parent.name / "runtime.json"
-            staged_runtime.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(runtime, staged_runtime)
 
     def shell(
@@ -250,7 +250,7 @@ class MemoryWorkspace(
             if not path.is_file() or path.is_symlink():
                 continue
             relative = path.relative_to(root)
-            if relative.parts and is_runtime_name(relative.parts[0]):
+            if is_internal_path(relative):
                 continue
             result[relative.as_posix()] = hashlib.sha256(
                 path.read_bytes()
@@ -269,9 +269,8 @@ class MemoryWorkspace(
         paths = [
             path.relative_to(self.stage_dir).as_posix()
             for path in sorted(self.stage_dir.rglob("*"))
-            if path.is_file() and not any(
-                is_runtime_name(part)
-                for part in path.relative_to(self.stage_dir).parts
+            if path.is_file() and not is_internal_path(
+                path.relative_to(self.stage_dir)
             )
         ]
         return "\n".join(paths) or "(empty workspace)"

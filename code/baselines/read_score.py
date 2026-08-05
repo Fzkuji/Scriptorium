@@ -2,9 +2,10 @@
 """Read the judge accuracy out of one evaluation file.
 
 Prints "<percent> <count>". Exits non-zero when the file holds no judged
-record, which is how run_comparison.sh tells a finished run from a run that
-died partway through — evaluate.py writes partial results as it goes, so the
-file existing proves nothing.
+record, which is how a sweep tells a run that scored something from one that
+died before judging — an evaluator writes its output file as it goes, so the
+file existing proves nothing. The count says how much was judged; a run that
+died halfway reports its real n rather than passing as complete.
 
     python baselines/read_score.py results/comparison-s0/mem0/eval.json
 """

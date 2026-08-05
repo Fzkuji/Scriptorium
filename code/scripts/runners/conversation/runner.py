@@ -12,7 +12,7 @@ from src import retrieval
 
 from scripts.runners.common import atomic_json, read_json, tree_sha256, utc_now
 from .config import parse_args
-from .data import load_sample, sample_inventory
+from .data import check_benchmark, load_sample, sample_inventory
 from .evaluation import run_evaluator, verify_evaluator
 from src.runtime.billing import read_spend, spend_delta
 
@@ -33,6 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     status_path = output_dir / "status.json"
 
     sample_index, sample = load_sample(data_path, args.sample_id)
+    check_benchmark(sample, args.benchmark)
     questions_path = output_dir / f"sample{sample_index}_questions.json"
     inventory = sample_inventory(sample)
     memory_config = memory.MemoryConfig(
@@ -246,7 +247,16 @@ def main(argv: list[str] | None = None) -> int:
     atomic_json(call_log_path, backend.call_log)
     if args.evaluate:
         atomic_json(status_path, {"phase": "evaluating", "updated_at": utc_now()})
-        run_evaluator(args, output_dir, questions_path)
+        try:
+            run_evaluator(args, output_dir, questions_path)
+        except Exception as exc:
+            atomic_json(status_path, {
+                "phase": "failed",
+                "stage": "evaluating",
+                "error": f"{type(exc).__name__}: {exc}",
+                "finished_at": utc_now(),
+            })
+            raise
     atomic_json(status_path, {
         "phase": "complete",
         "completed": len(completed),

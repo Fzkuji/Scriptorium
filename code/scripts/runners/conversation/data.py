@@ -20,6 +20,28 @@ def load_sample(path: Path, sample_id: str) -> tuple[int, dict[str, Any]]:
     return matches[0]
 
 
+def check_benchmark(sample: dict[str, Any], benchmark: str) -> None:
+    """Refuse a sample whose questions are not the ones this benchmark scores.
+
+    The two shapes look alike enough to run: a BEAM sample scored as LoCoMo
+    silently keeps the four questions numbered 1-4 and reports them under
+    LoCoMo's category names, and a LoCoMo sample scored as BEAM judges its
+    unanswerable questions against the distractor they carry.
+    """
+    beam_shaped = any("beam_category" in question for question in sample["qa"])
+    if benchmark == "beam" and not beam_shaped:
+        raise ValueError(
+            f"--benchmark beam needs questions carrying beam_category; "
+            f"{sample['sample_id']} has none. Convert it first with "
+            f"python -m scripts.runners.beam.convert"
+        )
+    if benchmark != "beam" and beam_shaped:
+        raise ValueError(
+            f"{sample['sample_id']} carries BEAM questions; "
+            f"run it with --benchmark beam"
+        )
+
+
 def sample_inventory(sample: dict[str, Any]) -> dict[str, Any]:
     conversation = sample["conversation"]
     sessions = [
@@ -28,11 +50,11 @@ def sample_inventory(sample: dict[str, Any]) -> dict[str, Any]:
         if re.fullmatch(r"session_[0-9]+", key)
     ]
     questions = sample["qa"]
-    # LoCoMo marks its unanswerable questions as category 5; other benchmarks
-    # carry an explicit flag. Counting either keeps the tally honest for a
-    # sample whose categories do not stop at five.
+    # A benchmark that marks its unanswerable questions says so; LoCoMo says
+    # it by numbering them 5, which in another benchmark means something else.
+    flagged = any("abstention" in question for question in questions)
     unanswerable = sum(
-        bool(question.get("abstention")) or int(question["category"]) == 5
+        bool(question["abstention"]) if flagged else int(question["category"]) == 5
         for question in questions
     )
     return {

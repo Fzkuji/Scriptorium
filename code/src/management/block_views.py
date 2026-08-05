@@ -17,7 +17,7 @@ from ..markdown import (
     render_definition,
 )
 from ..markdown.syntax import SINGLE_CITATION, definitions
-from ..workspace_layout import RUNTIME_DIR, runtime_dir
+from ..workspace_layout import runtime_dir
 
 
 class BlockViewsMixin:
@@ -176,7 +176,7 @@ class BlockViewsMixin:
         count: int,
         noun: str,
     ) -> str:
-        backup = self.memory_dir / f"{RUNTIME_DIR}-block-backup"
+        backup = self.memory_dir / f"{runtime_dir(self.memory_dir).name}-block-backup"
         if backup.exists():
             shutil.rmtree(backup)
         backup.mkdir()

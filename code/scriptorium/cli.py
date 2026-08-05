@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 from src.management.transaction import TransactionError, workspace_revision
-from src.workspace_layout import RUNTIME_DIR
+from src.workspace_layout import RUNTIME_DIR, has_runtime_dir
 from src.retrieval import inspect
 
 
@@ -64,9 +64,9 @@ def ensure_workspace(root: Path, *, self_ignore: bool = False) -> bool:
     convention), so personal memory landing inside a repository is never
     accidentally committed to it.
     """
-    existing = root.is_dir() and any(
-        (root / name).exists()
-        for name in ("core.md", "topics", "sources")
+    existing = root.is_dir() and (
+        any((root / name).exists() for name in ("core.md", "topics", "sources"))
+        or has_runtime_dir(root)
     )
     root.mkdir(parents=True, exist_ok=True)
     if existing:
@@ -154,21 +154,26 @@ def parse_workspaces(values: list[str]) -> list[tuple[str, Path]]:
 
     Order matters: the first workspace receives writes that name no layer,
     so put the narrowest (the project) first. A name is a plain identifier;
-    anything else is read as a path, so a filename containing `=` still
-    works in the single-workspace form.
+    a value whose text before `=` is not one is read as a path.
     """
     layered = len(values) > 1
     workspaces: list[tuple[str, Path]] = []
     for value in values:
         name, sep, path = value.partition("=")
         if sep and LAYER_NAME.fullmatch(name):
+            if not path.strip():
+                # An unset variable expands to nothing. Left alone, the layer
+                # would resolve to the project root and be initialized there.
+                raise ValueError(f"workspace {name} has an empty path: {value!r}")
             workspaces.append((name, Path(path).expanduser()))
         elif layered:
             raise ValueError(
                 f"with several workspaces each needs a name: NAME=PATH, got {value!r}"
             )
-        else:
+        elif value.strip():
             workspaces.append(("memory", Path(value).expanduser()))
+        else:
+            raise ValueError("workspace path is empty")
     return workspaces
 
 
@@ -207,10 +212,7 @@ def command_mcp(workspace_values: list[str], git_commit: str) -> int:
     if not layers:
         print("no workspace could be prepared", file=sys.stderr)
         return 2
-    if len(layers) == 1:
-        run(layers[0][1], git_commit=git_commit)
-    else:
-        run(layers, git_commit=git_commit)
+    run(layers, git_commit=git_commit)
     return 0
 
 

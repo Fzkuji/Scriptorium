@@ -11,8 +11,8 @@ from src.management.transaction import workspace_revision  # noqa: E402
 from src.retrieval import inspect  # noqa: E402
 from src.runtime.state import RuntimeStateStore  # noqa: E402
 from src.workspace_layout import (  # noqa: E402
-    LEGACY_RUNTIME_DIRS, RUNTIME_DIR, is_runtime_name, is_runtime_path,
-    runtime_dir,
+    LEGACY_RUNTIME_DIRS, RUNTIME_DIR, is_internal_path, is_runtime_name,
+    is_state_file, runtime_dir,
 )
 
 LEGACY = LEGACY_RUNTIME_DIRS[0]
@@ -77,6 +77,14 @@ def test_runtime_names_cover_the_directory_and_what_it_stages(tmp_path: Path):
     assert not is_runtime_name("topics")
     assert not is_runtime_name(".scriptoriumish")
 
-    assert is_runtime_path(Path(RUNTIME_DIR) / "runtime.json")
-    assert is_runtime_path(Path("topics") / f"{RUNTIME_DIR}-bm25.json")
-    assert not is_runtime_path(Path("topics") / "api.md")
+    assert is_internal_path(Path(RUNTIME_DIR) / "runtime.json")
+    assert is_internal_path(Path(f"{RUNTIME_DIR}-bm25.json"))
+    assert is_internal_path(Path(".git") / "HEAD")
+    assert not is_internal_path(Path("topics") / "api.md")
+    # A file inside topics/ is authored memory whatever it is named.
+    assert not is_internal_path(Path("topics") / f"{RUNTIME_DIR}-note.md")
+
+    assert is_state_file(Path(RUNTIME_DIR) / "runtime.json")
+    assert not is_state_file(
+        Path(f"{RUNTIME_DIR}-block-backup") / RUNTIME_DIR / "runtime.json"
+    )

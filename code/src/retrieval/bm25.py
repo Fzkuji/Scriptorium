@@ -24,9 +24,10 @@ from ..markdown.syntax import (
     definition_match,
     source_reference,
 )
-from ..workspace_layout import RUNTIME_DIR
+from ..workspace_layout import runtime_dir
 
-_CACHE_NAME = f"{RUNTIME_DIR}-bm25.json"
+# The cache sits beside the runtime directory and takes its name, so a
+# workspace built before the rename keeps every file it already has.
 _WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
 # Scripts written without spaces, where a whole run would otherwise become one
 # token: CJK ideographs (plus extensions A/B and compatibility), hiragana,
@@ -425,7 +426,8 @@ class MemoryBM25Index:
         self.memory_dir = Path(memory_dir).resolve()
         self.topics_dir = self.memory_dir / "topics"
         self.sources_dir = self.memory_dir / "sources"
-        self.cache_path = self.memory_dir / _CACHE_NAME
+        self._runtime_name = runtime_dir(self.memory_dir).name
+        self.cache_path = self.memory_dir / f"{self._runtime_name}-bm25.json"
         self._visible_files = None if files is None else tuple(files)
         self.persist = persist and files is None
         self._lock = threading.RLock()
@@ -448,7 +450,7 @@ class MemoryBM25Index:
     def _write_cache(self) -> None:
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         payload = {"version": 4, "files": self._files}
-        fd, temporary = tempfile.mkstemp(prefix=f"{RUNTIME_DIR}-bm25-", dir=self.memory_dir)
+        fd, temporary = tempfile.mkstemp(prefix=f"{self._runtime_name}-bm25-", dir=self.memory_dir)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(payload, handle, ensure_ascii=False, separators=(",", ":"))

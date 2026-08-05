@@ -71,6 +71,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     except run_config.ConfigError as exc:
         parser.error(str(exc))
     args = parser.parse_args(argv)
+    # A config file sets defaults, which argparse never validates.
+    if args.benchmark not in ("locomo", "beam"):
+        parser.error(f"--benchmark must be locomo or beam, got {args.benchmark!r}")
     if args.workers < 1:
         parser.error("--workers must be positive")
     if args.max_turns < 1:

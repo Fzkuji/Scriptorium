@@ -9,12 +9,13 @@
 # --caps sweeps writer_input_token_cap, which is how much conversation the
 # Writer sees at once. Each variant is retried once; a variant that still fails
 # is skipped rather than ending the sweep. Success is decided by whether
-# eval_full.json was written, not by an exit code.
+# eval_full.json holds judged records, not by an exit code.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON="${PYTHON:-$REPO/.venv/bin/python}"
 RUNNER="$REPO/code/scripts/runners/run_conversation.py"
+SCORE="$REPO/code/baselines/read_score.py"
 SUMMARY="$REPO/code/scripts/analysis/analyze_run.py"
 
 usage() {
@@ -49,7 +50,9 @@ run_one() {  # $1 = label ("" for none), $2.. = extra runner args
     for attempt in 1 2; do
         echo "===== ${label:-run} attempt $attempt $(date +%H:%M:%S)"
         "$PYTHON" "$RUNNER" "${args[@]}"
-        if [[ -f "$out/eval_full.json" ]]; then
+        # A judged record, not a file: the unified evaluator writes its
+        # output before judging anything, so an existing file proves nothing.
+        if "$PYTHON" "$SCORE" "$out/eval_full.json" >/dev/null 2>&1; then
             echo "===== ${label:-run} ok"
             DONE+=("$out")
             return 0

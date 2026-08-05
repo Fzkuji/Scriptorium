@@ -281,3 +281,66 @@ def test_uncreatable_layer_is_dropped_not_fatal(tmp_path: Path):
     )
 
     assert [name for name, _ in layers] == ["global"]
+
+
+# --- defects found in review, kept fixed ---
+
+def test_an_empty_workspace_path_is_refused(tmp_path: Path):
+    """`--workspace project=$UNSET` must not initialize the project root."""
+    for value in ("project=", "project=  ", ""):
+        with pytest.raises(ValueError, match="empty"):
+            cli.parse_workspaces([value])
+
+
+def test_a_single_named_workspace_keeps_its_name(two_layers):
+    project, _global = two_layers
+    server = build_server([("project", project)], git_commit="off")
+
+    revision = call(server, "memory_status", {})["revision"]
+    result = call(server, "memory_update", {
+        "base_revision": revision,
+        "patch": patch_text("topics/api.md", TOPIC_LINES),
+        "sources": SOURCES,
+        "layer": "project",
+    })
+
+    assert result["ok"] is True, result
+    assert result["data"]["layer"] == "project"
+    # One layer still means unqualified paths.
+    assert (project / "topics/api.md").is_file()
+
+
+def test_a_bad_argument_reaches_the_caller_across_layers(server):
+    """An invalid regex is an error, not an empty memory."""
+    result = call(server, "memory_grep", {
+        "query": "[", "literal": False,
+    })
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "INVALID_ARGUMENT"
+
+
+def test_a_workspace_under_git_hides_its_repository(tmp_path: Path):
+    import subprocess
+
+    from src.management.transaction import workspace_revision
+
+    cli.main(["init", str(tmp_path)])
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    before = workspace_revision(tmp_path)
+
+    listed = {entry["path"] for entry in inspect.list_files(tmp_path)["files"]}
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+
+    assert not any(path.startswith(".git/") for path in listed)
+    # Git's own bookkeeping must not look like a concurrent write.
+    assert workspace_revision(tmp_path) == before
+
+
+def test_a_directory_holding_only_a_runtime_dir_is_left_alone(tmp_path: Path):
+    legacy = tmp_path / ".nativemem"
+    legacy.mkdir()
+    (legacy / "runtime.json").write_text("{}\n", encoding="utf-8")
+
+    assert cli.ensure_workspace(tmp_path) is False
+    assert not (tmp_path / ".scriptorium").exists()

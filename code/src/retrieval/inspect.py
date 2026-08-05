@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ..management.transaction import TransactionError, workspace_revision
-from ..workspace_layout import is_runtime_name
+from ..workspace_layout import is_internal_path
 from ..markdown import parse_topic_tree
 
 DERIVED_DIRS = ("timeline",)
@@ -65,7 +65,7 @@ def visible_files(memory_dir: Path) -> list[Path]:
         if not path.is_file() or path.is_symlink():
             continue
         relative = path.relative_to(root)
-        if relative.parts and is_runtime_name(relative.parts[0]):
+        if is_internal_path(relative):
             continue
         result.append(path)
     return sorted(result, key=lambda item: item.relative_to(root).as_posix())

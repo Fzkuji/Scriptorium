@@ -12,14 +12,18 @@ def analyze(run_dir):
     print(f"===== {run_dir}")
     p = os.path.join(run_dir, "eval_full.json")
     if os.path.exists(p):
-        rows = json.load(open(p))["records"]
+        payload = json.load(open(p))
+        # The locked evaluator writes {"records"}; the unified one writes
+        # {"meta", "results"} and carries a build-stats row with no score.
+        rows = payload.get("records") or payload.get("results") or []
+        rows = [r for r in rows if r.get("judge_score") is not None]
         n = len(rows)
         std = sum(1 for r in rows if r["judge_score"] >= 1)
         strict = sum(1 for r in rows if r["judge_score"] >= 1 and not ABSTAIN.search(str(r.get("answer") or "")))
         ab = sum(1 for r in rows if ABSTAIN.search(str(r.get("answer") or "")))
         cats = {}
         for r in rows:
-            c = r["category"]; ok = r["judge_score"] >= 1 and not ABSTAIN.search(str(r.get("answer") or ""))
+            c = r.get("beam_category", r.get("category")); ok = r["judge_score"] >= 1 and not ABSTAIN.search(str(r.get("answer") or ""))
             cats.setdefault(c, [0, 0]); cats[c][0] += ok; cats[c][1] += 1
         print(f"  分数: n={n} 标准={std/n*100:.1f} 严格={strict/n*100:.1f} 弃答={ab}")
         print("  分项:", {CAT.get(c, c): f"{a/b*100:.1f}" for c, (a, b) in sorted(cats.items())})

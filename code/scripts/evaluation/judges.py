@@ -227,6 +227,8 @@ def judge_beam(question, gold, answer, *, rubric=None, abstention=False):
     """
     if abstention:
         return judge_locomo_abstention(question, gold, answer)
+    if isinstance(rubric, str):
+        rubric = [rubric]
     checklist = "\n".join(f"- {item}" for item in (rubric or []) if str(item).strip())
     prompt = (
         "Judge whether the generated answer is CORRECT or WRONG for the "

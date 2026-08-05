@@ -5,11 +5,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import statistics
 from pathlib import Path
 
-from scripts.analyze_gpt56_qa_windows import exact_mcnemar_p
+
+def exact_mcnemar_p(candidate_only: int, reference_only: int) -> float:
+    """Two-sided exact McNemar p-value for discordant paired binary outcomes."""
+    if min(candidate_only, reference_only) < 0:
+        raise ValueError("McNemar counts must be non-negative")
+    discordant = candidate_only + reference_only
+    if discordant == 0:
+        return 1.0
+    tail = sum(
+        math.comb(discordant, index)
+        for index in range(min(candidate_only, reference_only) + 1)
+    ) / (2**discordant)
+    return min(1.0, 2 * tail)
 
 
 CONDITIONS = ("dual_source", "topic_source", "timeline_source", "dual_no_source")
