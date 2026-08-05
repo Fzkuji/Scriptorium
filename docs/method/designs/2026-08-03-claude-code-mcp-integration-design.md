@@ -85,7 +85,8 @@ agent-memory validate --workspace WORKSPACE
 agent-memory mcp --workspace WORKSPACE [--git-commit auto|on|off]
 ```
 
-- `init` 创建标准 workspace 和 `.nativemem/runtime.json`。如果目录已含 memory 文件，只校验，不覆盖。
+- `init` 创建标准 workspace 和 `.scriptorium/runtime.json`。如果目录已含 memory 文件或运行时目录，只校验，不覆盖。
+- `mcp` 在启动时创建缺失的 workspace，因此 `init` 是可选的。相对路径按会话所在仓库根解析；自动创建的 workspace 自带内容为 `*` 的 `.gitignore`。
 - `validate` 解析所有 Topic/Core、检查 Source 与 block links，并重新计算派生视图到临时目录；成功时不改文件。
 - `mcp` 通过 stdin/stdout 运行 FastMCP server，日志只能写 stderr。
 - `--git-commit auto` 为默认值：workspace 是 Git repository 时提交，否则正常完成事务；`on` 要求 Git 可用，`off` 不提交。
@@ -102,7 +103,7 @@ memory/
   timeline/**/*.md
   recent_events.jsonl
   relations.json
-  .nativemem/runtime.json
+  .scriptorium/runtime.json
 ```
 
 - `topics/**/*.md` 与 `core.md` 是 Claude 可提出修改的权威语义状态。
@@ -183,7 +184,7 @@ INTERNAL_ERROR
 {"prefix": "topics/", "include_derived": true, "limit": 200}
 ```
 
-返回 workspace-relative file paths、文件字节数和可选 heading 列表。默认不列 `.nativemem/**`。结果数量和输出字节都必须有硬上限。
+返回 workspace-relative file paths、文件字节数和可选 heading 列表。默认不列运行时目录 `.scriptorium/**`（改名前建的 workspace 沿用 `.nativemem/**`）。结果数量和输出字节都必须有硬上限。
 
 ### 6.4 `memory_read`
 
@@ -354,7 +355,7 @@ Runtime revision 在 Git repository 中使用 `HEAD` 加 workspace fingerprint�
 
 ## 8. 并发、Git 与恢复
 
-- 每个 workspace 使用 `.nativemem/write.lock` 的进程级排他锁；锁只覆盖一次 update transaction。实现优先使用 Python 标准库：POSIX 使用 `fcntl.flock`，Windows 使用 `msvcrt.locking`，不为该功能增加第三方依赖。
+- 每个 workspace 使用运行时目录下 `write.lock` 的进程级排他锁；锁只覆盖一次 update transaction。实现优先使用 Python 标准库：POSIX 使用 `fcntl.flock`，Windows 使用 `msvcrt.locking`，不为该功能增加第三方依赖。
 - 读工具不获取写锁，但返回其读取时的 revision。
 - `base_revision` 防止 Claude 根据旧内容覆盖另一个会话刚提交的修改。
 - Git commit 仅在文件原子安装成功后执行。

@@ -29,7 +29,7 @@ memory/
   recent_events.jsonl  # 最近 50 条已写入记录
   relations.json # 从 Topic links 生成的 outbound/backlinks
   core.md        # 持续提供给 Agent 的核心信息
-  .nativemem/runtime.json # cursor、触发状态、完整创建顺序
+  .scriptorium/runtime.json # cursor、触发状态、完整创建顺序
 ```
 
 当前查询实现从 `topics/` 重建 BM25 与 Embedding 索引，不要求向量数据库，也不在查询期间向 memory tree 写入索引文件。

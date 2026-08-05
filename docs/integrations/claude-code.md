@@ -120,7 +120,7 @@ To version memory, run `git init` inside the workspace before registering.
 | `memory_read` | Read a file by line window, `heading`, or `block_id`. |
 | `memory_grep` | Literal or regex text search. |
 | `memory_search` | Ranked retrieval, `method` of `bm25` or `embedding`. |
-| `memory_update` | The only writer. Commits sources and a topic patch together. |
+| `memory_update` | The only writer. Commits sources and a topic patch together; `layer` chooses which workspace receives them. |
 
 There is no shell tool. `memory_update` accepts a unified diff restricted to
 `topics/**/*.md` and `core.md`; renames, mode changes, symlinks and binary

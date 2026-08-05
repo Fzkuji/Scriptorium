@@ -11,7 +11,7 @@
 | 项 | LoCoMo | LongMemEval (oracle / S) | BEAM |
 |---|---|---|---|
 | 论文 | ACL 2024, Maharana et al. (2024.acl-long.747) | ICLR 2025, arXiv 2410.10813 | ICLR 2026, arXiv 2510.27246 |
-| 本地数据 | `code/locomo/data/locomo10.json`（2.8 MB） | `code/longmemeval/data.json`（=oracle, 15 MB）；`data/longmemeval_s_cleaned.json`（=S, 277 MB） | HF `Mohammadta/BEAM` + `Mohammadta/BEAM-10M`（缓存约 1.25 GB） |
+| 本地数据 | `code/benchmarks/locomo/data/locomo10.json`（2.8 MB） | `code/benchmarks/longmemeval/data/longmemeval_oracle.json`（15 MB）；`longmemeval_s_cleaned.json`（277 MB） | HF 缓存于 `code/benchmarks/beam/hf_cache/`（100K/500K/1M 三档 arrow） |
 | 会话数 | 10 conversations（conv-26/30/41-44/47-50） | 500 题各自带 haystack（oracle 1-6 session/题；S 38-62 session/题） | 100 conversations（100K:20 / 500K:35 / 1M:35 / 10M:10，**4 个 bucket 合计 100**） |
 | session/turn | 272 sessions，5882 turns；每 conv 8k-16k 词（均值 13,377） | oracle 共 948 sessions，10,960 turns（每 session 2-32 turn，mean 11.56） | 每会话消息数：100K≈288 / 500K≈1088 / 1M≈2134 / 10M≈20,870（论文 Table 3） |
 | 上下文规模 | 每 conv ~13k 词 | oracle mean 5,639 tokens；S mean ≈103k tokens（cl100k 实测） | 100K≈130k tokens/会话 … 10M≈10M tokens/会话 |
@@ -27,9 +27,12 @@
 ```
 LoCoMo item: {sample_id, conversation:{speaker_a, speaker_b, session_N:[{speaker,dia_id,text,(blip_caption,img_url,query)}], session_N_date_time}, qa:[{question, answer|adversarial_answer, evidence, category}], observation, session_summary, event_summary}
 LongMemEval item: {question_id(_abs?), question_type, question, answer, question_date, haystack_dates, haystack_session_ids, haystack_sessions:[[{role,content,has_answer}]], answer_session_ids}
-BEAM item: {conversation_id, conversation_seed, narratives, user_profile, conversation_plan, chat(2D: batch→turns, turn 含 role/content/time_anchor/index), probing_questions:[{question, ideal_response, difficulty, rubric:[nugget], plan_reference, (abstention_type, why_unanswerable)}]}
+BEAM item: {conversation_id, conversation_seed, narratives, user_profile, conversation_plan, chat(2D: session→turns, turn 含 role/content/time_anchor/index), probing_questions:{类别名→[题]}}
+BEAM 题: {question, rubric:[nugget], difficulty, 标准答案字段随类别而异} —— 十类各 2 题；标准答案在 answer / ideal_answer(矛盾) / ideal_response(弃答) / ideal_summary(总结) / expected_compliance(指令、偏好遵循) 之一
 ```
-注意：BEAM 的 `probing_questions` 在 HF 里是 Python repr 字符串，要 `ast.literal_eval`（mem0-benchmarks `benchmarks/beam/run.py` L139-153）。
+注意：BEAM 的 `probing_questions` 在 HF 里是 Python repr 字符串，要 `ast.literal_eval`，得到的是**按类别分组的字典**而非题目列表（`code/scripts/runners/beam/convert.py`）。
+
+BEAM 官方口径与我们的差异：官方把标准答案拆成 nugget，逐条判 0 / 0.5 / 1 再平均，顺序题用 Kendall tau-b 计部分正确；我们按每题非对即错。同一份答案在官方口径下分数更高，两者不可直接比较。
 
 ---
 

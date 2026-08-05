@@ -97,7 +97,7 @@
 ├── recent_events.jsonl
 ├── relations.json
 ├── core.md
-└── .nativemem/runtime.json   # cursor、触发器与完整创建顺序；不属于记忆正文</code></pre>
+└── .scriptorium/runtime.json # cursor、触发器与完整创建顺序；不属于记忆正文</code></pre>
   <h3 id="source-memory">2.1 Source Memory</h3>
   <p>Source 保存完整消息和外部文档定位信息，是 Topic 事实的证据边界。对话来源使用 provider 提供的稳定 <code>thread_id</code> 与 <code>message_id</code>。如果输入数据只有顺序型 benchmark label，例如 LoCoMo 的 <code>D1:14</code>，Adapter 会在写入前将其确定性转换为 <code>locomo/thread_*/msg_*</code>；顺序 label 只用于 benchmark 输入和评测映射，不写入 NativeMem 的持久记忆。文件来源使用路径及页码、章节或行号。当前 Markdown link 的显示文字保留完整稳定 Source ID。Source 只追加，不因 Topic 修改、纠错或视图重建而覆盖。</p>
 
@@ -166,7 +166,7 @@ Source S ──→ LLM Writer ──→ Topic T
                                       ├──→ Recent R
                                       └──→ Relations G
 Source S + Topic T ──→ LLM Manager ──→ Core C</code></pre>
-  <p>事实追踪方向始终回到 Source。Topic 和 Core 是需要保存的语义状态；Timeline、Recent、Relations、structure map、BM25 与 Embedding 索引均可重建。<code>.nativemem/runtime.json</code> 保存 session cursor、管理触发状态和完整创建顺序，它是运行状态，不是提供给模型的记忆正文。</p>
+  <p>事实追踪方向始终回到 Source。Topic 和 Core 是需要保存的语义状态；Timeline、Recent、Relations、structure map、BM25 与 Embedding 索引均可重建。<code>.scriptorium/runtime.json</code> 保存 session cursor、管理触发状态和完整创建顺序，它是运行状态，不是提供给模型的记忆正文。</p>
 
   <h2 id="construction">§3 Memory Construction</h2>
   <p>构建只处理 session cursor 之后的新增 Source。Writer 使用普通文件命令直接编辑 staged Topic Markdown；它不提交事件 JSON，也不分别调用 Timeline、Recent 或 Relations 工具。一次写入事务如下。</p>

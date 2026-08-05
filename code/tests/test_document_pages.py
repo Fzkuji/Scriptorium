@@ -197,7 +197,7 @@ def test_method_page_records_the_current_topic_and_timeline_contract() -> None:
         "[^new-evidence-label]",
         "claim-adjacent evidence footnotes",
         "relations.json",
-        ".nativemem/runtime.json",
+        ".scriptorium/runtime.json",
         "不生成文件或条目",
         "shell-only Writer/Manager",
     ):
