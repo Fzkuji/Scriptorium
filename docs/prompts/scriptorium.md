@@ -167,7 +167,7 @@ Question: {question}
 
 ### 从检索上下文生成答案 prompt（inline f-string）
 
-来源：`run_judge.py`，函数 `generate_answer`（变量 `prompt`，用于 Mem0 等 baseline 从检索上下文生成答案）
+来源：已退役的 `scripts/evaluation/run_judge.py`（保留在 f40d8a5 之前的提交中），函数 `generate_answer`（变量 `prompt`，用于 Mem0 等 baseline 从检索上下文生成答案）
 
 ```text
 Answer the question using ONLY the provided context. If the context does not contain the answer, say "NOT FOUND".
@@ -184,7 +184,7 @@ Answer concisely.
 
 ### JUDGE_SYSTEM（标准评测 judge 系统提示词）
 
-来源：`eval_standard.py`，模块级变量 `JUDGE_SYSTEM`
+来源：已退役的 `scripts/evaluation/standard.py`（保留在 f40d8a5 之前的提交中），模块级变量 `JUDGE_SYSTEM`
 
 ```text
 You are evaluating conversational AI memory recall. Return JSON only.
@@ -192,7 +192,7 @@ You are evaluating conversational AI memory recall. Return JSON only.
 
 ### JUDGE_PROMPT（标准评测 0/1 二元 judge 提示词）
 
-来源：`eval_standard.py`，模块级变量 `JUDGE_PROMPT`（Mem0 风格 0/1 binary judge；`{{ }}` 为源码中 `.format` 的转义花括号，逐字保留）
+来源：已退役的 `scripts/evaluation/standard.py`（保留在 f40d8a5 之前的提交中），模块级变量 `JUDGE_PROMPT`（Mem0 风格 0/1 binary judge；`{{ }}` 为源码中 `.format` 的转义花括号，逐字保留）
 
 ```text
 Label the generated answer as CORRECT or WRONG.
@@ -225,7 +225,7 @@ Return JSON: {{"reasoning": "one sentence", "label": "CORRECT" or "WRONG"}}
 
 ### 0-100 打分 judge prompt（inline f-string）
 
-来源：`run_judge.py`，函数 `judge_score`（变量 `prompt`）
+来源：已退役的 `scripts/evaluation/run_judge.py`（保留在 f40d8a5 之前的提交中），函数 `judge_score`（变量 `prompt`）
 
 ```text
 Score 0-100 based on factual accuracy and completeness.
@@ -253,4 +253,4 @@ Output ONLY a number 0-100.
 Execute a shell command in the memory folder. The working directory is always the root of the memory folder. Use standard Linux commands (ls, cat, grep, mkdir, tee, etc.) to read and write files.
 ```
 
-其余分类说明：`memory_builder_v2.py`、`eval_standard.py`、`run_judge.py` 三个文件中不存在其他 prompt。
+其余分类说明：`memory_builder_v2.py`、`standard.py`、`run_judge.py` 三个文件中不存在其他 prompt。这三个文件都已退役，其中的 prompt 逐字保留在本页，当前判分实现见 `scripts/evaluation/judges.py`。

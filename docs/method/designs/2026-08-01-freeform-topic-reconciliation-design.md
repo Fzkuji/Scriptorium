@@ -14,4 +14,4 @@
 - Runtime 只负责格式与来源校验、相对链接改写、Timeline/Recent/Relations 重建和原子安装；
 - 旧版 Reconciler 与 `save_memory(events[])` 仅保留为旧 workspace 的兼容代码，不暴露给当前 Agent。
 
-当前规范与完整示例见 [`../nativemem-method.html`](../nativemem-method.html)，实现计划与验收范围见 [`../../internal/superpowers/plans/2026-08-01-topic-block-memory-runtime.md`](../../internal/superpowers/plans/2026-08-01-topic-block-memory-runtime.md)。
+当前规范与完整示例见 [`../scriptorium-method.html`](../scriptorium-method.html)，实现计划与验收范围见 [`../../internal/superpowers/plans/2026-08-01-topic-block-memory-runtime.md`](../../internal/superpowers/plans/2026-08-01-topic-block-memory-runtime.md)。

@@ -11,7 +11,7 @@ PUBLIC_PAGE_STYLES = {
     "docs/Model-Aligned-Wiki.html": "assets/document.css",
     "docs/related-work/related-work.html": "../assets/document.css",
     "docs/related-work/survey.html": "../assets/document.css",
-    "docs/method/nativemem-method.html": "../assets/document.css",
+    "docs/method/scriptorium-method.html": "../assets/document.css",
     "docs/experiments/experiment.html": "../assets/document.css",
 }
 REQUIRED_SHELL_CLASSES = (
@@ -170,9 +170,9 @@ def test_experiment_page_retains_tab_and_relocation_behavior() -> None:
 
 
 def test_overview_figure_is_editable_and_complete() -> None:
-    figure_path = REPOSITORY_ROOT / "code/figures/nativemem_overview.svg"
+    figure_path = REPOSITORY_ROOT / "code/figures/scriptorium_overview.svg"
     assert figure_path.exists()
-    _, figure = parse_document("code/figures/nativemem_overview.svg")
+    _, figure = parse_document("code/figures/scriptorium_overview.svg")
     figure_source = figure_path.read_text(encoding="utf-8")
     assert "viewBox=" in figure_source
     assert not figure.image_hrefs
@@ -183,13 +183,13 @@ def test_overview_figure_is_editable_and_complete() -> None:
 
 def test_public_pages_reference_the_svg_overview_figure() -> None:
     overview_html = (REPOSITORY_ROOT / "docs/Model-Aligned-Wiki.html").read_text(encoding="utf-8")
-    method_html = (REPOSITORY_ROOT / "docs/method/nativemem-method.html").read_text(encoding="utf-8")
-    assert "../code/figures/nativemem_overview.svg" in overview_html
-    assert "../../code/figures/nativemem_overview.svg" in method_html
+    method_html = (REPOSITORY_ROOT / "docs/method/scriptorium-method.html").read_text(encoding="utf-8")
+    assert "../code/figures/scriptorium_overview.svg" in overview_html
+    assert "../../code/figures/scriptorium_overview.svg" in method_html
 
 
 def test_method_page_records_the_current_topic_and_timeline_contract() -> None:
-    method = (REPOSITORY_ROOT / "docs/method/nativemem-method.html").read_text(
+    method = (REPOSITORY_ROOT / "docs/method/scriptorium-method.html").read_text(
         encoding="utf-8"
     )
     for token in (

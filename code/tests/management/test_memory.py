@@ -780,7 +780,7 @@ def test_block_transaction_restores_every_installed_view_on_install_failure(
     }])
     tracked = [
         "topics/a.md", "timeline/2026/01/01.md", "recent_events.jsonl",
-        "relations.json", ".nativemem/runtime.json",
+        "relations.json", ".scriptorium/runtime.json",
     ]
     before = {name: (tmp_path / name).read_bytes() for name in tracked}
     original_replace = os.replace

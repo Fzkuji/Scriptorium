@@ -278,8 +278,8 @@ def test_incremental_cache_matches_fresh_rebuild(tmp_path: Path):
         "topic": "Melanie/painting",
     }])
     incremental = index.search("sunrise painting")
-    cache = json.loads((memory_dir / ".nativemem-bm25.json").read_text())
-    (memory_dir / ".nativemem-bm25.json").unlink()
+    cache = json.loads((memory_dir / ".scriptorium-bm25.json").read_text())
+    (memory_dir / ".scriptorium-bm25.json").unlink()
     rebuilt = MemoryBM25Index(memory_dir).search("sunrise painting")
 
     assert initial[0]["refs"] == ["D1:3"]
@@ -303,7 +303,7 @@ def test_bm25_can_search_without_writing_a_query_time_cache(tmp_path: Path):
     results = MemoryBM25Index(memory_dir, persist=False).search("support group")
 
     assert results
-    assert not (memory_dir / ".nativemem-bm25.json").exists()
+    assert not (memory_dir / ".scriptorium-bm25.json").exists()
 
 
 def test_bm25_searches_source_turns_missing_from_topics(tmp_path: Path):

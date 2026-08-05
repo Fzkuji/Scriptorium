@@ -17,6 +17,7 @@ from ..markdown import (
     render_definition,
 )
 from ..markdown.syntax import SINGLE_CITATION, definitions
+from ..workspace_layout import RUNTIME_DIR, runtime_dir
 
 
 class BlockViewsMixin:
@@ -175,7 +176,7 @@ class BlockViewsMixin:
         count: int,
         noun: str,
     ) -> str:
-        backup = self.memory_dir / ".nativemem-block-backup"
+        backup = self.memory_dir / f"{RUNTIME_DIR}-block-backup"
         if backup.exists():
             shutil.rmtree(backup)
         backup.mkdir()
@@ -190,7 +191,7 @@ class BlockViewsMixin:
             Path("recent_events.jsonl"),
             Path("relations.json"),
             Path("core.md"),
-            Path(".nativemem/runtime.json"),
+            Path(runtime_dir(self.memory_dir).name) / "runtime.json",
         )
         moved: list[Path] = []
         installed: list[Path] = []

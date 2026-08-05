@@ -17,6 +17,7 @@ from .prompts import (
     VERIFICATION_RETRIEVAL_TASK,
 )
 from .retrying import STRUCTURED_OUTPUT_ATTEMPTS
+from ..workspace_layout import TEMPORARY_PREFIX
 
 _PROBE_SCHEMA = {
     "type": "object",
@@ -78,7 +79,7 @@ def _verification_retrieve(
     config: MemoryConfig,
 ) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(
-        prefix="nativemem-verify-read-"
+        prefix=f"{TEMPORARY_PREFIX}verify-read-"
     ) as temporary:
         copied = Path(temporary) / "memory"
         shutil.copytree(Path(memory_dir), copied)

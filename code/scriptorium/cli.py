@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from src.management.transaction import TransactionError, workspace_revision
+from src.workspace_layout import RUNTIME_DIR
 from src.retrieval import inspect
 
 
@@ -75,7 +76,7 @@ def ensure_workspace(root: Path, *, self_ignore: bool = False) -> bool:
     core = root / "core.md"
     if not core.exists():
         core.write_text("# Core\n", encoding="utf-8")
-    runtime = root / ".nativemem"
+    runtime = root / RUNTIME_DIR
     runtime.mkdir(exist_ok=True)
     runtime_json = runtime / "runtime.json"
     if not runtime_json.exists():

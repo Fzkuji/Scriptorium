@@ -28,9 +28,16 @@ than the automatic self-ignoring `.gitignore` —
 scriptorium init ~/memory
 ```
 
-This creates `topics/`, `sources/`, `core.md` and `.nativemem/runtime.json`. If
-the directory already holds memory files, `init` reports their status and
+This creates `topics/`, `sources/`, `core.md` and `.scriptorium/runtime.json`.
+If the directory already holds memory files, `init` reports their status and
 changes nothing.
+
+`.scriptorium/` is the runtime's own area — cursors, the write lock, staged
+backups and retrieval caches. It is hidden from every listing and never
+writable by a patch. A workspace built before the project took its current
+name carries this directory as `.nativemem/` and keeps it: a stored run's
+hash covers every byte of its workspace, so renaming inside one would
+invalidate the record it was published with.
 
 ## Register the server
 

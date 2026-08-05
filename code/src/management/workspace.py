@@ -29,6 +29,7 @@ from .transaction import (
     workspace_revision,
     workspace_write_lock,
 )
+from ..workspace_layout import TEMPORARY_PREFIX, is_runtime_name, runtime_dir
 
 
 class MemoryWorkspace(
@@ -47,7 +48,7 @@ class MemoryWorkspace(
     ):
         self.memory_dir = Path(memory_dir).resolve()
         self.memory_dir.mkdir(parents=True, exist_ok=True)
-        self.stage_dir = Path(tempfile.mkdtemp(prefix="nativemem-topics-"))
+        self.stage_dir = Path(tempfile.mkdtemp(prefix=f"{TEMPORARY_PREFIX}topics-"))
         self.pending: dict[str, dict[str, Any]] = {}
         self.reconciler = reconciler
         self.config = config or MemoryConfig()
@@ -73,9 +74,9 @@ class MemoryWorkspace(
         core = self.memory_dir / "core.md"
         if core.exists():
             shutil.copy2(core, self.stage_dir / core.name)
-        runtime = self.memory_dir / ".nativemem" / "runtime.json"
+        runtime = runtime_dir(self.memory_dir) / "runtime.json"
         if runtime.exists():
-            staged_runtime = self.stage_dir / ".nativemem" / "runtime.json"
+            staged_runtime = self.stage_dir / runtime.parent.name / "runtime.json"
             staged_runtime.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(runtime, staged_runtime)
 
@@ -249,7 +250,7 @@ class MemoryWorkspace(
             if not path.is_file() or path.is_symlink():
                 continue
             relative = path.relative_to(root)
-            if relative.parts and relative.parts[0].startswith(".nativemem"):
+            if relative.parts and is_runtime_name(relative.parts[0]):
                 continue
             result[relative.as_posix()] = hashlib.sha256(
                 path.read_bytes()
@@ -268,8 +269,9 @@ class MemoryWorkspace(
         paths = [
             path.relative_to(self.stage_dir).as_posix()
             for path in sorted(self.stage_dir.rglob("*"))
-            if path.is_file() and ".nativemem" not in path.relative_to(
-                self.stage_dir
-            ).parts
+            if path.is_file() and not any(
+                is_runtime_name(part)
+                for part in path.relative_to(self.stage_dir).parts
+            )
         ]
         return "\n".join(paths) or "(empty workspace)"

@@ -18,7 +18,7 @@
 
 | 文件 | 项目 | 内容 | 来源 |
 |---|---|---|---|
-| [nativemem.md](nativemem.md) | NativeMem（我们的方法） | 构建 7 + Answer 3 + Judge 3 + 其他 1 = 14 个 prompt | 本地代码（`memory_builder_v2.py` / `eval_standard.py` / `run_judge.py` 等） |
+| [scriptorium.md](scriptorium.md) | Scriptorium（我们的方法） | 构建 7 + Answer 3 + Judge 3 + 其他 1 = 14 个 prompt | 本地代码；判分与答题 prompt 出自已退役的 `standard.py` / `run_judge.py`，正文逐字保留 |
 
 ### 开源框架自带评测
 

@@ -10,7 +10,10 @@ from typing import Any, Callable
 from .tokenization import TokenCounter
 
 
-SCHEMA = "nativemem-writer-capacity-v3"
+SCHEMA = "scriptorium-writer-capacity-v3"
+# The format did not change when the project was renamed, so a calibration
+# recorded under the former name still loads.
+ACCEPTED_SCHEMAS = (SCHEMA, "nativemem-writer-capacity-v3")
 
 
 class MessageTooLargeError(ValueError):
@@ -33,7 +36,7 @@ class WriterCapacity:
         writer_protocol_sha256: str,
     ) -> WriterCapacity:
         value = json.loads(Path(path).read_text(encoding="utf-8"))
-        if value.get("schema") != SCHEMA:
+        if value.get("schema") not in ACCEPTED_SCHEMAS:
             raise ValueError("unsupported Writer capacity schema")
         if value.get("model") != model:
             raise ValueError("Writer capacity model does not match")

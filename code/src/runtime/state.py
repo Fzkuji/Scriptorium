@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from ..workspace_layout import runtime_dir
+
 
 @dataclass(frozen=True)
 class SourceRecord:
@@ -44,7 +46,7 @@ class RuntimeState:
 class RuntimeStateStore:
     def __init__(self, memory_dir: Path):
         self.memory_dir = Path(memory_dir)
-        self.path = self.memory_dir / ".nativemem" / "runtime.json"
+        self.path = runtime_dir(self.memory_dir) / "runtime.json"
 
     def load(self) -> RuntimeState:
         if not self.path.exists():

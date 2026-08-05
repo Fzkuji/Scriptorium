@@ -24,8 +24,9 @@ from ..markdown.syntax import (
     definition_match,
     source_reference,
 )
+from ..workspace_layout import RUNTIME_DIR
 
-_CACHE_NAME = ".nativemem-bm25.json"
+_CACHE_NAME = f"{RUNTIME_DIR}-bm25.json"
 _WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
 # Scripts written without spaces, where a whole run would otherwise become one
 # token: CJK ideographs (plus extensions A/B and compatibility), hiragana,
@@ -447,7 +448,7 @@ class MemoryBM25Index:
     def _write_cache(self) -> None:
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         payload = {"version": 4, "files": self._files}
-        fd, temporary = tempfile.mkstemp(prefix=".nativemem-bm25-", dir=self.memory_dir)
+        fd, temporary = tempfile.mkstemp(prefix=f"{RUNTIME_DIR}-bm25-", dir=self.memory_dir)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(payload, handle, ensure_ascii=False, separators=(",", ":"))

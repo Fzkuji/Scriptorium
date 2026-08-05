@@ -33,9 +33,9 @@ def test_runtime_state_is_atomic_and_cursor_advances_explicitly(tmp_path: Path):
     state.advance_cursor("thread_x", "msg_z9", ordinal=1)
     store.save(state)
 
-    saved = json.loads((tmp_path / ".nativemem/runtime.json").read_text())
+    saved = json.loads((tmp_path / ".scriptorium/runtime.json").read_text())
     assert saved["cursors"]["thread_x"] == {"message_id": "msg_z9", "ordinal": 1}
-    assert not (tmp_path / ".nativemem/runtime.json.tmp").exists()
+    assert not (tmp_path / ".scriptorium/runtime.json.tmp").exists()
 
 
 def test_runtime_trigger_decisions_are_deterministic():

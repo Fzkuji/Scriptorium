@@ -1,6 +1,6 @@
 # Agent Memory Harness File-Native Multi-View 设计
 
-> 状态：当前设计规范，updated 2026-08-02。Topic Markdown 的逐字段规则以 [`../nativemem-method.html`](../nativemem-method.html) 为准。
+> 状态：当前设计规范，updated 2026-08-02。Topic Markdown 的逐字段规则以 [`../scriptorium-method.html`](../scriptorium-method.html) 为准。
 
 Agent Memory Harness 使用文本文件保存外部记忆。LLM 负责 Topic/Core 的语义内容、组织路径、证据日期和检索动作；Runtime 负责稳定 ID、来源解析、相对路径、派生视图和事务一致性。本文只定义方法结构，不固定 benchmark、模型或实验参数。
 

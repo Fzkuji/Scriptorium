@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from .views import memory_files
+from ..workspace_layout import TEMPORARY_PREFIX
 
 
 _READ_ONLY_COMMANDS = {
@@ -103,7 +104,7 @@ def execute_workspace_bash(
     if not allowed:
         return f"Command rejected: {reason}"
     with tempfile.TemporaryDirectory(
-        prefix="nativemem-read-"
+        prefix=f"{TEMPORARY_PREFIX}read-"
     ) as temporary:
         view = Path(temporary)
         root = memory_dir.resolve()
