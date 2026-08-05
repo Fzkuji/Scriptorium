@@ -1,12 +1,12 @@
-# Agent Memory Harness File-Native Multi-View 设计
+# Scriptorium File-Native Multi-View 设计
 
 > 状态：当前设计规范，updated 2026-08-02。Topic Markdown 的逐字段规则以 [`../scriptorium-method.html`](../scriptorium-method.html) 为准。
 
-Agent Memory Harness 使用文本文件保存外部记忆。LLM 负责 Topic/Core 的语义内容、组织路径、证据日期和检索动作；Runtime 负责稳定 ID、来源解析、相对路径、派生视图和事务一致性。本文只定义方法结构，不固定 benchmark、模型或实验参数。
+Scriptorium 使用文本文件保存外部记忆。LLM 负责 Topic/Core 的语义内容、组织路径、证据日期和检索动作；Runtime 负责稳定 ID、来源解析、相对路径、派生视图和事务一致性。本文只定义方法结构，不固定 benchmark、模型或实验参数。
 
 ## 1. Memory State
 
-NativeMem 的记忆状态包括完整原始记忆和多种派生视图：
+Scriptorium 的记忆状态包括完整原始记忆和多种派生视图：
 
 $$M_t=(S_t,T_t,C_t;D_t,R_t,G_t).$$
 
@@ -44,21 +44,21 @@ Recent Memory 是 Topic blocks 的有限窗口，不是独立事实来源。FIFO
 
 ### 1.1 Fact Evolution
 
-NativeMem 不通过覆盖旧事实来维护单一 current state。事实发生变化时，Writer 在 Topic 中保留旧状态并写入具有新时间值和来源的状态；Runtime 随后从具有年份、月份或完整日期的 evidence footnotes 重建 Timeline。例如，用户在两个明确日期分别居住于北京和上海时，两项完整日期 evidence 都保留。
+Scriptorium 不通过覆盖旧事实来维护单一 current state。事实发生变化时，Writer 在 Topic 中保留旧状态并写入具有新时间值和来源的状态；Runtime 随后从具有年份、月份或完整日期的 evidence footnotes 重建 Timeline。例如，用户在两个明确日期分别居住于北京和上海时，两项完整日期 evidence 都保留。
 
 纠错也作为完整过程记录：先前表达及其 source 保留，后续记录明确说明用户进行了纠正。Source Memory 始终保存全部原始交互，Git 保存派生文件的修改版本。因此，当前设计不增加 `supersedes`、有效区间或独立 current-state 数据库。
 
-| 对标对象 | 新旧事实处理 | NativeMem 的区别 |
+| 对标对象 | 新旧事实处理 | Scriptorium 的区别 |
 |---|---|---|
-| [Mem0](https://github.com/mem0ai/mem0) | 对 memory item 执行 add、update、delete 或 no-op | NativeMem 不通过删除旧 item 只保留当前值 |
-| [Infini Memory](https://arxiv.org/html/2606.10677) | 重写相关 Topic Document，并记录 update relation | NativeMem 保留带时间的完整变化记录 |
-| [Zep / Graphiti](https://help.getzep.com/graphiti/core-concepts/adding-episodes) | 使用 temporal edges、有效区间和 edge invalidation | NativeMem 使用文本事件、时间视图和 LLM时间判断，不维护图边有效期 |
-| [LightMem](https://arxiv.org/html/2604.07798) | 根据时间与证据执行 merge、update 或 drop | NativeMem 不删除 Source Memory，也不要求丢弃旧事件 |
-| [ByteRover](https://arxiv.org/html/2604.01599) | 使用 UPDATE、UPSERT、MERGE 和 DELETE 修改 Markdown entries | NativeMem 默认追加事实变化，结构整理不删除原始证据 |
+| [Mem0](https://github.com/mem0ai/mem0) | 对 memory item 执行 add、update、delete 或 no-op | Scriptorium 不通过删除旧 item 只保留当前值 |
+| [Infini Memory](https://arxiv.org/html/2606.10677) | 重写相关 Topic Document，并记录 update relation | Scriptorium 保留带时间的完整变化记录 |
+| [Zep / Graphiti](https://help.getzep.com/graphiti/core-concepts/adding-episodes) | 使用 temporal edges、有效区间和 edge invalidation | Scriptorium 使用文本事件、时间视图和 LLM时间判断，不维护图边有效期 |
+| [LightMem](https://arxiv.org/html/2604.07798) | 根据时间与证据执行 merge、update 或 drop | Scriptorium 不删除 Source Memory，也不要求丢弃旧事件 |
+| [ByteRover](https://arxiv.org/html/2604.01599) | 使用 UPDATE、UPSERT、MERGE 和 DELETE 修改 Markdown entries | Scriptorium 默认追加事实变化，结构整理不删除原始证据 |
 
 ## 2. Three-Level Memory Management
 
-NativeMem 只采用三级记忆管理。
+Scriptorium 只采用三级记忆管理。
 
 这里的三级表示三种管理时机和作用域，不是三种记忆存储层级。
 
@@ -171,15 +171,15 @@ Agent 自主判断证据是否足够并结束；达到框架轮次或可选成�
 
 ### 3.4 Reference Systems
 
-| 对标对象 | 对应技术 | 与 NativeMem 的比较 |
+| 对标对象 | 对应技术 | 与 Scriptorium 的比较 |
 |---|---|---|
-| [ByteRover](https://arxiv.org/html/2604.01599) | 5-Tier Progressive Retrieval：exact cache、fuzzy cache、BM25 direct response、single LLM、full agentic search | 主要策略对标。ByteRover 使用固定自动路由；NativeMem 由 Agent 自主选择 grep、BM25、Embedding 和文件工具 |
+| [ByteRover](https://arxiv.org/html/2604.01599) | 5-Tier Progressive Retrieval：exact cache、fuzzy cache、BM25 direct response、single LLM、full agentic search | 主要策略对标。ByteRover 使用固定自动路由；Scriptorium 由 Agent 自主选择 grep、BM25、Embedding 和文件工具 |
 | [Infini Memory-H](https://arxiv.org/html/2606.10677) | LLM summary selection + BM25 partition retrieval | 固定混合检索对标 |
 | [Infini Memory-A](https://arxiv.org/html/2606.10677) | Agent 调用 `grep`、`search`、`list_docs`、`read_lines` | Agent-controlled retrieval 对标 |
 | [LightMem](https://arxiv.org/html/2604.07798) | query rewriting/routing + Embedding top-k + semantic reranking | Embedding 检索与模型控制对标 |
 | [Semble](https://github.com/MinishLab/semble) | BM25 + static Embedding + RRF + code-aware reranking | 后续混合检索增强参考，不作为当前标准方法 |
 
-ByteRover 的完整 agentic fallback 允许最多 50 次迭代；LightMem 的粗检索固定返回 10 个候选；Infini Memory 同时使用最大迭代数、evidence budget 和无新增证据停止。NativeMem 采用更小的默认上限，并通过 development-set budget sweep 确定正式配置。
+ByteRover 的完整 agentic fallback 允许最多 50 次迭代；LightMem 的粗检索固定返回 10 个候选；Infini Memory 同时使用最大迭代数、evidence budget 和无新增证据停止。Scriptorium 采用更小的默认上限，并通过 development-set budget sweep 确定正式配置。
 
 后续可以参考 Semble，将 BM25 与 Embedding 排名通过 RRF 融合，再使用 topic path、日期、source references 和链接等记忆结构信号重排。该增强需要与三种独立工具配置分别比较，验证后才能加入标准方法。
 
@@ -231,11 +231,11 @@ Git commit、session cursor、按 token 增量触发、一小时空闲触发和�
 | File-only | Agent 使用目录、文件和 grep |
 | BM25-only | 每个 query 固定执行 BM25，再由 LLM回答 |
 | Embedding-only | 每个 query 固定执行 Embedding search，再由 LLM回答 |
-| Agent Memory Harness Retrieval | Agent 自主选择 grep、BM25、Embedding 和结构化访问工具 |
+| Scriptorium Retrieval | Agent 自主选择 grep、BM25、Embedding 和结构化访问工具 |
 | ByteRover-style | exact/fuzzy cache、BM25、single LLM、full agentic search 的固定五级路由 |
 | Semble-style | BM25 + Embedding + RRF + 记忆结构重排 |
 
-主要比较 Agent Memory Harness Retrieval 与 ByteRover-style；其余配置用于判断增益来自具体检索器、Agent控制还是混合重排。
+主要比较 Scriptorium Retrieval 与 ByteRover-style；其余配置用于判断增益来自具体检索器、Agent控制还是混合重排。
 
 所有配置必须记录逐题模型轮次、tool calls、memory-visible tokens、最终证据 tokens、端到端时间和模型调用成本。主比较统一使用 development set 选定的模型轮次、可选成本上限和检索器 `top_k`。
 

@@ -99,7 +99,7 @@
 ├── core.md
 └── .scriptorium/runtime.json # cursor、触发器与完整创建顺序；不属于记忆正文</code></pre>
   <h3 id="source-memory">2.1 Source Memory</h3>
-  <p>Source 保存完整消息和外部文档定位信息，是 Topic 事实的证据边界。对话来源使用 provider 提供的稳定 <code>thread_id</code> 与 <code>message_id</code>。如果输入数据只有顺序型 benchmark label，例如 LoCoMo 的 <code>D1:14</code>，Adapter 会在写入前将其确定性转换为 <code>locomo/thread_*/msg_*</code>；顺序 label 只用于 benchmark 输入和评测映射，不写入 NativeMem 的持久记忆。文件来源使用路径及页码、章节或行号。当前 Markdown link 的显示文字保留完整稳定 Source ID。Source 只追加，不因 Topic 修改、纠错或视图重建而覆盖。</p>
+  <p>Source 保存完整消息和外部文档定位信息，是 Topic 事实的证据边界。对话来源使用 provider 提供的稳定 <code>thread_id</code> 与 <code>message_id</code>。如果输入数据只有顺序型 benchmark label，例如 LoCoMo 的 <code>D1:14</code>，Adapter 会在写入前将其确定性转换为 <code>locomo/thread_*/msg_*</code>；顺序 label 只用于 benchmark 输入和评测映射，不写入 Scriptorium 的持久记忆。文件来源使用路径及页码、章节或行号。当前 Markdown link 的显示文字保留完整稳定 Source ID。Source 只追加，不因 Topic 修改、纠错或视图重建而覆盖。</p>
 
   <h3 id="topic-memory">2.2 Topic Memory and Memory Unit</h3>
   <p>Topic 是由 LLM 组织的 Markdown 语义状态。一个 memory unit 对应一个语义完整、可独立引用和更新的段落，而不是一句话或一个最小事实。相关的多项事实可以整合为连续正文，并分别保留来源注释；整个段落只在末尾保存一个 Obsidian-compatible block ID。</p>
@@ -132,7 +132,7 @@
 
 ## 当前工作
 
-用户于 2026-08-05 入职星河科技，担任研究工程师。[^e-c08341] 用户主要负责 NativeMem 项目的系统设计与实验，并与两名同事共同维护评测代码。[^e-d1147a] 公司办公室位于上海张江，团队通常每周到岗三天。[^e-f309bc] ^52ef10a8
+用户于 2026-08-05 入职星河科技，担任研究工程师。[^e-c08341] 用户主要负责 Scriptorium 项目的系统设计与实验，并与两名同事共同维护评测代码。[^e-d1147a] 公司办公室位于上海张江，团队通常每周到岗三天。[^e-f309bc] ^52ef10a8
 
 [^e-c08341]: Time: `2026-08-05`; Sources: [locomo/thread_2722126b02ae/msg_f9a93abfe77a](../../sources/locomo/thread_2722126b02ae.md#source-679f4d9a45983ab4)
 [^e-d1147a]: Time: `undated`; Sources: [locomo/thread_2722126b02ae/msg_587dcdad6982](../../sources/locomo/thread_2722126b02ae.md#source-d5dd50a810f775bb), [locomo/thread_046276ceb02b/msg_91d0c2e3d774](../../sources/locomo/thread_046276ceb02b.md#source-8f402b2f3ebddfcc)

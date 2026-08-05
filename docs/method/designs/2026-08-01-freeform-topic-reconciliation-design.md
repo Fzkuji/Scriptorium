@@ -1,4 +1,4 @@
-# NativeMem Topic 编辑接口决策记录
+# Topic 编辑接口决策记录
 
 > 状态：已被当前 Topic block contract 取代，2026-08-01。
 

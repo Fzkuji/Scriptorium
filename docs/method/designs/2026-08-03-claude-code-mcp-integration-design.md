@@ -1,10 +1,10 @@
-# Agent Memory Harness 与 Claude Code 集成技术规格
+# Scriptorium 与 Claude Code 集成技术规格
 
-状态：已实现，2026-08-03。实现见 `code/agent_memory_harness/`、`code/src/management/transaction.py`、`code/src/management/patching.py`、`code/src/retrieval/inspect.py` 与 `claude-plugin/`。
+状态：已实现。实现见 `code/scriptorium/`（CLI 与 MCP server）、`code/src/retrieval/layers.py`（分层）、`code/src/management/transaction.py`、`code/src/management/patching.py`、`code/src/retrieval/inspect.py` 与 `claude-plugin/`。
 
-与本规格的差异：`memory_update` 的 patch 只支持 create、update、delete；`agent-memory validate` 在 scratch 副本中重建派生视图；plugin 的 `author` 按 manifest schema 写成 object。
+与本规格的差异：`memory_update` 的 patch 只支持 create、update、delete；`scriptorium validate` 在 scratch 副本中重建派生视图；plugin 的 `author` 按 manifest schema 写成 object。
 
-本文定义 Agent Memory Harness 的可安装 Python package、外部 stdio MCP server、Claude Code plugin 和交付文档。实现者应以本文为接口规格，不改变已有 Topic block contract、benchmark evaluator 或实验结果。
+本文定义 Scriptorium 的可安装 Python package、外部 stdio MCP server、Claude Code plugin 和交付文档。实现者应以本文为接口规格，不改变已有 Topic block contract、benchmark evaluator 或实验结果。
 
 ## 1. 设计目标
 
@@ -15,7 +15,7 @@
 
 两条路径必须共享现有 `code/src/management`、`code/src/markdown`、`code/src/retrieval` 和 `code/src/runtime`，不得复制一套交互版 memory schema 或 lifecycle。
 
-交互路径不启动第二个 LLM，不要求额外 API key，不读取或修改 Claude Code 的登录配置。Agent Memory Harness 自身的参数只通过函数参数、CLI 参数或配置文件传入，不新增环境变量。
+交互路径不启动第二个 LLM，不要求额外 API key，不读取或修改 Claude Code 的登录配置。Scriptorium 自身的参数只通过函数参数、CLI 参数或配置文件传入，不新增环境变量。
 
 ## 2. 非目标
 
@@ -54,16 +54,16 @@ MCP 是标准协议，其他支持 MCP 的 Agent 可以复用该 server。框架
 
 仓库根目录新增 `pyproject.toml`：
 
-- distribution name：`agent-memory-harness`；
-- Python package：`agent_memory_harness`；
-- console script：`agent-memory = agent_memory_harness.cli:main`；
+- distribution name：`scriptorium`；
+- Python package：`scriptorium`；
+- console script：`scriptorium = scriptorium.cli:main`；
 - Python 版本：与仓库当前支持版本一致，首版声明 `>=3.12`；
 - 使用 setuptools 的 dynamic dependencies 从现有 `requirements.txt` 读取依赖，不重复维护两份依赖版本。
 
 公开 Python API：
 
 ```python
-from agent_memory_harness import (
+from scriptorium import (
     BuildConfig,
     MemoryConfig,
     MemoryWorkspace,
@@ -80,9 +80,9 @@ from agent_memory_harness import (
 只增加三个命令：
 
 ```text
-agent-memory init WORKSPACE
-agent-memory validate --workspace WORKSPACE
-agent-memory mcp --workspace WORKSPACE [--git-commit auto|on|off]
+scriptorium init WORKSPACE
+scriptorium validate --workspace WORKSPACE
+scriptorium mcp --workspace [NAME=]PATH ... [--git-commit auto|on|off]
 ```
 
 - `init` 创建标准 workspace 和 `.scriptorium/runtime.json`。如果目录已含 memory 文件或运行时目录，只校验，不覆盖。
@@ -111,7 +111,7 @@ memory/
 - `timeline/**`、`recent_events.jsonl`、`relations.json` 和检索 index 是 Runtime 派生状态。
 - Topic memory unit、evidence footnote、八位十六进制 block ID、临时 `new-block-*`/`new-evidence-*`、时间精度和 `#^block-id` link 全部沿用现有方法规范。
 
-MCP server 启动时必须验证 workspace 是目录且能够解析；不能静默创建传错的绝对路径。创建目录只由 `agent-memory init` 执行。
+MCP server 启动时必须验证 workspace 是目录且能够解析；不能静默创建传错的绝对路径。创建目录只由 `scriptorium init` 执行。
 
 ## 6. MCP server
 
@@ -372,27 +372,23 @@ Git 不能与文件安装组成跨系统原子事务，因此错误协议必须�
 发布前：
 
 ```bash
-pip install git+https://github.com/<owner>/Agent-Memory-Harness.git
+pip install git+https://github.com/Fzkuji/Scriptorium.git
 ```
 
 发布后：
 
 ```bash
-pip install agent-memory-harness
+pip install scriptorium
 ```
 
-初始化并注册：
+注册（workspace 缺失时由 server 在启动时创建，`init` 可选）：
 
 ```bash
-agent-memory init /absolute/path/to/memory
+claude mcp add --scope user scriptorium -- \
+  scriptorium mcp --workspace project=.memory --workspace global=~/memory
 
-claude mcp add --scope user agent-memory -- \
-  agent-memory mcp --workspace /absolute/path/to/memory
-
-claude mcp get agent-memory
+claude mcp get scriptorium
 ```
-
-README 发布前必须将 `<owner>` 替换成真实 GitHub owner；技术规格保留占位符是因为当前仓库没有已确认的 remote URL。
 
 ### 9.2 Plugin 内容
 
@@ -432,14 +428,16 @@ claude-plugin/
 
 ```text
 pyproject.toml
-code/agent_memory_harness/__init__.py       # public facade
-code/agent_memory_harness/cli.py            # init / validate / mcp
-code/agent_memory_harness/mcp_server.py     # FastMCP adapter only
+code/scriptorium/__init__.py                # public facade, lazily resolved
+code/scriptorium/cli.py                     # init / validate / mcp
+code/scriptorium/mcp_server.py              # FastMCP adapter only
+code/src/retrieval/layers.py                # several workspaces read as one
+code/src/workspace_layout.py                # the names the runtime owns
 code/src/management/workspace.py            # structured transaction
 code/src/management/source_archive.py       # stage-targeted archive
 code/src/retrieval/...                      # reusable read/grep/search functions
 claude-plugin/.claude-plugin/plugin.json
-claude-plugin/skills/agent-memory/SKILL.md
+claude-plugin/skills/scriptorium/SKILL.md
 claude-plugin/README.md
 README.md
 docs/integrations/claude-code.md
@@ -459,8 +457,8 @@ docs/Model-Aligned-Wiki.html                 # navigation link only
 ### 12.1 Package 与 CLI
 
 - clean virtual environment 中 build wheel、install wheel；
-- `python -c "import agent_memory_harness"`；
-- `agent-memory --help`、三个 subcommand help；
+- `python -c "import scriptorium"`；
+- `scriptorium --help`、三个 subcommand help；
 - `init` 不覆盖已有 workspace；
 - `validate` 不修改任何文件。
 
@@ -508,7 +506,7 @@ docs/Model-Aligned-Wiki.html                 # navigation link only
 
 根 README 按实际使用顺序编写：
 
-1. Agent Memory Harness 的范围和两个运行模式。
+1. Scriptorium 的范围和两个运行模式。
 2. `pip install` 与最小依赖。
 3. 当前 Claude Code 会话的三条 quick-start 命令。
 4. 一个完整的检索和写入示例。

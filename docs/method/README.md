@@ -19,6 +19,7 @@
 | 本文件 | 目录说明 | 方法文档关系和证据边界 |
 | [`scriptorium-method.html`](scriptorium-method.html) | 当前方法正文 | 两个主要贡献、记忆结构、Topic 规范、构建、管理、检索和实现边界 |
 | [`designs/file_native_multiview_design.md`](designs/file_native_multiview_design.md) | 当前设计 | 记忆状态、写入触发、查询、维护和恢复机制 |
+| [`designs/2026-08-03-claude-code-mcp-integration-design.md`](designs/2026-08-03-claude-code-mcp-integration-design.md) | 当前设计 | 可安装 package、stdio MCP server、分层 workspace 与 Claude Code plugin |
 | [`../internal/analysis/recent_memory_framework_comparison.md`](../internal/analysis/recent_memory_framework_comparison.md) | 内部设计分析 | 近期系统已有而本方法缺少或尚未定型的组件 |
 | [`../experiments/experiment.html`](../experiments/experiment.html) | 实验页面 | 实验矩阵、结果与执行状态 |
 
