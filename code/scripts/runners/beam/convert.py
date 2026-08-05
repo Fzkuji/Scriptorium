@@ -43,6 +43,17 @@ CATEGORIES = (
     "summarization",
     "abstention",
 )
+# Each category states its reference answer under its own key. Two of them
+# describe how a compliant answer behaves instead of quoting one, which is the
+# reference those questions have: they test whether an instruction or a stated
+# preference was followed, not whether a fact was recalled.
+GOLD_FIELDS = (
+    "answer",
+    "ideal_answer",
+    "ideal_response",
+    "ideal_summary",
+    "expected_compliance",
+)
 MONTHS = {
     name.lower(): number
     for number, name in enumerate(
@@ -115,9 +126,17 @@ def convert_questions(row: dict[str, Any]) -> list[dict[str, Any]]:
     questions = []
     for number, name in enumerate(CATEGORIES, start=1):
         for item in probing.get(name, []):
-            # Abstention questions carry an ideal_response instead of an
-            # answer; both are the text the judge compares against.
-            gold = item.get("answer") or item.get("ideal_response") or ""
+            gold = next(
+                (str(item[field]) for field in GOLD_FIELDS if item.get(field)),
+                None,
+            )
+            if gold is None:
+                # An empty reference would be judged against the rubric alone
+                # and look like a normal result, so refuse it here instead.
+                raise ValueError(
+                    f"BEAM {name} question has no reference answer in "
+                    f"{GOLD_FIELDS}: {sorted(item)}"
+                )
             questions.append({
                 "question": str(item.get("question", "")),
                 "answer": str(gold),

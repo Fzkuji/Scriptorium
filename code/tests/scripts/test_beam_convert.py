@@ -88,6 +88,39 @@ def test_abstention_gold_comes_from_ideal_response():
     assert abstention["abstention"] is True
 
 
+def test_every_category_reference_field_is_read():
+    """Each BEAM category names its reference differently; none may be lost."""
+    row = dict(ROW, probing_questions=str({
+        "contradiction_resolution": [
+            {"question": "Have I used Flask?",
+             "ideal_answer": "You have said both.", "rubric": "['contradiction']"},
+        ],
+        "summarization": [
+            {"question": "Summarize the project.",
+             "ideal_summary": "It began with Flask.", "rubric": "['Flask']"},
+        ],
+        "instruction_following": [
+            {"question": "Show the schema.",
+             "expected_compliance": "Response includes a highlighted code block.",
+             "rubric": "['code block']"},
+        ],
+    }))
+
+    golds = {q["beam_category"]: q["answer"] for q in convert_questions(row)}
+
+    assert golds["contradiction_resolution"] == "You have said both."
+    assert golds["summarization"] == "It began with Flask."
+    assert golds["instruction_following"].startswith("Response includes")
+
+
+def test_a_question_without_any_reference_is_refused():
+    row = dict(ROW, probing_questions=str({
+        "summarization": [{"question": "Summarize.", "rubric": "['x']"}],
+    }))
+    with pytest.raises(ValueError, match="no reference answer"):
+        convert_questions(row)
+
+
 def test_unknown_category_is_refused_rather_than_dropped():
     row = dict(ROW, probing_questions=str({"made_up_category": []}))
     with pytest.raises(ValueError, match="unknown BEAM categories"):
