@@ -52,8 +52,9 @@ paper/
 .memos/
 .venv-*/
 
-# 工具的临时会话状态（brainstorm 服务端口、pid）
-.superpowers/brainstorm/
+# 工具的工作状态目录（brainstorm 端口/pid、SDD 台账草稿）；
+# 值得留存的任务台账放在 docs/internal/superpowers/progress/
+.superpowers/
 
 # 本地凭证：config 用 api_key_file 指向仓库外的文件，切勿提交
 *api-key*.txt

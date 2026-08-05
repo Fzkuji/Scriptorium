@@ -1,7 +1,7 @@
 # v8 双视图索引 + 回原文检索 — Progress Ledger
 
-Plan: docs/superpowers/plans/2026-07-08-dual-index-retrieve-original.md
-Spec: docs/superpowers/specs/2026-07-08-dual-index-retrieve-original-design.md
+Plan: docs/internal/superpowers/plans/2026-07-08-dual-index-retrieve-original.md
+Spec: docs/internal/superpowers/specs/2026-07-08-dual-index-retrieve-original-design.md
 Branch: feature/v7-agent-memory（v8 迭代其上）
 Base commit: 3d60723
 
@@ -16,8 +16,8 @@ Base commit: 3d60723
   - 冒烟暴露真 bug + 已修（commit d61cd82）：distill_events 弱模型有时吐裸数字 dia_id [3,5] 丢 D<session>: 前缀，read_turns 解析不了→回原文取空。修法：代码侧用本 chunk 合法 dia_ids 列表强制规范化为 D<session>:<turn>，丢弃无效。test_v8_distill 8 passed，全套 44 passed。重跑冒烟验证检索改善进行中。
 
 ## v8-opt: dia_id 代码托管（新计划，base 5340d0c）
-Plan: docs/superpowers/plans/2026-07-08-v8-code-managed-diaid.md
-Spec: docs/superpowers/specs/2026-07-08-v8-code-managed-diaid-design.md
+Plan: docs/internal/superpowers/plans/2026-07-08-v8-code-managed-diaid.md
+Spec: docs/internal/superpowers/specs/2026-07-08-v8-code-managed-diaid-design.md
 起因：冒烟发现弱模型提炼漏标 dia_id(6/9空) + 检索抄不对 id。改为代码托管：提炼带行号模型写refs、检索read_original工具必填id。
 - Task opt-1: complete (commits 5340d0c..efc2feb, 含 fix: _number_chunk 按turn块编号防多行发言错位; revert-verify 证明; 49 passed, review clean)
 - Task opt-2: complete (commits efc2feb..4feb0ef, read_original工具dia_id必填, 消息顺序/JSONguard/端到端 全过; 50 passed, review clean)

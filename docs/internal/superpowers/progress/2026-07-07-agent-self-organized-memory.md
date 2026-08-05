@@ -1,6 +1,6 @@
 # v7 Agent Self-Organized Memory — Progress Ledger
 
-Plan: docs/superpowers/plans/2026-07-07-agent-self-organized-memory.md
+Plan: docs/internal/superpowers/plans/2026-07-07-agent-self-organized-memory.md
 Branch: feature/v7-agent-memory
 Base commit: b64b434
 
