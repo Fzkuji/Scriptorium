@@ -2,7 +2,8 @@
 
 `scripts/` holds one shell entry point plus packages of Python implementation.
 Anything you run by hand is either `run_experiment.sh` or a module invoked with
-`python -m`; no loose `.py` files sit at this level.
+`python -m`; no loose `.py` files sit at this level. Every path below is
+relative to `code/`, which is where these commands run.
 
 ## Run an experiment
 

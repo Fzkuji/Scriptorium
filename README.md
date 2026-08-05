@@ -117,20 +117,22 @@ docs/
   internal/                   research analysis and development records
 ```
 
-Root-level `src`, `scripts`, `tests`, `benchmarks`, `figures`, `gold_memory`,
-`results`, `baselines`, and `third_party` are relative compatibility symlinks. Executable
-code is classified under `scripts/`; generated analysis is stored under
-`results/analysis/`. There is no separate code-level `experiments/` directory.
-`code/src/evaluation` is a compatibility link to `code/scripts/evaluation`
-for the hash-locked `code/scripts/evaluation/eval_full.py`; evaluation implementation is
+Everything runnable lives under `code/`, and only there — run the commands
+below from that directory. Generated analysis is stored under
+`code/results/analysis/`; there is no code-level `experiments/` directory.
+`code/src/evaluation` is a compatibility link to `code/scripts/evaluation`,
+required because the hash-locked `code/scripts/evaluation/eval_full.py`
+imports its answerer as `src.evaluation.answerer`; the implementation is
 maintained only under `code/scripts/evaluation`.
 
 ## Running an experiment
 
-Every runner takes its settings from a JSON config, so a run is one command and
-no credential reaches your shell history. Copy the example and edit it:
+Run these from `code/`. Every runner takes its settings from a JSON config, so
+a run is one command and no credential reaches your shell history. Copy the
+example and edit it:
 
 ```bash
+cd code
 cp scripts/configs/locomo.example.json scripts/configs/my-run.json
 ```
 
