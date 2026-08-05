@@ -3,7 +3,10 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3.12}"
-VENV_DIR="${VENV_DIR:-$PROJECT_ROOT/.venv}"
+# Keep the environment outside a syncing folder. iCloud sets a hidden flag on
+# files it syncs, and Python skips a hidden .pth, which silently disables an
+# editable install. $PROJECT_ROOT/.venv may be a symlink to this.
+VENV_DIR="${VENV_DIR:-$HOME/.venvs/scriptorium}"
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
   echo "Python 3.12 is required. Set PYTHON_BIN to its executable." >&2
@@ -34,5 +37,9 @@ fi
 # The layout check lives with the tests that define it, so a clone with a
 # missing or duplicated directory fails here rather than mid-experiment.
 "$VENV_DIR/bin/python" -m pytest -q "$PROJECT_ROOT/code/tests/test_portable_layout.py"
+
+if [[ ! -e "$PROJECT_ROOT/.venv" ]]; then
+  ln -s "$VENV_DIR" "$PROJECT_ROOT/.venv"
+fi
 
 echo "Environment ready: $VENV_DIR"

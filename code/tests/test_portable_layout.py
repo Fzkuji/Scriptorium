@@ -32,7 +32,13 @@ def test_the_repository_root_holds_no_second_copy_of_the_code_tree():
     for name in CODE_DIRECTORIES:
         assert (ROOT / "code" / name).is_dir()
         assert not (ROOT / name).exists()
-    assert not any(child.is_symlink() for child in ROOT.iterdir())
+    # Dot-entries are local environment — a `.venv` symlink pointing at an
+    # environment kept outside a syncing folder is expected.
+    assert not any(
+        child.is_symlink()
+        for child in ROOT.iterdir()
+        if not child.name.startswith(".")
+    )
 
 
 def test_third_party_checkouts_sit_beside_the_adapters_that_drive_them():

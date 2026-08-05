@@ -116,10 +116,14 @@ source .venv/bin/activate
 cd code && pytest -q tests
 ```
 
-`setup.sh` creates a local virtual environment, installs `requirements-dev.txt`,
-and checks the repository layout. It refuses to rebind an existing environment
-to a different interpreter, because the compiled packages inside it belong to
-the one it was built with.
+`setup.sh` creates the virtual environment at `~/.venvs/scriptorium`, links it
+as `.venv`, installs `requirements-dev.txt`, and checks the repository layout.
+The environment lives outside the repository because a syncing folder (iCloud
+Drive, Dropbox) marks files hidden, and Python skips a hidden `.pth`, which
+disables an editable install without saying so. Set `VENV_DIR` to put it
+somewhere else. `setup.sh` refuses to rebind an existing environment to a
+different interpreter, because the compiled packages inside it belong to the
+one it was built with.
 
 API credentials are never stored in this repository. Runners receive
 credentials, models, endpoints and budgets through explicit CLI or config
