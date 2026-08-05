@@ -7,7 +7,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 
-from scripts.nativemem.common import atomic_json, stop_on_signal, tree_sha256
+from scripts.runners.common import atomic_json, stop_on_signal, tree_sha256
 from src import retrieval
 
 from .outputs import (

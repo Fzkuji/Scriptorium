@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from scripts.nativemem.common import run_config
-from scripts.nativemem.locomo.config import parse_args
+from scripts.runners.common import run_config
+from scripts.runners.conversation.config import parse_args
 
 
 def write_config(tmp_path: Path, payload: dict, name: str = "run.json") -> Path:
@@ -131,7 +131,7 @@ def test_runner_still_works_without_a_config(tmp_path: Path):
 def test_cache_reads_are_priced_at_their_own_rate():
     """Cache reads cost a fraction of fresh input; pricing them as input
     overstated cost by orders of magnitude on cache-heavy runs."""
-    from scripts.nativemem.run_locomo import summarize_usage
+    from scripts.runners.run_conversation import summarize_usage
 
     records = [{
         "phase": "build",

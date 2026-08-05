@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def test_ablation_loads_locomo_without_historical_runner(tmp_path: Path):
-    from scripts.nativemem.ablation.outputs import load_unit
+    from scripts.runners.ablation.outputs import load_unit
 
     data = tmp_path / "locomo.json"
     data.write_text(json.dumps([{
@@ -37,7 +37,7 @@ def test_ablation_loads_locomo_without_historical_runner(tmp_path: Path):
 
 
 def test_longmemeval_selection_uses_current_support_module():
-    from scripts.nativemem.longmemeval.selection import question_type_indices
+    from scripts.runners.longmemeval.selection import question_type_indices
 
     data = [
         {"question_type": "single-session-user"},

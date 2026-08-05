@@ -1,4 +1,4 @@
-"""LoCoMo sample loading and inventory."""
+"""Sample loading and inventory, for any benchmark shaped as sessions."""
 
 import json
 import re
@@ -15,7 +15,7 @@ def load_sample(path: Path, sample_id: str) -> tuple[int, dict[str, Any]]:
     ]
     if len(matches) != 1:
         raise ValueError(
-            f"expected one LoCoMo sample {sample_id!r}, found {len(matches)}"
+            f"expected one sample {sample_id!r}, found {len(matches)}"
         )
     return matches[0]
 

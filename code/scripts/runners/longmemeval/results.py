@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-from scripts.nativemem.common import atomic_json, read_json
+from scripts.runners.common import atomic_json, read_json
 
 
 def source_records(analysis_path: Path) -> list[dict[str, Any]]:

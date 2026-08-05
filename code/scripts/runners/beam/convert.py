@@ -7,10 +7,10 @@ four categories — but the runner between them only needs sessions of turns
 and questions with gold answers, so converting is enough to reuse the build,
 query and evaluation path unchanged.
 
-    python -m scripts.nativemem.beam.convert --size 100K --conversation 1 \
+    python -m scripts.runners.beam.convert --size 100K --conversation 1 \
         --output benchmarks/beam/converted/beam100K-1.json
 
-The result is a one-sample list, so `run_locomo.py --data <file>
+The result is a one-sample list, so `run_conversation.py --data <file>
 --sample-id beam100K-1` runs it.
 """
 

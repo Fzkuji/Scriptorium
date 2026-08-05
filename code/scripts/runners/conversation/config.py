@@ -1,4 +1,4 @@
-"""Command-line configuration for one complete LoCoMo conversation."""
+"""Command-line configuration for one complete conversation."""
 
 import argparse
 from pathlib import Path
@@ -20,6 +20,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         )
     )
     run_config.add_config_flag(parser)
+    parser.add_argument(
+        "--benchmark",
+        choices=("locomo", "beam"),
+        default="locomo",
+        help=(
+            "which questions the sample carries, and therefore which "
+            "evaluator scores it"
+        ),
+    )
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA)
     parser.add_argument("--sample-id", default="conv-50")
     parser.add_argument("--output-dir", type=Path, required=True)

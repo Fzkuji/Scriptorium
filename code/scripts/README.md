@@ -60,7 +60,7 @@ section in the top-level `README.md`.
 
 | Package | What is in it |
 |---|---|
-| `nativemem/` | The runners behind every stored result: LoCoMo, LongMemEval, ablations |
+| `runners/` | The runners behind every stored result: one conversation (`conversation/`, LoCoMo and BEAM), LongMemEval's queue, ablations |
 | `model_capacity/` | Writer input-capacity calibration |
 | `evaluation/` | Judges, metrics, LLM clients, and `eval_full.py` |
 | `analysis/` | `analyze_run.py` and one-question analyses |
@@ -70,10 +70,16 @@ Everything here runs our own method. Code that runs a system we compare
 against, or that measures one under a controlled condition, lives in
 `baselines/` — see `baselines/README.md`.
 
-## Locked evaluator
+## Evaluators
 
 `evaluation/eval_full.py` is the only permitted LoCoMo evaluator and is
-hash-locked by `AGENTS.md`. Verify its SHA-256 before any LoCoMo scoring run.
-Do not add a second scorer or wrap it with changed semantics.
+hash-locked by `AGENTS.md`. Its SHA-256 is verified before any LoCoMo run
+starts. Do not add a second LoCoMo scorer or wrap it with changed semantics.
+
+Benchmarks added since are scored by `evaluation/evaluate.py --benchmark`,
+which records its own hash into every result file it writes. Both judge with
+the same model on the same endpoint, so their scores are comparable. The
+runner picks between them from `--benchmark`; there is no separate judging
+step to remember.
 
 Read a module's docstring for what it does; every one has one.

@@ -861,7 +861,7 @@ def test_shell_revision_synchronizes_event_content_to_all_views(tmp_path: Path):
     )
 
 
-def test_nativemem_build_verifies_each_session_before_next_write(
+def test_scriptorium_build_verifies_each_session_before_next_write(
     tmp_path: Path, monkeypatch
 ):
     calls = []
@@ -906,7 +906,7 @@ def test_nativemem_build_verifies_each_session_before_next_write(
     ]
 
 
-def test_nativemem_build_replaces_locomo_sequence_refs_with_opaque_source_ids(
+def test_scriptorium_build_replaces_locomo_sequence_refs_with_opaque_source_ids(
     tmp_path: Path, monkeypatch
 ):
     captured = []
@@ -939,7 +939,7 @@ def test_nativemem_build_replaces_locomo_sequence_refs_with_opaque_source_ids(
     assert "D1:14" not in ref
 
 
-def test_nativemem_build_runs_local_reorganization_at_fixed_session_intervals(
+def test_scriptorium_build_runs_local_reorganization_at_fixed_session_intervals(
     tmp_path: Path, monkeypatch
 ):
     conv = {}
@@ -1004,7 +1004,7 @@ def test_nativemem_build_runs_local_reorganization_at_fixed_session_intervals(
         ([{"tool": "save_memory", "status": "ok", "count": 1}], True, 1),
     ],
 )
-def test_nativemem_final_management_requires_new_memory_and_can_be_disabled(
+def test_scriptorium_final_management_requires_new_memory_and_can_be_disabled(
     tmp_path: Path, monkeypatch, audit, final_manage, expected_calls
 ):
     conv = {
@@ -1039,7 +1039,7 @@ def test_nativemem_final_management_requires_new_memory_and_can_be_disabled(
     assert len(calls) == expected_calls
 
 
-def test_nativemem_build_can_disable_write_verification(tmp_path: Path, monkeypatch):
+def test_scriptorium_build_can_disable_write_verification(tmp_path: Path, monkeypatch):
     conv = {
         "session_1": [("user", "message")],
         "session_1_date_time": "2023-05-01",
@@ -1070,7 +1070,7 @@ def test_nativemem_build_can_disable_write_verification(tmp_path: Path, monkeypa
     assert verification == {"skipped": True, "reason": "disabled"}
 
 
-def test_nativemem_build_batches_writes_and_samples_verification(
+def test_scriptorium_build_batches_writes_and_samples_verification(
     tmp_path: Path, monkeypatch
 ):
     conv = {}

@@ -13,15 +13,15 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.nativemem.common import run_config, source_tree_sha256  # noqa: E402
-from scripts.nativemem.longmemeval import support as common  # noqa: E402
-from scripts.nativemem.longmemeval.queue import (  # noqa: E402
+from scripts.runners.common import run_config, source_tree_sha256  # noqa: E402
+from scripts.runners.longmemeval import support as common  # noqa: E402
+from scripts.runners.longmemeval.queue import (  # noqa: E402
     claim_item,
     finish_claim,
     initialize_queue,
     queue_states,
 )
-from scripts.nativemem.longmemeval.selection import (  # noqa: E402
+from scripts.runners.longmemeval.selection import (  # noqa: E402
     question_type_indices,
     round_robin_indices,
 )

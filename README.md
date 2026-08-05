@@ -87,7 +87,12 @@ code/
   scriptorium/                installable facade, CLI and MCP server
   src/                        reusable Scriptorium implementation
   scripts/                    run_experiment.sh plus our own method's runners
-    nativemem/                LoCoMo, LongMemEval and ablation runners
+    runners/                  one package per benchmark family
+      conversation/           one conversation end to end: LoCoMo and BEAM
+      longmemeval/            LongMemEval's many-sample queue
+      beam/                   BEAM conversation conversion
+      ablation/               ablation variants
+      common/                 config parsing, atomic writes, hashing
     model_capacity/           Writer capacity calibration
     evaluation/               judges, metrics, and the locked evaluator
     analysis/                 summaries over stored runs
@@ -139,10 +144,10 @@ python -m scripts.model_capacity.calibrate_writer \
   --config scripts/configs/model_capacity.example.json
 
 # 2. Build memory for one conversation and evaluate it
-python scripts/nativemem/run_locomo.py --config scripts/configs/my-run.json
+python scripts/runners/run_conversation.py --config scripts/configs/my-run.json
 
 # 3. Same run, build only, to inspect the memory before spending on answers
-python scripts/nativemem/run_locomo.py --config scripts/configs/my-run.json \
+python scripts/runners/run_conversation.py --config scripts/configs/my-run.json \
   --build-only
 ```
 
@@ -151,7 +156,7 @@ sweeps:
 
 ```bash
 for sample in conv-50 conv-51 conv-52; do
-  python scripts/nativemem/run_locomo.py \
+  python scripts/runners/run_conversation.py \
     --config scripts/configs/my-run.json \
     --sample-id "$sample" \
     --output-dir "results/formal/sweep-$sample"
@@ -159,7 +164,7 @@ done
 ```
 
 `run_longmemeval.py` accepts `--config` the same way. Run
-`python scripts/nativemem/run_locomo.py --help` for the full option list.
+`python scripts/runners/run_conversation.py --help` for the full option list.
 
 ### BEAM, for conversations long enough to strain a Writer
 
@@ -170,11 +175,11 @@ cap bind, and enough questions per build to be worth the build.
 
 ```bash
 # Convert one conversation into what the runner reads
-python -m scripts.nativemem.beam.convert --size 100K --conversation 1 \
+python -m scripts.runners.beam.convert --size 100K --conversation 1 \
   --output benchmarks/beam/converted/beam100K-1.json
 
 # Build and answer, with the locked LoCoMo evaluator turned off
-python scripts/nativemem/run_locomo.py --config my-beam-run.json \
+python scripts/runners/run_conversation.py --config my-beam-run.json \
   --data benchmarks/beam/converted/beam100K-1.json \
   --sample-id beam100K-1 --no-evaluate \
   --writer-input-token-cap 16384

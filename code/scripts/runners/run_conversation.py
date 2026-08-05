@@ -9,7 +9,7 @@ CODE_ROOT = Path(__file__).resolve().parents[2]
 if str(CODE_ROOT) not in sys.path:
     sys.path.insert(0, str(CODE_ROOT))
 
-from scripts.nativemem.locomo import (
+from scripts.runners.conversation import (
     load_sample,
     main,
     parse_args,

@@ -14,7 +14,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON="${PYTHON:-$REPO/.venv/bin/python}"
-RUNNER="$REPO/code/scripts/nativemem/run_locomo.py"
+RUNNER="$REPO/code/scripts/runners/run_conversation.py"
 SUMMARY="$REPO/code/scripts/analysis/analyze_run.py"
 
 usage() {

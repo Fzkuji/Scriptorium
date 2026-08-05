@@ -1,4 +1,4 @@
-"""Shared utilities for NativeMem experiment entrypoints."""
+"""Shared utilities for the experiment entry points."""
 
 from . import run_config
 from .io import (

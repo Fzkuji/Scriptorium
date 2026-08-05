@@ -14,7 +14,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from scripts.nativemem.common import atomic_json, read_json, sha256_file, utc_now
+from scripts.runners.common import atomic_json, read_json, sha256_file, utc_now
 
 
 CODE_ROOT = Path(__file__).resolve().parents[3]

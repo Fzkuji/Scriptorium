@@ -8,12 +8,12 @@ import pytest
 CODE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(CODE))
 
-from scripts.nativemem.beam.convert import (  # noqa: E402
+from scripts.runners.beam.convert import (  # noqa: E402
     CATEGORIES, convert_conversation, convert_questions, parse_anchor,
     parse_literal,
 )
-from scripts.nativemem.locomo.data import sample_inventory  # noqa: E402
-from scripts.nativemem.locomo.query import CARRIED_FIELDS  # noqa: E402
+from scripts.runners.conversation.data import sample_inventory  # noqa: E402
+from scripts.runners.conversation.query import CARRIED_FIELDS  # noqa: E402
 
 ROW = {
     "conversation_id": "1",

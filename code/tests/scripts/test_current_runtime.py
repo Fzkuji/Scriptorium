@@ -7,7 +7,7 @@ import pytest
 from src import build as adapter
 
 
-def test_nativemem_adapter_owns_session_conversion(tmp_path: Path, monkeypatch):
+def test_scriptorium_adapter_owns_session_conversion(tmp_path: Path, monkeypatch):
     captured = []
     conversation = {
         "session_1": [{
@@ -38,7 +38,7 @@ def test_nativemem_adapter_owns_session_conversion(tmp_path: Path, monkeypatch):
     assert captured[0]["refs"] == [adapter.benchmark_source_id("D1:14")]
 
 
-def test_nativemem_adapter_preserves_locomo_image_evidence(
+def test_scriptorium_adapter_preserves_locomo_image_evidence(
     tmp_path: Path, monkeypatch
 ):
     captured = []
@@ -79,8 +79,8 @@ def test_nativemem_adapter_preserves_locomo_image_evidence(
     assert adapter.build_turn_index(conversation)[source_id]["text"] == expected
 
 
-def test_nativemem_locomo_inventory_selects_stable_sample_id(tmp_path: Path):
-    from scripts.nativemem import run_locomo
+def test_scriptorium_locomo_inventory_selects_stable_sample_id(tmp_path: Path):
+    from scripts.runners import run_conversation
 
     dataset = [
         {
@@ -102,8 +102,8 @@ def test_nativemem_locomo_inventory_selects_stable_sample_id(tmp_path: Path):
     data_path = tmp_path / "locomo.json"
     data_path.write_text(json.dumps(dataset), encoding="utf-8")
 
-    index, sample = run_locomo.load_sample(data_path, "conv-50")
-    inventory = run_locomo.sample_inventory(sample)
+    index, sample = run_conversation.load_sample(data_path, "conv-50")
+    inventory = run_conversation.sample_inventory(sample)
 
     assert index == 1
     assert inventory == {
@@ -116,8 +116,8 @@ def test_nativemem_locomo_inventory_selects_stable_sample_id(tmp_path: Path):
     }
 
 
-def test_nativemem_locomo_usage_summary_reports_phase_and_cost():
-    from scripts.nativemem import run_locomo
+def test_scriptorium_locomo_usage_summary_reports_phase_and_cost():
+    from scripts.runners import run_conversation
 
     records = [
         {
@@ -136,7 +136,7 @@ def test_nativemem_locomo_usage_summary_reports_phase_and_cost():
         },
     ]
 
-    summary = run_locomo.summarize_usage(
+    summary = run_conversation.summarize_usage(
         records,
         input_usd_per_million=1.0,
         output_usd_per_million=2.0,
@@ -154,10 +154,10 @@ def test_nativemem_locomo_usage_summary_reports_phase_and_cost():
     assert summary["by_phase"]["build"]["calls"] == 3
 
 
-def test_nativemem_locomo_usage_summary_prices_cached_input_tokens():
-    from scripts.nativemem import run_locomo
+def test_scriptorium_locomo_usage_summary_prices_cached_input_tokens():
+    from scripts.runners import run_conversation
 
-    summary = run_locomo.summarize_usage(
+    summary = run_conversation.summarize_usage(
         [
             {
                 "phase": "build",
@@ -182,10 +182,10 @@ def test_nativemem_locomo_usage_summary_prices_cached_input_tokens():
     assert summary["totals"]["anthropic_equivalent_cost_usd"] == 99.0
 
 
-def test_nativemem_locomo_cli_uses_explicit_credentials(tmp_path: Path):
-    from scripts.nativemem import run_locomo
+def test_scriptorium_locomo_cli_uses_explicit_credentials(tmp_path: Path):
+    from scripts.runners import run_conversation
 
-    args = run_locomo.parse_args([
+    args = run_conversation.parse_args([
         "--output-dir", str(tmp_path),
         "--base-url", "https://example.test/v1",
         "--api-key", "builder-key",
@@ -210,7 +210,7 @@ def test_nativemem_locomo_cli_uses_explicit_credentials(tmp_path: Path):
     assert not hasattr(args, "api_key_env")
 
 
-def test_nativemem_runtime_exports_the_current_retrieval_api():
+def test_scriptorium_runtime_exports_the_current_retrieval_api():
     from src import retrieval
 
     assert callable(retrieval.create_runtime)
@@ -218,7 +218,7 @@ def test_nativemem_runtime_exports_the_current_retrieval_api():
 
 
 def test_longmemeval_cli_uses_one_framework_limit(tmp_path: Path):
-    from scripts.nativemem.run_longmemeval import parser
+    from scripts.runners.run_longmemeval import parser
 
     args = parser().parse_args([
         "--output-dir", str(tmp_path),
@@ -236,7 +236,7 @@ def test_longmemeval_cli_uses_one_framework_limit(tmp_path: Path):
     assert not hasattr(args, "retrieval_max_tool_calls")
 
 
-def test_nativemem_management_exports_the_current_writing_api():
+def test_scriptorium_management_exports_the_current_writing_api():
     from src import management as memory
 
     assert hasattr(memory, "__path__")
@@ -247,12 +247,13 @@ def test_nativemem_management_exports_the_current_writing_api():
 def test_locomo_runner_records_build_failure_and_partial_usage(
     tmp_path: Path, monkeypatch
 ):
-    from scripts.nativemem.locomo import runner
+    from scripts.runners.conversation import runner
 
     data_path = tmp_path / "locomo.json"
     data_path.write_text("[]", encoding="utf-8")
     output_dir = tmp_path / "run"
     args = SimpleNamespace(
+        benchmark="locomo",
         data=data_path,
         output_dir=output_dir,
         sample_id="conv-test",
@@ -281,7 +282,7 @@ def test_locomo_runner_records_build_failure_and_partial_usage(
             raise RuntimeError("writer reached its turn limit")
 
     monkeypatch.setattr(runner, "parse_args", lambda _argv=None: args)
-    monkeypatch.setattr(runner, "verify_evaluator", lambda: None)
+    monkeypatch.setattr(runner, "verify_evaluator", lambda benchmark: None)
     monkeypatch.setattr(
         runner,
         "load_sample",
@@ -311,12 +312,13 @@ def test_locomo_runner_records_build_failure_and_partial_usage(
 
 
 def test_locomo_build_only_stops_before_querying(tmp_path: Path, monkeypatch):
-    from scripts.nativemem.locomo import runner
+    from scripts.runners.conversation import runner
 
     data_path = tmp_path / "locomo.json"
     data_path.write_text("[]", encoding="utf-8")
     output_dir = tmp_path / "run"
     args = SimpleNamespace(
+        benchmark="locomo",
         data=data_path,
         output_dir=output_dir,
         sample_id="conv-test",
@@ -367,7 +369,7 @@ def test_locomo_build_only_stops_before_querying(tmp_path: Path, monkeypatch):
             return {}
 
     monkeypatch.setattr(runner, "parse_args", lambda _argv=None: args)
-    monkeypatch.setattr(runner, "verify_evaluator", lambda: None)
+    monkeypatch.setattr(runner, "verify_evaluator", lambda benchmark: None)
     monkeypatch.setattr(runner, "load_sample", lambda *_args: (0, sample))
     monkeypatch.setattr(
         runner,

@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from scripts.nativemem.common import atomic_json, read_json
-from scripts.nativemem.longmemeval import support as longmemeval
+from scripts.runners.common import atomic_json, read_json
+from scripts.runners.longmemeval import support as longmemeval
 
 
 CODE_ROOT = Path(__file__).resolve().parents[3]

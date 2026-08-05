@@ -1,4 +1,8 @@
-"""LoCoMo NativeMem runner components."""
+"""One conversation end to end: build memory, answer, score.
+
+LoCoMo and BEAM differ in length and in what they ask, not in what the
+runner does with them, so both run through this package.
+"""
 
 from .config import parse_args
 from .data import load_sample, sample_inventory

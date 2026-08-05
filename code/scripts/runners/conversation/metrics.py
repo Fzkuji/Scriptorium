@@ -1,4 +1,4 @@
-"""Usage, latency, and memory-size summaries for LoCoMo runs."""
+"""Usage, latency, and memory-size summaries for one conversation run."""
 
 import statistics
 from pathlib import Path

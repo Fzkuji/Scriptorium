@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.nativemem.longmemeval import support
+from scripts.runners.longmemeval import support
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "longmemeval_s_tiny.json"

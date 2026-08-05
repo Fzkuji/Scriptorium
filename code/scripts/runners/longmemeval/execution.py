@@ -4,7 +4,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any, Callable
 
-from scripts.nativemem.common import atomic_json, read_json
+from scripts.runners.common import atomic_json, read_json
 from src import retrieval
 
 from . import support as lme

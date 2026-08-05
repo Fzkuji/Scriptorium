@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts.nativemem import reanswer_longmemeval as MOD
+from scripts.runners import reanswer_longmemeval as MOD
 from src import retrieval
 from src.agent_runtime import AgentResult
 from src.retrieval import tools as retrieval_tools
@@ -299,7 +299,7 @@ def test_query_agent_forwards_time_window_to_embedding_search(
     assert trace[0]["args"]["date_from"] == "2023"
 
 
-def test_nativemem_inventory_and_file_reader_expose_sources(tmp_path):
+def test_scriptorium_inventory_and_file_reader_expose_sources(tmp_path):
     (tmp_path / "topics").mkdir()
     (tmp_path / "timeline/2023/05").mkdir(parents=True)
     (tmp_path / "sources").mkdir()
@@ -327,7 +327,7 @@ def test_nativemem_inventory_and_file_reader_expose_sources(tmp_path):
     ) == "raw source\n"
 
 
-def test_nativemem_file_reader_exposes_line_window_parameters(tmp_path):
+def test_scriptorium_file_reader_exposes_line_window_parameters(tmp_path):
     path = tmp_path / "topics/notes.md"
     path.parent.mkdir()
     path.write_text("one\ntwo\nthree\n", encoding="utf-8")
@@ -345,7 +345,7 @@ def test_nativemem_file_reader_exposes_line_window_parameters(tmp_path):
     ) == "two\n"
 
 
-def test_nativemem_read_only_shell_can_search_sources(tmp_path):
+def test_scriptorium_read_only_shell_can_search_sources(tmp_path):
     source = tmp_path / "sources/thread.md"
     source.parent.mkdir()
     source.write_text(
@@ -359,7 +359,7 @@ def test_nativemem_read_only_shell_can_search_sources(tmp_path):
     assert "sources/thread.md:1:Calvin bought a drum machine." in output
 
 
-def test_nativemem_ablation_conditions_change_views_and_tools(tmp_path):
+def test_scriptorium_ablation_conditions_change_views_and_tools(tmp_path):
     (tmp_path / "topics").mkdir()
     (tmp_path / "timeline").mkdir()
     (tmp_path / "sources").mkdir()
@@ -481,7 +481,7 @@ def test_search_tools_cannot_see_files_hidden_by_ablation(
         assert "secret-source-only-term" not in output
 
 
-def test_nativemem_source_verification_can_be_disabled(tmp_path):
+def test_scriptorium_source_verification_can_be_disabled(tmp_path):
     (tmp_path / "core.md").write_text(
         "The stable answer is Shanghai.\n", encoding="utf-8"
     )
@@ -505,7 +505,7 @@ def test_nativemem_source_verification_can_be_disabled(tmp_path):
     assert trace[-1]["source_verification"] is False
 
 
-def test_nativemem_query_config_rejects_invalid_values():
+def test_scriptorium_query_config_rejects_invalid_values():
     with pytest.raises(ValueError, match="max_turns"):
         retrieval.QueryConfig(max_turns=0)
     with pytest.raises(ValueError, match="max_budget_usd"):

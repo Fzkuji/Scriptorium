@@ -1,4 +1,4 @@
-"""Build, query, and evaluate a complete LoCoMo conversation."""
+"""Build, query, and evaluate one complete conversation."""
 
 import json
 import time
@@ -10,7 +10,7 @@ from src import build as adapter
 from src import management as memory
 from src import retrieval
 
-from scripts.nativemem.common import atomic_json, read_json, tree_sha256, utc_now
+from scripts.runners.common import atomic_json, read_json, tree_sha256, utc_now
 from .config import parse_args
 from .data import load_sample, sample_inventory
 from .evaluation import run_evaluator, verify_evaluator
@@ -23,7 +23,7 @@ from .results import build_record, load_completed, write_questions
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    verify_evaluator()
+    verify_evaluator(args.benchmark)
     data_path = args.data.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
             or not memory_dir.is_dir()
             or tree_sha256(memory_dir) != build.get("memory_sha256")
         ):
-            raise RuntimeError("existing NativeMem build is incomplete or differs")
+            raise RuntimeError("existing build is incomplete or differs")
     else:
         if memory_dir.exists() and any(memory_dir.iterdir()):
             raise RuntimeError("memory exists without a complete build record")
@@ -206,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
             "failed": failures,
             "finished_at": utc_now(),
         })
-        raise RuntimeError(f"{len(failures)} LoCoMo questions failed")
+        raise RuntimeError(f"{len(failures)} questions failed")
     if tree_sha256(memory_dir) != memory_hash:
         raise RuntimeError("query phase modified the memory workspace")
 
@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     atomic_json(call_log_path, backend.call_log)
     if args.evaluate:
         atomic_json(status_path, {"phase": "evaluating", "updated_at": utc_now()})
-        run_evaluator(args, output_dir)
+        run_evaluator(args, output_dir, questions_path)
     atomic_json(status_path, {
         "phase": "complete",
         "completed": len(completed),

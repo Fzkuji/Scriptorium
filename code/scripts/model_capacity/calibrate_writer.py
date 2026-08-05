@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from scripts.nativemem.common import atomic_json
+from scripts.runners.common import atomic_json
 from src import management, retrieval
 from src.management.api import render_writer_input, writer_protocol_sha256
 from src.runtime.capacity import (

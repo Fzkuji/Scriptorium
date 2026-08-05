@@ -10,7 +10,7 @@
 - `code/src/runtime/`：派生视图、在线状态、tokenizer 和 Writer capacity artifact；
 - `code/src/retrieval/`：文件、grep、BM25、Embedding 和 Agent-controlled retrieval；
 - `code/scripts/model_capacity/calibrate_writer.py`：在固定工作负载上校准 Writer 输入预算；
-- `code/scripts/nativemem/`：LoCoMo、LongMemEval 和消融入口。
+- `code/scripts/runners/`：单对话（LoCoMo、BEAM）、LongMemEval 和消融入口。
 
 ## 文档职责
 

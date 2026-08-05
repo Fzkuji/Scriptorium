@@ -5,7 +5,7 @@ import signal
 from pathlib import Path
 from typing import Any
 
-from scripts.nativemem.common import run_config, stop_on_signal
+from scripts.runners.common import run_config, stop_on_signal
 from src import retrieval
 
 from .execution import answer_one, lme, run_pending

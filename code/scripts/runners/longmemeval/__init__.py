@@ -1,6 +1,6 @@
 """LongMemEval NativeMem runner components."""
 
-from scripts.nativemem.common import atomic_json, read_json, stop_on_signal
+from scripts.runners.common import atomic_json, read_json, stop_on_signal
 from .execution import (
     answer_one,
     collect_answer,

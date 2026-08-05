@@ -1,4 +1,4 @@
-"""Checkpoint and result records for resumable LoCoMo execution."""
+"""Checkpoint and result records for resumable execution."""
 
 import time
 from dataclasses import asdict
@@ -7,7 +7,7 @@ from typing import Any
 
 from src import build as adapter
 
-from scripts.nativemem.common import atomic_json, read_json, tree_sha256, utc_now
+from scripts.runners.common import atomic_json, read_json, tree_sha256, utc_now
 from .metrics import memory_inventory
 
 

@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).parents[2] / "scripts/nativemem/run_longmemeval.py"
-SPEC = importlib.util.spec_from_file_location("run_nativemem_longmemeval", SCRIPT)
+SCRIPT = Path(__file__).parents[2] / "scripts/runners/run_longmemeval.py"
+SPEC = importlib.util.spec_from_file_location("run_longmemeval_script", SCRIPT)
 MOD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MOD)
 
