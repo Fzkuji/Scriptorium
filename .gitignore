@@ -37,6 +37,7 @@ paper/*.synctex.gz
 # 系统
 .DS_Store
 .env
+.venv
 .venv/
 
 # Python 打包产物
