@@ -10,7 +10,6 @@ code/benchmarks/
 
 # 实验结果体积很大，全部保留在本地，不纳入主仓库；正式摘要另存 docs/。
 code/results/
-results
 
 # 记忆构建产物（可由脚本重新生成，只入库评测 JSON）
 code/results/*/memory*/
