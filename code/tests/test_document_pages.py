@@ -13,6 +13,8 @@ PUBLIC_PAGE_STYLES = {
     "docs/related-work/survey.html": "../assets/document.css",
     "docs/method/scriptorium-method.html": "../assets/document.css",
     "docs/experiments/experiment.html": "../assets/document.css",
+    "docs/research/research-plan.html": "../assets/document.css",
+    "docs/research/longmemeval-smoke-plan.html": "../assets/document.css",
 }
 REQUIRED_SHELL_CLASSES = (
     "document-shell",
@@ -34,7 +36,7 @@ REQUIRED_FIGURE_LABELS = {
     "File-Native Multi-View Memory",
     "Source Memory",
     "Topical View",
-    "Temporal View",
+    "Timeline View",
     "Recent Memory",
     "Core Memory",
     "Hyperlink Relations",
@@ -185,7 +187,7 @@ def test_public_pages_reference_the_svg_overview_figure() -> None:
     overview_html = (REPOSITORY_ROOT / "docs/Model-Aligned-Wiki.html").read_text(encoding="utf-8")
     method_html = (REPOSITORY_ROOT / "docs/method/scriptorium-method.html").read_text(encoding="utf-8")
     assert "../code/figures/scriptorium_overview.svg" in overview_html
-    assert "../../code/figures/scriptorium_overview.svg" in method_html
+    assert "../assets/scriptorium_overview.svg" in method_html
 
 
 def test_method_page_records_the_current_topic_and_timeline_contract() -> None:

@@ -61,16 +61,21 @@ class UsageTracker:
 
 
 class Runtime:
+    supports_batch_checkpoint = True
     def __init__(
         self,
         agent: Any,
         model: str,
         *,
+        query_agent: Any | None = None,
+        query_model: str | None = None,
         build_config: adapter.BuildConfig | None = None,
         query_config: QueryConfig | None = None,
     ) -> None:
-        self.agent = agent
-        self.model = model
+        self.builder_agent = agent
+        self.builder_model = model
+        self.agent = query_agent or agent
+        self.model = query_model or model
         self.build_config = build_config
         self.query_config = query_config or QueryConfig()
         self.call_log: list[dict[str, Any]] = []
@@ -148,18 +153,27 @@ class Runtime:
             Path(base_dir),
         )
 
-    def build_memory(self, conv: dict[str, Any], memory_dir: str):
+    def build_memory(
+        self,
+        conv: dict[str, Any],
+        memory_dir: str,
+        *,
+        checkpoint_path: str | Path | None = None,
+        resume: bool = False,
+    ):
         if self.build_config is None:
             raise RuntimeError("Scriptorium build_config was not supplied")
         result = adapter.build_memory(
             conv,
             memory_dir,
-            agent=self.agent,
-            model=self.model,
+            agent=self.builder_agent,
+            model=self.builder_model,
             usage_logger=lambda result: self.log_agent_result(
                 result, "writer"
             ),
             config=self.build_config,
+            checkpoint_path=checkpoint_path,
+            resume=resume,
         )
         with self._retrieval_index_lock:
             self._retrieval_indexes.clear()
@@ -184,7 +198,12 @@ def create_runtime(
     api_key: str,
     model: str = "openai/gpt-4o-mini",
     cli_path: str | None = None,
+    query_base_url: str | None = None,
+    query_api_key: str | None = None,
+    query_model: str | None = None,
+    query_cli_path: str | None = None,
     agent: Any | None = None,
+    query_agent: Any | None = None,
     build_config: adapter.BuildConfig | None = None,
     query_config: QueryConfig | None = None,
 ) -> Runtime:
@@ -201,9 +220,23 @@ def create_runtime(
                 cli_path=cli_path,
             )
         )
+    if query_agent is None and any(
+        value is not None
+        for value in (query_base_url, query_api_key, query_model, query_cli_path)
+    ):
+        query_agent = ClaudeCodeAgent(
+            ClaudeCodeConfig(
+                base_url=query_base_url or base_url,
+                api_key=query_api_key or api_key,
+                model=query_model or model,
+                cli_path=query_cli_path if query_cli_path is not None else cli_path,
+            )
+        )
     return Runtime(
         agent,
         model,
+        query_agent=query_agent,
+        query_model=query_model,
         build_config=build_config,
         query_config=query_config,
     )

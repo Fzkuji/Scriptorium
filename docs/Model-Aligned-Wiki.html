@@ -58,7 +58,7 @@ updated: '2026-07-31'
 </div>
 
 <figure class="architecture-figure">
-  <img src="../code/figures/scriptorium_overview.svg" alt="Scriptorium state-centered multi-view memory architecture">
+  <img src="assets/scriptorium_overview.svg" alt="Scriptorium state-centered multi-view memory architecture">
   <figcaption>Scriptorium 多视图状态：Source Memory 是权威原始记录，Topic、Timeline、Recent 与 Core 围绕它组织，并由 Agent 按需检索。</figcaption>
 </figure>
 
@@ -76,6 +76,11 @@ updated: '2026-07-31'
 </table>
 
 <h2 id="3-方法">3. 方法</h2>
+
+<figure style="margin:1rem 0 1.25rem">
+<img src="../code/figures/scriptorium_overview.svg" alt="Scriptorium file-native multi-view memory architecture" style="width:100%;display:block">
+<figcaption style="font-size:.82rem;color:hsl(var(--bc)/.65);margin-top:.35rem">当前实现：Runtime 归档 Source 并维护派生视图，Agent 管理 Topic/Core，并按需选择 grep、BM25 或可选 Embedding 完成证据化回答。详细边界见 <a href="method/scriptorium-method.html">Method</a>。</figcaption>
+</figure>
 
 <h3 id="3-1-problem">3.1 问题定义</h3>
 
@@ -221,6 +226,7 @@ updated: '2026-07-31'
 <li><a href="experiments/results/our_results.md">Results Evidence</a> — 可追溯的结果表与实验产物</li>
 <li><a href="integrations/claude-code.md">Claude Code Integration</a> — 交互路径的安装、MCP 工具、错误码与并发规则</li>
 <li><a href="research/research-plan.html">Research Plan</a> — 当前进度、剩余研究任务、依赖关系和执行顺序</li>
+<li><a href="research/longmemeval-smoke-plan.html">LongMemEval-S Smoke Plan</a> — 组件边界、checkpoint/恢复、multi-session smoke、S4/S8 配对、构建复用与查询 mask 消融</li>
 </ul>
 
   <!-- /wah:slot -->

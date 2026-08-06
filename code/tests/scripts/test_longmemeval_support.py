@@ -159,6 +159,27 @@ def test_empty_answer_fails_and_resume_reuses_completed_build(tmp_path):
     assert good.build_calls == 0 and good.answer_calls == 1
 
 
+def test_build_only_saves_reusable_memory_without_answering(tmp_path):
+    item = support.load_dataset(FIXTURE, expected_count=2)[0]
+    backend = FakeBackend()
+
+    ok, detail, checkpoint = support.run_item(
+        0,
+        item,
+        tmp_path,
+        backend,
+        run_meta(),
+        resume=False,
+        build_only=True,
+    )
+
+    assert ok and detail == "build complete"
+    assert checkpoint["status"] == "built"
+    assert checkpoint["build"]["status"] == "complete"
+    assert "answer" not in checkpoint and "retrieval" not in checkpoint
+    assert backend.build_calls == 1 and backend.answer_calls == 0
+
+
 def test_incomplete_state_requires_resume(tmp_path):
     item = support.load_dataset(FIXTURE, expected_count=2)[0]
     paths = support.item_paths(tmp_path, 0, item["question_id"])

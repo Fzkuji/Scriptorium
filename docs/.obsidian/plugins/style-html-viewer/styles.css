@@ -1,0 +1,147 @@
+/* ==========================================
+   Obsidian HTML Viewer Plugin Stylesheet
+   ========================================== */
+
+/* Main View Container */
+.html-viewer-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* Header Controls & Mode Switcher */
+.html-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  gap: 8px;
+}
+
+.html-viewer-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.html-viewer-toggle-btn:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.html-viewer-toggle-btn.is-active {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* Preview Mode Frame Container */
+.html-viewer-preview-container {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.html-viewer-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background-color: var(--background-primary);
+}
+
+/* Source View Container */
+.html-viewer-source-container {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-adaptive-normal);
+  white-space: pre-wrap;
+  word-break: break-all;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* Inline Error Cards (R4 Error Handling) */
+.html-viewer-error-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  background-color: var(--background-primary);
+}
+
+.html-viewer-error-card {
+  max-width: 500px;
+  width: 100%;
+  padding: 20px 24px;
+  border-radius: 8px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--text-error);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.html-viewer-error-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-error);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.html-viewer-error-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-error);
+}
+
+.html-viewer-error-message {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-normal);
+  line-height: 1.5;
+}
+
+.html-viewer-error-details {
+  margin: 0;
+  padding: 8px 12px;
+  background-color: var(--background-primary-alt);
+  border-radius: 4px;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-x: auto;
+}
+
+/* Loading Spinner & State */
+.html-viewer-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 12px;
+  color: var(--text-muted);
+}

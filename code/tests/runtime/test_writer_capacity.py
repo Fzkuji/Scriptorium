@@ -86,6 +86,67 @@ def test_explicit_writer_cap_batches_without_a_calibration_file(
     ]
 
 
+def test_build_checkpoint_resumes_after_last_committed_batch(
+    tmp_path: Path, monkeypatch
+):
+    from src import build
+
+    checkpoint = tmp_path / "build-checkpoint.json"
+    conversation = {
+        f"session_{index}": [{
+            "speaker": "user", "text": f"fact-{index}", "dia_id": f"D{index}:1"
+        }]
+        for index in range(1, 4)
+    }
+    first_calls = []
+
+    def fail_on_second(_memory_dir, *, sessions, **_kwargs):
+        first_calls.append(sessions[0]["refs"][0])
+        if len(first_calls) == 2:
+            raise RuntimeError("interrupted")
+        return []
+
+    monkeypatch.setattr(build.memory, "write_sessions", fail_on_second)
+    config = build.BuildConfig(
+        session_batch=1, verify_writes=False, final_manage=False
+    )
+    with pytest.raises(RuntimeError, match="interrupted"):
+        build.build_memory(
+            conversation,
+            tmp_path / "memory",
+            agent=object(),
+            model="test-model",
+            config=config,
+            checkpoint_path=checkpoint,
+        )
+
+    saved = json.loads(checkpoint.read_text(encoding="utf-8"))
+    assert saved["completed_batches"] == 1
+    resumed_calls = []
+    monkeypatch.setattr(
+        build.memory,
+        "write_sessions",
+        lambda _memory_dir, *, sessions, **_kwargs: (
+            resumed_calls.append(sessions[0]["refs"][0]) or []
+        ),
+    )
+    build.build_memory(
+        conversation,
+        tmp_path / "memory",
+        agent=object(),
+        model="test-model",
+        config=config,
+        checkpoint_path=checkpoint,
+        resume=True,
+    )
+
+    assert first_calls[0] not in resumed_calls
+    assert len(resumed_calls) == 2
+    completed = json.loads(checkpoint.read_text(encoding="utf-8"))
+    assert completed["status"] == "complete"
+    assert completed["completed_batches"] == 3
+
+
 def test_capacity_selection_uses_full_workload_cost_not_largest_batch():
     from src.runtime.capacity import select_writer_capacities
 

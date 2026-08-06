@@ -113,6 +113,25 @@ def test_create_runtime_uses_explicit_agent_without_mutating_environment(
     assert os.environ["BUILDER_KEY"] == "inherited-key"
 
 
+def test_runtime_keeps_builder_and_query_agents_separate():
+    builder = object()
+    answerer = object()
+
+    result = retrieval.create_runtime(
+        "https://builder.example/v1",
+        model="deepseek-builder",
+        api_key="builder-key",
+        agent=builder,
+        query_model="gpt-answerer",
+        query_agent=answerer,
+    )
+
+    assert result.builder_agent is builder
+    assert result.builder_model == "deepseek-builder"
+    assert result.agent is answerer
+    assert result.model == "gpt-answerer"
+
+
 def test_runtime_constructs_each_retrieval_index_once_across_threads():
     runtime = retrieval.Runtime(agent=object(), model="test-model")
     created = []

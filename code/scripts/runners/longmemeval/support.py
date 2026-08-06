@@ -177,6 +177,7 @@ def item_paths(
         "item_dir": item_dir,
         "memory_dir": item_dir / "memory",
         "checkpoint": item_dir / "checkpoint.json",
+        "build_checkpoint": item_dir / "build-checkpoint.json",
     }
 
 
@@ -292,6 +293,7 @@ def run_item(
     backend: Any,
     run_meta: dict[str, Any],
     resume: bool,
+    build_only: bool = False,
 ) -> tuple[bool, str, dict[str, Any] | None]:
     paths = item_paths(output_dir, index, item["question_id"])
     old = None
@@ -329,7 +331,13 @@ def run_item(
         and memory_is_valid(paths["memory_dir"])
     )
     if not build_reusable:
-        if paths["memory_dir"].exists():
+        resumable_build = bool(
+            resume
+            and getattr(backend, "supports_batch_checkpoint", False)
+            and paths["build_checkpoint"].is_file()
+            and paths["memory_dir"].exists()
+        )
+        if paths["memory_dir"].exists() and not resumable_build:
             shutil.rmtree(paths["memory_dir"])
         checkpoint.update({
             "status": "building",
@@ -340,9 +348,17 @@ def run_item(
         _tracker_reset(backend, phase)
         started = time.monotonic()
         try:
-            reported_seconds, events = backend.build_memory(
-                conversation, str(paths["memory_dir"])
-            )
+            if getattr(backend, "supports_batch_checkpoint", False):
+                reported_seconds, events = backend.build_memory(
+                    conversation,
+                    str(paths["memory_dir"]),
+                    checkpoint_path=paths["build_checkpoint"],
+                    resume=resumable_build,
+                )
+            else:
+                reported_seconds, events = backend.build_memory(
+                    conversation, str(paths["memory_dir"])
+                )
             usage = _tracker_snapshot(backend, phase)
             stats = memory_stats(paths["memory_dir"])
             if int(events) <= 0 or not stats["markdown_files"] or not stats["bytes"]:
@@ -365,6 +381,16 @@ def run_item(
             })
             _record_failure(checkpoint, paths["checkpoint"], "build", exc)
             return False, str(exc), checkpoint
+
+    if build_only:
+        checkpoint.update({
+            "status": "built",
+            "updated_at": utc_now(),
+        })
+        checkpoint.pop("retrieval", None)
+        checkpoint.pop("answer", None)
+        atomic_json(paths["checkpoint"], checkpoint)
+        return True, "build complete", checkpoint
 
     checkpoint.update({
         "status": "retrieving",

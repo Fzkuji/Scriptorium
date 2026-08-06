@@ -1,6 +1,9 @@
 """Scriptorium memory-build orchestration."""
 
 import json
+import hashlib
+import os
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -54,6 +57,36 @@ def _written_blocks(audit):
     )
 
 
+def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, ensure_ascii=False, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _batch_plan(batches: list[list[dict[str, Any]]]) -> tuple[list[dict[str, Any]], str]:
+    plan = [{
+        "index": index,
+        "source_ids": [ref for session in batch for ref in session["refs"]],
+        "observation_dates": [session["observation_date"] for session in batch],
+    } for index, batch in enumerate(batches)]
+    digest = hashlib.sha256(json.dumps(
+        plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    return plan, digest
+
+
 def build_memory(
     conv: dict[str, Any],
     memory_dir: str | Path,
@@ -63,6 +96,8 @@ def build_memory(
     model: str,
     usage_logger=None,
     config: BuildConfig | None = None,
+    checkpoint_path: str | Path | None = None,
+    resume: bool = False,
 ):
     config = config or BuildConfig()
     started = time.time()
@@ -117,11 +152,42 @@ def build_memory(
             for start in range(0, len(sessions), session_batch)
         ]
 
-    completed_sessions = 0
+    plan, plan_hash = _batch_plan(batches)
+    progress_path = Path(checkpoint_path) if checkpoint_path else None
+    progress: dict[str, Any] = {
+        "schema": "scriptorium-build-checkpoint-v1",
+        "status": "building",
+        "batch_plan": plan,
+        "batch_plan_sha256": plan_hash,
+        "completed_batches": 0,
+        "completed_sessions": 0,
+        "event_count": 0,
+        "touched_topics": [],
+        "final_management": "pending" if config.final_manage else "disabled",
+    }
+    if progress_path and resume and progress_path.is_file():
+        loaded = json.loads(progress_path.read_text(encoding="utf-8"))
+        if loaded.get("schema") != progress["schema"]:
+            raise ValueError("unsupported build checkpoint schema")
+        if loaded.get("batch_plan_sha256") != plan_hash:
+            raise ValueError("build checkpoint batch plan differs")
+        completed = int(loaded.get("completed_batches", 0))
+        if completed < 0 or completed > len(batches):
+            raise ValueError("build checkpoint completed batch count is invalid")
+        progress.update(loaded)
+        event_count = int(progress.get("event_count", 0))
+        touched_topics = set(progress.get("touched_topics", []))
+    elif progress_path:
+        _atomic_json(progress_path, progress)
+
+    completed_sessions = int(progress.get("completed_sessions", 0))
     session_by_last_ref = {
         session["refs"][-1]: session for session in sessions if session["refs"]
     }
-    for batch in batches:
+    completed_batches = int(progress.get("completed_batches", 0))
+    for batch_index, batch in enumerate(batches):
+        if batch_index < completed_batches:
+            continue
         audit = memory.write_sessions(
             memory_dir,
             agent=agent,
@@ -179,11 +245,36 @@ def build_memory(
                 )
                 touched_topics.clear()
 
-    if event_count and config.final_manage:
+        if progress_path:
+            progress.update({
+                "status": "building",
+                "completed_batches": batch_index + 1,
+                "completed_sessions": completed_sessions,
+                "last_source_id": batch[-1]["refs"][-1] if batch and batch[-1]["refs"] else None,
+                "event_count": event_count,
+                "touched_topics": sorted(touched_topics),
+            })
+            _atomic_json(progress_path, progress)
+
+    if (
+        event_count
+        and config.final_manage
+        and progress.get("final_management") != "complete"
+    ):
         memory.manage_memory(
             memory_dir,
             agent=agent,
             usage_logger=usage_logger,
             config=config.memory_config,
         )
+        progress["final_management"] = "complete"
+    if progress_path:
+        progress.update({
+            "status": "complete",
+            "completed_batches": len(batches),
+            "completed_sessions": completed_sessions,
+            "event_count": event_count,
+            "touched_topics": sorted(touched_topics),
+        })
+        _atomic_json(progress_path, progress)
     return time.time() - started, event_count
