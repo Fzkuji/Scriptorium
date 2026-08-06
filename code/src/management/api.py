@@ -15,9 +15,12 @@ from .prompts import (
     WRITER_BATCH_TASK,
     WRITER_TASK,
 )
+from .writer_examples import WRITER_SHELL_EXAMPLES
 
 
-def render_writer_task(sessions: list[dict[str, Any]]) -> str:
+def render_writer_task(
+    sessions: list[dict[str, Any]], *, shell_examples: bool = False
+) -> str:
     rendered = []
     for number, session in enumerate(sessions, start=1):
         rendered.append(
@@ -25,7 +28,10 @@ def render_writer_task(sessions: list[dict[str, Any]]) -> str:
             f"{session['observation_date']}\n\n"
             f"{render_conversation(session['turns'], session['refs'])}"
         )
-    return WRITER_BATCH_TASK.format(sessions="\n\n".join(rendered))
+    task = WRITER_BATCH_TASK.format(sessions="\n\n".join(rendered))
+    if shell_examples:
+        task = f"{task}\n{WRITER_SHELL_EXAMPLES}"
+    return task
 
 
 def render_writer_input(sessions: list[dict[str, Any]]) -> str:
@@ -80,7 +86,10 @@ def write_sessions(
     usage_logger: Any | None = None,
     config: MemoryConfig | None = None,
 ) -> list[dict[str, Any]]:
-    task = render_writer_task(sessions)
+    task = render_writer_task(
+        sessions,
+        shell_examples=(config or MemoryConfig()).writer_shell_examples,
+    )
     return _run_agent(
         memory_dir,
         agent=agent,

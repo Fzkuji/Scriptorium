@@ -1,0 +1,18 @@
+# The build only needs code/. Everything below is large, local, or irrelevant
+# to serving Add and Search, and copying it would bloat the build context.
+.git
+.venv
+.venv*
+paper/
+docs/
+code/results/
+code/benchmarks/
+code/figures/
+code/baselines/
+code/gold_memory/
+code/tests/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.ruff_cache/
+.DS_Store

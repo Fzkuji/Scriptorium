@@ -50,7 +50,7 @@ WRITER_API_KEY = os.environ.get("SCRIPTORIUM_WRITER_API_KEY", "")
 # One Add request carries at most 20 messages, so a single writer pass covers it.
 # Cross-session reorganisation is deliberately not run inside a request: it would
 # put the 1200s platform timeout at risk for no gain on a 20-message chunk.
-MEMORY_CONFIG = MemoryConfig()
+MEMORY_CONFIG = MemoryConfig(writer_shell_examples=True)
 
 app = FastAPI(title="Scriptorium Memory Service")
 _bearer = HTTPBearer(auto_error=False)

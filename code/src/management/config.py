@@ -8,6 +8,10 @@ class MemoryConfig:
     recent_limit: int = 50
     max_turns: int = 20
     max_budget_usd: float | None = None
+    # Weaker models do not infer that one shell call is one transaction, and
+    # stall by splitting a paragraph from the footnote it cites. Worked
+    # examples make the consequence concrete for them.
+    writer_shell_examples: bool = False
 
     def __post_init__(self) -> None:
         if self.core_max_tokens < 0:

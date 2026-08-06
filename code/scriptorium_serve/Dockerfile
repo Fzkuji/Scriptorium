@@ -21,9 +21,8 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir "fastapi>=0.115" "uvicorn[standard]>=0.30"
+COPY code/scriptorium_serve/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY code/ ./code/
 

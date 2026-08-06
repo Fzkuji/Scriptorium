@@ -1,0 +1,13 @@
+# Runtime dependencies of the Add / Search service only.
+#
+# The repository's top-level requirements.txt covers the whole research harness
+# (benchmarks, figures, embedding retrieval, baselines) and pulls in torch and
+# the CUDA stack through sentence-transformers. This service retrieves with
+# BM25 and writes over HTTP, so none of that belongs in the image.
+claude-agent-sdk==0.1.81
+fastapi>=0.115,<1
+openai>=1.50,<3
+pydantic>=2,<3
+rank-bm25>=0.2.2,<1
+tiktoken==0.12.0
+uvicorn[standard]>=0.30,<1
