@@ -12,15 +12,11 @@
 #     scriptorium-memory
 FROM python:3.12-slim
 
-# The writer runs Claude Code as a subprocess, so the CLI and a Node runtime
-# have to be present in the image alongside the Python service.
+# The writer talks to an OpenAI-compatible endpoint over HTTP, so no Node
+# runtime and no Claude Code CLI are needed. The workspace shell tool does use
+# ordinary POSIX utilities, which the base image already provides.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates gnupg git \
-    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && npm install -g @anthropic-ai/claude-code \
-    && apt-get purge -y gnupg \
-    && apt-get autoremove -y \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
