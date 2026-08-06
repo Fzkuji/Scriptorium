@@ -586,7 +586,7 @@ class MemoryBM25Index:
             })
 
         results.sort(key=lambda row: (-row["final_score"], row["path"], row["line"], row["event_id"]))
-        return results[: max(1, min(int(top_k), 50))]
+        return results[: max(1, min(int(top_k), 100))]
 
 
 def render_search_results(results: list[dict[str, Any]]) -> str:

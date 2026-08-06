@@ -6,10 +6,13 @@ from .claude_code import (
     ClaudeCodeAgent,
     ClaudeCodeConfig,
 )
+from .openai_agent import OpenAIAgentConfig, OpenAIWriterAgent
 
 __all__ = [
     "AgentExecutionError",
     "AgentResult",
     "ClaudeCodeAgent",
     "ClaudeCodeConfig",
+    "OpenAIAgentConfig",
+    "OpenAIWriterAgent",
 ]

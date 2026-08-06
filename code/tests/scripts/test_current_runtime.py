@@ -224,6 +224,7 @@ def test_longmemeval_cli_uses_one_framework_limit(tmp_path: Path):
         "--output-dir", str(tmp_path),
         "--start", "0",
         "--limit", "1",
+        "--base-url", "https://example.test/v1",
         "--api-key", "test-key",
         "--claude-cli", "/opt/claude",
         "--max-turns", "20",
