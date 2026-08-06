@@ -28,7 +28,7 @@ cat > topics/hobbies.md <<'EOF'
 
 Melanie painted a lakeside landscape and found it calming.[^new-evidence-painting] ^new-block-painting
 
-[^new-evidence-painting]: Time: `2023-05-08`; Sources: provider/thread-1/message-4
+[^new-evidence-painting]: Time: `2023-05-08`; Sources: leaderboard/session-7/msg-4
 EOF
 
 Correct — extending an existing file, rewritten whole in one call:
@@ -42,8 +42,8 @@ Melanie painted a lakeside landscape and found it calming.[^e-1a2b3c4d5e] ^a1b2c
 
 Melanie sold the painting to a neighbour.[^new-evidence-sale] ^new-block-sale
 
-[^e-1a2b3c4d5e]: Time: `2023-05-08`; Sources: provider/thread-1/message-4
-[^new-evidence-sale]: Time: `2023-06-02`; Sources: provider/thread-2/message-9
+[^e-1a2b3c4d5e]: Time: `2023-05-08`; Sources: leaderboard/session-7/msg-4
+[^new-evidence-sale]: Time: `2023-06-02`; Sources: leaderboard/session-9/msg-2
 EOF
 
 Wrong — the fact cites a footnote this call does not define:
@@ -52,7 +52,7 @@ echo 'Melanie sold the painting.[^new-evidence-sale] ^new-block-sale' >> topics/
 
 Wrong — the definition arrives in a later call, after the first was rejected:
 
-echo '[^new-evidence-sale]: Time: `2023-06-02`; Sources: provider/thread-2/message-9' >> topics/hobbies.md
+echo '[^new-evidence-sale]: Time: `2023-06-02`; Sources: leaderboard/session-9/msg-2' >> topics/hobbies.md
 
 If a call is rejected, do not repeat it. Read the error, then rewrite the whole
 file correctly in one call.
@@ -61,6 +61,8 @@ Read before writing so existing content is preserved:
 
 cat topics/hobbies.md
 
-Source handles come from the conversation below, in `provider/thread/message`
-form. Copy them exactly; never invent one.
+Source handles are the bracketed identifiers on each line of the conversation
+below. Copy a handle exactly as it appears there, character for character. Do
+not prepend a word to it, do not reformat it, and never invent one. The handles
+shown in these examples are illustrations; use the real ones from the input.
 """
