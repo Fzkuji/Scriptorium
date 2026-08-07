@@ -30,7 +30,19 @@ The complete source conversation is already included below. Inspect whichever ex
 
 Preserve complete historical state changes. Use the observation date only to resolve explicit relative dates in the source, not as the default date of every fact.
 
-Use the shell to update `core.md` only for stable information that should be visible in every future interaction, such as persistent preferences, long-term goals, active ongoing work, or mandatory constraints. Keep source references in Core Memory.
+Read the conversation first and decide what kind of exchange it is, because that determines what counts as worth recording.
+
+When people are talking socially, the substance IS the social content: who these people are to each other, what happened between them, decisions and turning points, feelings stated, plans made. Sparse or fragmentary dialogue still carries these. Record what a person would remember about the exchange.
+
+When someone is working through a task with an assistant, record what belongs to this particular user: their situation, constraints, stated facts, preferences, choices, and what they decided to do. Generic explanation or advice from the assistant is not memory, however long it runs. A wall of general-purpose suggestions usually contains one or two user-specific facts; record those.
+
+Every session contains something a future reader would need. Work through the sessions one at a time and leave at least one concrete fact behind for each, naming the people and the specifics involved. Do not collapse several sessions into a single summary sentence; a session you did not write anything for is a session lost.
+
+If a session seems to hold nothing, look again at what the participants revealed about themselves. In fragmentary or emotional dialogue the fact is usually who said what to whom and what it meant between them, not a tidy statement anyone made outright.
+
+Never write memory about this workspace, this task, or the act of recording. Statements like "the workspace should stay organised" or "conversations should be documented" are not facts about anyone and must not be recorded.
+
+Use the shell to update `core.md` only for stable information that should be visible in every future interaction: things about the people involved that stay true across sessions. Leave a section out entirely rather than filling it with generic statements. Keep source references in Core Memory.
 
 Observation date:
 {observation_date}

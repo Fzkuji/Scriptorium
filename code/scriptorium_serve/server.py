@@ -55,6 +55,18 @@ MEMORY_CONFIG = MemoryConfig(writer_shell_examples=True)
 app = FastAPI(title="Scriptorium Memory Service")
 _bearer = HTTPBearer(auto_error=False)
 
+# Both handlers offload to the default thread pool, whose anyio limit is 40. The
+# platform fans out up to 64 Add and 256 Search workers, so 40 would queue them
+# behind each other and inflate latency under a load we can otherwise serve.
+THREAD_LIMIT = int(os.environ.get("SCRIPTORIUM_THREAD_LIMIT", "384"))
+
+
+@app.on_event("startup")
+async def _raise_thread_limit() -> None:
+    import anyio.to_thread
+
+    anyio.to_thread.current_default_thread_limiter().total_tokens = THREAD_LIMIT
+
 # Writes to one workspace are serialised by Scriptorium's own file lock, but the
 # platform fans out 64 workers and may hit the same user_id concurrently. A
 # per-user lock keeps those requests queued in-process instead of contending on

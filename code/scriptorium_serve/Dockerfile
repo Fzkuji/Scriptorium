@@ -39,9 +39,12 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 
-# Add holds a request open for the whole write, so keep workers modest and let
-# the platform's own concurrency drive throughput.
+# Add holds a request open for the whole write, so a single worker serves the
+# platform's fan-out from the thread pool rather than from extra processes. The
+# backlog covers the burst that arrives when 64 Add and 256 Search workers all
+# connect at once.
 CMD ["uvicorn", "scriptorium_serve.server:app", \
      "--app-dir", "/app/code", \
      "--host", "0.0.0.0", "--port", "8000", \
-     "--timeout-keep-alive", "1200"]
+     "--timeout-keep-alive", "1200", \
+     "--backlog", "512"]
