@@ -111,6 +111,21 @@ one being described as a rollback of the other.
 
 To version memory, run `git init` inside the workspace before registering.
 
+## Install the plugin
+
+The server makes memory possible; the plugin makes it happen. Registering
+the server alone leaves the model with six tools it is free to ignore, and
+a workspace nobody searches or writes to stays empty.
+
+```bash
+claude plugin validate ./claude-plugin --strict
+```
+
+The plugin adds a SessionStart hook that injects a memory protocol — when to
+search before answering, when to save a fact, and the reasoning that loses
+facts — plus a skill covering the mechanics of each call. It registers no
+server of its own, so it cannot collide with the registration above.
+
 ## Tools
 
 | Tool | Purpose |

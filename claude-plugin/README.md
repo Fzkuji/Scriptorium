@@ -1,8 +1,16 @@
 # Scriptorium plugin
 
-Usage guidance for the `scriptorium` MCP server. The plugin is optional: it
-adds a skill describing when to read and write memory, and nothing else. All
-capability comes from the server, which works without this plugin installed.
+Usage guidance for the `scriptorium` MCP server. All capability comes from the
+server; the plugin makes the model use it. Two pieces:
+
+- A **SessionStart hook** injecting the memory protocol — when to search before
+  answering, when to save, and the excuses that lose facts. Tools the model
+  merely *has* go unused; a workspace nobody reads or writes is an empty
+  directory with a schema.
+- A **skill** with the mechanics of each call: which tool finds what, how one
+  `memory_update` is shaped, what each rejection code means.
+
+The server works without the plugin. Memory rarely happens without it.
 
 The plugin deliberately does not register an MCP server of its own. You
 register the server yourself, pointing at your workspace:

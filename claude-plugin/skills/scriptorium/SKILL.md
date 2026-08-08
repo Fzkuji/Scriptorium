@@ -13,8 +13,8 @@ every update; editing them by hand accomplishes nothing.
 
 ## Reading
 
-Look at memory when the user refers to earlier context, asks what you know, or
-when a durable fact would change your answer. Not every turn needs a lookup.
+When to look is covered by the memory protocol injected at session start.
+This section is how.
 
 Find the right file before reading it in full:
 
@@ -29,10 +29,8 @@ Reading a whole file is a last resort; results are size-capped anyway.
 
 ## Writing
 
-Save a fact when it will still matter in a later session — how the user works,
-what they are building, decisions and their reasons, stable preferences. Skip
-what is only relevant to this conversation and what the repository already
-records.
+What is worth saving is covered by the memory protocol. This section is the
+mechanics of one write.
 
 One `memory_update` carries both the evidence and the edit citing it. Get
 `base_revision` from `memory_status` or any read, then send:
