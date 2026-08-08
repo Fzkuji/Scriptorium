@@ -59,6 +59,7 @@ def collect_answer(
             condition=condition,
             include_recent=include_recent,
             state=state,
+            search_tools=config.search_tools,
         ),
         max_turns=config.max_turns,
         max_budget_usd=config.max_budget_usd,

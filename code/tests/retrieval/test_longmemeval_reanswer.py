@@ -78,6 +78,7 @@ def test_query_agent_uses_framework_tools_and_reports_usage(tmp_path):
         {"question": "Where did the user move?"},
         memory_dir,
         {},
+        config=retrieval.QueryConfig(search_tools="split"),
     )
 
     assert answer == "Shanghai"
@@ -258,7 +259,8 @@ def test_query_agent_can_choose_read_only_bm25(tmp_path):
     backend, _logged = scripted_backend(agent)
 
     memories, _steps, answer, trace = retrieval.collect_answer(
-        backend, {"question": "What degree?"}, memory_dir, {}
+        backend, {"question": "What degree?"}, memory_dir, {},
+        config=retrieval.QueryConfig(search_tools="split"),
     )
 
     assert answer == "Business Administration"
@@ -310,6 +312,7 @@ def test_query_agent_forwards_time_window_to_embedding_search(
         {"question": "What did Melanie paint in 2023?"},
         memory_dir,
         {},
+        config=retrieval.QueryConfig(search_tools="split"),
     )
 
     assert answer == "spring sunrise"
@@ -415,10 +418,10 @@ def test_scriptorium_ablation_conditions_change_views_and_tools(tmp_path):
         )
     } == {"topics/topic.md", "timeline/day.md", "sources/thread.md"}
 
-    def tool_names(condition):
+    def tool_names(condition, search_tools="fused"):
         return {
             tool["function"]["name"]
-            for tool in retrieval.tools_for(condition)
+            for tool in retrieval.tools_for(condition, search_tools)
         }
 
     def tool_properties(name):
@@ -431,9 +434,18 @@ def test_scriptorium_ablation_conditions_change_views_and_tools(tmp_path):
 
     assert "search_memory" not in tool_names("native")
     assert "bash" not in tool_names("dual_source")
-    assert {"bm25_search", "embedding_search"} <= tool_names("dual_source")
-    assert "bm25_search" not in tool_names("timeline_source")
-    assert "embedding_search" not in tool_names("timeline_source")
+    # Search defaults to the fused entry point; the two backends it replaced
+    # stay available as an ablation, and neither set appears without an index.
+    assert "memory_search" in tool_names("dual_source")
+    assert not {"bm25_search", "embedding_search"} & tool_names("dual_source")
+    assert {"bm25_search", "embedding_search"} <= tool_names(
+        "dual_source", "split"
+    )
+    assert "memory_search" not in tool_names("dual_source", "split")
+    for search_tools in ("fused", "split"):
+        assert not {
+            "bm25_search", "embedding_search", "memory_search"
+        } & tool_names("timeline_source", search_tools)
     assert "resolve_sources" not in tool_names("native")
     assert {"date_from", "date_to"} <= tool_properties("bm25_search")
     assert {"date_from", "date_to"} <= tool_properties(

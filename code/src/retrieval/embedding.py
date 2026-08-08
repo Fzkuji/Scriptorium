@@ -134,7 +134,7 @@ class MemoryEmbeddingIndex:
                 -row["similarity"], row["path"], row["line"], row["event"]
             )
         )
-        return results[: max(1, min(int(top_k), 10))]
+        return results[: max(1, min(int(top_k), 50))]
 
 
 def render_search_results(results: list[dict[str, Any]]) -> str:

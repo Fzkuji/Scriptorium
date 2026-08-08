@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any
 
+from .config import SEARCH_TOOL_SETS
 from .schemas import CONDITION_VIEWS, TOOL_DEFINITIONS
 
 
@@ -68,16 +69,31 @@ def read_memory_file(
     return "".join(lines[start:] if count is None else lines[start:start + count])
 
 
-def tools_for(condition: str) -> list[dict[str, Any]]:
+def tools_for(
+    condition: str, search_tools: str = "fused"
+) -> list[dict[str, Any]]:
+    """Tool schemas for one retrieval condition.
+
+    ``search_tools`` selects between the fused search entry point and the two
+    separate backends it replaced; ``timeline_source`` exposes neither,
+    because that condition measures retrieval without an index.
+    """
     if condition != "native" and condition not in CONDITION_VIEWS:
         raise ValueError(f"unknown Scriptorium condition: {condition}")
+    if search_tools not in SEARCH_TOOL_SETS:
+        raise ValueError(f"unknown search tool set: {search_tools}")
+    enabled = (
+        () if condition == "timeline_source" else SEARCH_TOOL_SETS[search_tools]
+    )
+    every_search_tool = {
+        name for names in SEARCH_TOOL_SETS.values() for name in names
+    }
     return [
         tool
         for tool in TOOL_DEFINITIONS
         if (condition == "native" or tool["function"]["name"] != "bash")
-        and not (
-            condition == "timeline_source"
-            and tool["function"]["name"]
-            in {"bm25_search", "embedding_search"}
+        and (
+            tool["function"]["name"] not in every_search_tool
+            or tool["function"]["name"] in enabled
         )
     ]

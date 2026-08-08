@@ -31,8 +31,9 @@ def retrieval_tools(
     condition: str,
     include_recent: bool,
     state: RetrievalToolState,
+    search_tools: str = "fused",
 ) -> list[Any]:
-    definitions = tools_for(condition)
+    definitions = tools_for(condition, search_tools)
 
     def make_tool(definition: dict[str, Any]):
         function = definition["function"]

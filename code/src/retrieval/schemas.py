@@ -33,6 +33,21 @@ TOOL_DEFINITIONS = [
             "date_to": {"type": "string", "description": "Inclusive upper bound: YYYY, YYYY-MM, or YYYY-MM-DD."},
         }, "required": ["query"]},
     }},
+    {"type": "function", "function": {
+        "name": "memory_search",
+        "description": (
+            "Rank topic and source memory by fused lexical + semantic "
+            "relevance (BM25 and embedding merged with reciprocal rank "
+            "fusion). Preferred single search entry point."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "top_k": {"type": "integer", "minimum": 1, "maximum": 10},
+            "path_prefix": {"type": "string"},
+            "date_from": {"type": "string", "description": "Inclusive lower bound: YYYY, YYYY-MM, or YYYY-MM-DD."},
+            "date_to": {"type": "string", "description": "Inclusive upper bound: YYYY, YYYY-MM, or YYYY-MM-DD."},
+        }, "required": ["query"]},
+    }},
 ]
 
 CONDITION_VIEWS = {
