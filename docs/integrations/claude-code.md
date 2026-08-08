@@ -13,9 +13,33 @@ the server described here.
 
 ```bash
 pip install git+https://github.com/Fzkuji/Scriptorium.git
+claude plugin marketplace add Fzkuji/Scriptorium
+claude plugin install scriptorium@scriptorium
 ```
 
-Python 3.12 or newer is required.
+Python 3.12 or newer is required. Start a new session and memory is live:
+the plugin brings its own MCP server pointed at `~/.scriptorium/memory`,
+created on first use, and injects the protocol that makes the model use it.
+
+To keep memory somewhere else, or to run one workspace per project, skip
+the plugin's server and register your own — see *Register the server*
+below. The sections after it explain the workspace layout and the tools;
+none of it is required reading to start.
+
+### Codex
+
+Codex has no plugin marketplace: hooks live in one global `hooks.json` and
+MCP servers in `config.toml`. Clone the repository and run the installer,
+which adds both entries and leaves the rest of your configuration alone:
+
+```bash
+pip install git+https://github.com/Fzkuji/Scriptorium.git
+./claude-plugin/install-codex.sh
+```
+
+`SCRIPTORIUM_WORKSPACE=~/somewhere ./claude-plugin/install-codex.sh` puts
+memory elsewhere. `--uninstall` removes both entries and leaves the
+workspace on disk.
 
 ## Create a workspace (optional)
 
