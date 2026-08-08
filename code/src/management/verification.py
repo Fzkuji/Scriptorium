@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .agent import _run_agent, render_conversation
+from .agent import _record_trajectory, _run_agent, render_conversation
 from .config import MemoryConfig
 from ..prompts import (
     VERIFICATION_PROBE_TASK,
@@ -46,20 +46,34 @@ def _structured(
     cwd: str | Path,
     usage_logger: Any | None,
     config: MemoryConfig,
+    memory_dir: str | Path | None = None,
+    stage: str = "verify",
 ) -> dict[str, Any]:
+    memory_dir = cwd if memory_dir is None else memory_dir
+    system_prompt = "Return the requested structured result."
     # Models reached through a gateway return structured output only most of
     # the time. A single miss used to abort the whole build, discarding memory
     # that had already been written correctly, so retry before giving up.
-    for _attempt in range(STRUCTURED_OUTPUT_ATTEMPTS):
-        result = agent.run(
-            prompt=prompt,
-            system_prompt="Return the requested structured result.",
-            cwd=cwd,
-            tools=[],
-            max_turns=config.max_turns,
-            max_budget_usd=config.max_budget_usd,
-            output_schema=schema,
-        )
+    for attempt in range(STRUCTURED_OUTPUT_ATTEMPTS):
+        # Every attempt is recorded, including the ones that came back
+        # unstructured: a retry that keeps missing is the thing worth reading.
+        label = stage if attempt == 0 else f"{stage}-retry{attempt}"
+        try:
+            result = agent.run(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                cwd=cwd,
+                tools=[],
+                max_turns=config.max_turns,
+                max_budget_usd=config.max_budget_usd,
+                output_schema=schema,
+            )
+        except BaseException as exc:
+            _record_trajectory(
+                memory_dir, label, system_prompt, prompt, error=exc
+            )
+            raise
+        _record_trajectory(memory_dir, label, system_prompt, prompt, result)
         if usage_logger is not None:
             usage_logger(result)
         if isinstance(result.structured_output, dict):
@@ -91,6 +105,8 @@ def _verification_retrieve(
             usage_logger=usage_logger,
             final_output=final,
             config=config,
+            history_dir=memory_dir,
+            stage="verify-retrieve",
         )
     text = final[-1] if final else ""
     match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL | re.IGNORECASE)
@@ -121,6 +137,8 @@ def _verification_answer_supported(
         cwd=cwd,
         usage_logger=usage_logger,
         config=config,
+        memory_dir=cwd,
+        stage="verify-answer-supported",
     )
     if not isinstance(value.get("supported"), bool):
         raise ValueError(
@@ -150,6 +168,8 @@ def verify_session(
         cwd=memory_dir,
         usage_logger=usage_logger,
         config=config,
+        memory_dir=memory_dir,
+        stage="verify-probe",
     )
     question = str(probe.get("question", "")).strip()
     expected_answer = str(probe.get("expected_answer", "")).strip()
@@ -206,6 +226,7 @@ def verify_session(
         ),
         usage_logger=usage_logger,
         config=config,
+        stage="verify-repair",
     )
     post_repair = _verification_retrieve(
         memory_dir,

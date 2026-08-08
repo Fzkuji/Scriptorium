@@ -147,8 +147,13 @@ def _run_agent(
     usage_logger: Any | None = None,
     final_output: list[str] | None = None,
     config: MemoryConfig | None = None,
+    history_dir: str | Path | None = None,
+    stage: str | None = None,
 ) -> list[dict[str, Any]]:
     config = config or MemoryConfig()
+    # Verification runs against a throwaway copy of the memory. Its history
+    # belongs with the real workspace, or it is deleted with the copy.
+    history_dir = memory_dir if history_dir is None else history_dir
     workspace = MemoryWorkspace(memory_dir, config=config)
     try:
         if source_sessions:
@@ -164,7 +169,7 @@ def _run_agent(
         # Edits made through the built-in file tools never pass through the
         # shell tool, so the transaction runs once the turn is over.
         baseline = _baseline(workspace)
-        stage = "write" if source_sessions else "organize"
+        stage = stage or ("write" if source_sessions else "organize")
         try:
             result = agent.run(
                 prompt=task,
@@ -176,10 +181,10 @@ def _run_agent(
             )
         except BaseException as exc:
             _record_trajectory(
-                memory_dir, stage, system_prompt, task, error=exc
+                history_dir, stage, system_prompt, task, error=exc
             )
             raise
-        _record_trajectory(memory_dir, stage, system_prompt, task, result)
+        _record_trajectory(history_dir, stage, system_prompt, task, result)
         if usage_logger is not None:
             usage_logger(result)
         error = _commit_turn(workspace, baseline, audit)
@@ -207,12 +212,12 @@ def _run_agent(
                 )
             except BaseException as exc:
                 _record_trajectory(
-                    memory_dir, f"{stage}-repair", system_prompt,
+                    history_dir, f"{stage}-repair", system_prompt,
                     repair_prompt, error=exc,
                 )
                 raise
             _record_trajectory(
-                memory_dir, f"{stage}-repair", system_prompt,
+                history_dir, f"{stage}-repair", system_prompt,
                 repair_prompt, repair,
             )
             if usage_logger is not None:

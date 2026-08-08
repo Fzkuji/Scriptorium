@@ -16,6 +16,7 @@ from src.management import (
 from src import build as adapter
 from src import management as memory
 from src.markdown import parse_topic_tree
+from src.workspace_layout import RUNTIME_DIR_NAMES
 
 
 class ScriptedAgent:
@@ -1155,7 +1156,12 @@ def test_verify_session_does_not_repair_when_memory_answers_probe(
     assert result["repaired"] is False
     assert result["initial"]["answer"] == "6:30 AM"
     assert result["post_repair"] is None
-    assert list(tmp_path.rglob("*")) == before
+    # Memory is untouched. The runtime directory is not memory: verification
+    # records its own trajectory there whether or not it changed anything.
+    assert [
+        path for path in tmp_path.rglob("*")
+        if not any(part in RUNTIME_DIR_NAMES for part in path.parts)
+    ] == before
     assert agent.calls[0]["output_schema"]["required"] == [
         "question", "expected_answer", "refs"
     ]
