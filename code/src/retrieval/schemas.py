@@ -13,25 +13,6 @@ TOOL_DEFINITIONS = [
         }, "required": ["command"]},
     }},
     {"type": "function", "function": {
-        "name": "list_memory_files",
-        "description": "List visible memory files.",
-        "parameters": {"type": "object", "properties": {
-            "prefix": {"type": "string"},
-        }},
-    }},
-    {"type": "function", "function": {
-        "name": "read_memory_file",
-        "description": (
-            "Read one visible memory file. Optional offset and limit select a "
-            "1-based line window."
-        ),
-        "parameters": {"type": "object", "properties": {
-            "path": {"type": "string"},
-            "offset": {"type": "integer", "minimum": 1},
-            "limit": {"type": "integer", "minimum": 1},
-        }, "required": ["path"]},
-    }},
-    {"type": "function", "function": {
         "name": "bm25_search",
         "description": "Rank topic and source memory by sparse lexical relevance.",
         "parameters": {"type": "object", "properties": {

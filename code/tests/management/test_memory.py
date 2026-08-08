@@ -383,11 +383,11 @@ def test_writer_may_read_but_must_not_modify_archived_sources():
     from src.management.prompts import SYSTEM_PROMPT, WRITER_BATCH_TASK, WRITER_TASK
 
     for prompt in (WRITER_TASK, WRITER_BATCH_TASK):
-        assert (
-            "Inspect whichever existing Topic, Core, or Source files are useful."
-            in prompt
-        )
-        assert "Do not modify files under sources/." in prompt
+        # Reading the evidence is allowed; writing to it is not, and the task
+        # says where the fact goes instead.
+        assert "read-only" in prompt
+        assert "sources/" in prompt
+        assert "topics/" in prompt
     assert "[^e1]" in SYSTEM_PROMPT
     assert (
         "[^e1]: Time: `<time>`; Sources: provider/thread_id/message_id"

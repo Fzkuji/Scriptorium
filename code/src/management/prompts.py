@@ -16,16 +16,16 @@ Never modify files under sources/. Topic Markdown is the editable semantic memor
 
 Organize topics/ by subject: one file per person, relationship, or recurring theme, grouped into directories such as topics/people/ and topics/relationship/. Never create a file per session or per date — a session's facts are distributed into whichever subject files they belong to. One memory paragraph is one coherent Markdown paragraph, which may contain several related facts.
 
-A paragraph you write for the first time carries no trailing `^id`. The Runtime assigns one. A paragraph that already ends in `^id` keeps that ID exactly as it is: never edit it, never delete it, never move it to another paragraph. Those IDs are how Timeline, Relations, and other paragraphs reach this memory.
+Identifiers already in a file are the Runtime's: a trailing `^7ffb575c`, and any footnote labelled `e-`, like `[^e-9bae588a38]`. Copy both through exactly as you found them. They are not mistakes to correct and not placeholders to renumber — other views reach this memory through them. A paragraph you write for the first time carries no trailing `^id`; the Runtime assigns one.
 
 Write each new fact as a paragraph followed by an evidence footnote, and add the footnote definition in this exact form:
 <complete fact>.[^e1]
 
 [^e1]: Time: `<time>`; Sources: provider/thread_id/message_id
 
-Number footnote labels `[^e1]`, `[^e2]`, `[^e3]` within the edit that adds them. The Runtime replaces them with stable IDs. Write source handles bare, exactly as they appear in the input; the Runtime expands them into links. Do not invent source handles. Multiple handles may follow `Sources:`, separated by `, `.
+Number the footnotes you add `[^e1]`, `[^e2]`, `[^e3]`, counting from one within this edit; the Runtime replaces them with stable `e-` IDs. A paragraph you append to may then cite `[^e-9bae588a38]` and `[^e1]` side by side, which is correct. Write source handles bare, exactly as they appear in the input; the Runtime expands them into links. Do not invent source handles. Multiple handles may follow `Sources:`, separated by `, `.
 
-Every `[^eN]` you cite in prose needs its matching `[^eN]:` definition line in the same edit and the same file. A citation whose definition is missing discards the whole turn. Never write prose containing `[^eN]` without the definition text below it.
+Every `[^eN]` you introduce needs its `[^eN]:` definition line in the same edit and file — write the two together, prose then definition. An existing `[^e-...]` already has its definition and needs nothing from you.
 
 Prefer copying the source wording over paraphrasing it. Rewrite only when the fact spans several messages or the original cannot stand alone.
 
@@ -39,7 +39,11 @@ Use ordinary Markdown links to relate memory paragraphs, for example [current wo
 
 Read, Write, Edit, Grep, and Glob operate on this workspace, and the shell is there for anything they do not cover. Every path is relative to the workspace root, exactly as it appears in the workspace structure: write `topics/people/calvin.md`, never a leading slash. Write creates missing parent directories on its own, so there is no need to make them first. Reach for Edit to revise an existing paragraph and Write to start a new file. Make the smallest relevant text change and keep unrelated prose and footnotes unchanged.
 
-To add a paragraph to a file that already exists, Read it, then Edit with `old_string` set to the last few lines you saw and `new_string` set to those same lines followed by your new paragraph and its footnote definition. An empty `old_string` inserts at the top of the file and is almost never what you want. If an Edit reports that it succeeded, that text is now in the file: move on to the next fact rather than writing it again.
+Use Write for a file that does not exist yet, passing the whole content at once. Use Edit only on a file you have just Read, and set `old_string` to text you actually saw in it — the last line or two is the usual anchor for appending. `old_string` must never be empty: an empty one matches nothing in a file that has content, and the edit fails. `new_string` then repeats that anchor followed by your new paragraph and its footnote definition.
+
+If the same Edit fails twice, stop repeating it. Read the file again and anchor on a line from what you just read.
+
+If an Edit reports that it succeeded, that text is now in the file: move on to the next fact rather than writing it again.
 
 Write and Edit are the only ways to change a file's contents. The shell is for listing, moving, and removing files; passing it an English sentence describing a file you want written does nothing.
 
@@ -66,8 +70,10 @@ A new subject file. Note the paragraph has no trailing ID — the Runtime adds i
 
     [^e1]: Time: `2023-03`; Sources: locomo/thread_37d993f7a9d6/msg_6c0a984c5fc6
 
-Adding a second fact to that file later. Everything already there stays byte for
-byte as it is, including the `^7ffb575c` the Runtime assigned:
+Adding a second fact to that file later. The Runtime has been through it since:
+the paragraph now ends in `^7ffb575c` and its footnote is `[^e-9bae588a38]`.
+Both are the Runtime's. Copy them through untouched and start your own numbering
+at `[^e1]` again:
 
     # Calvin
 
@@ -81,6 +87,18 @@ byte as it is, including the `^7ffb575c` the Runtime assigned:
 
     [^e1]: Time: `2023-07`; Sources: locomo/thread_749fa3152137/msg_23dffebd3e42
 
+The same edit written wrongly. The new paragraph is fine, but the existing
+citation was renumbered to match the new one, which strands its definition and
+discards the entire edit — the good paragraph with it:
+
+    Calvin acquired a mansion in Japan in March 2023, arranged by his agent.[^e1] ^7ffb575c
+
+    [^e-9bae588a38]: Time: `2023-03`; Sources: locomo/thread_37d993f7a9d6/msg_6c0a984c5fc6
+
+    Calvin began converting the mansion into a recording studio.[^e2]
+
+    [^e2]: Time: `2023-07`; Sources: locomo/thread_749fa3152137/msg_23dffebd3e42
+
 Correcting a fact already recorded. The prose changes, a footnote is appended,
 the trailing ID does not move:
 
@@ -89,19 +107,22 @@ the trailing ID does not move:
     [^e-9bae588a38]: Time: `2023-03`; Sources: locomo/thread_37d993f7a9d6/msg_6c0a984c5fc6
     [^e1]: Time: `2023-06`; Sources: locomo/thread_987adb9e3384/msg_3bb059d845a8
 
-Two things discard your whole turn: writing a `^id` yourself, and removing or
-moving one that already exists.
+In short: anything that reads `^7ffb575c` or `[^e-9bae588a38]` was written by the
+Runtime and is copied through verbatim. `[^e1]` and `[^e2]` are yours, and only
+for footnotes this edit introduces.
 """
 
 WRITER_TASK = """Integrate the following conversation session into the memory workspace.
 
-Review the supplied workspace structure and relevant existing documents. Use the shell to create or revise the appropriate Topic Markdown paragraphs and headings. Follow the Topic block and evidence-footnote contract in the system prompt.
+Every fact you record goes into a subject file under `topics/`, created or revised with the Write and Edit tools. A session is where facts come from, never where they are stored. Follow the Topic block and evidence-footnote contract in the system prompt.
 
-The complete source conversation is already included below. Inspect whichever existing Topic, Core, or Source files are useful. Do not modify files under sources/.
+Decide which subject each fact belongs to and write it there: a person, a relationship, a recurring theme. `topics/people/calvin.md` is right; a file named after a session or a date is wrong.
+
+The complete source conversation is below and nothing needs to be copied anywhere. Files under `sources/` are read-only evidence and will refuse to be written; if an edit there fails, that is the workspace working as intended, and the fix is to write the fact into `topics/` instead.
 
 Preserve complete historical state changes. Use the observation date only to resolve explicit relative dates in the source, not as the default date of every fact.
 
-Use the shell to update `core.md` only for stable information that should be visible in every future interaction, such as persistent preferences, long-term goals, active ongoing work, or mandatory constraints. Keep source references in Core Memory.
+Update `core.md` only for stable information that should be visible in every future interaction, such as persistent preferences, long-term goals, active ongoing work, or mandatory constraints. Keep source references in Core Memory.
 
 Observation date:
 {observation_date}
@@ -111,13 +132,15 @@ Conversation:
 
 WRITER_BATCH_TASK = """Integrate the following conversation sessions into the memory workspace.
 
-Review the supplied workspace structure and relevant existing documents. Use the shell to create or revise the appropriate Topic Markdown paragraphs and headings. Follow the Topic block and evidence-footnote contract in the system prompt.
+Every fact you record goes into a subject file under `topics/`, created or revised with the Write and Edit tools. Follow the Topic block and evidence-footnote contract in the system prompt.
 
-The complete source conversations are already included below. Inspect whichever existing Topic, Core, or Source files are useful. Do not modify files under sources/. Integrate every supplied session before finishing.
+Decide which subject each fact belongs to and write it there: a person, a relationship, a recurring theme. A session is where facts come from, never where they are stored, so `topics/people/calvin.md` is right and a file named after a session or a date is wrong.
+
+The complete source conversations are below and nothing needs to be copied anywhere. Files under `sources/` are read-only evidence and will refuse to be written; if an edit there fails, that is the workspace working as intended, and the fix is to write the fact into `topics/` instead. Integrate every supplied session before finishing.
 
 Preserve complete historical state changes. Use each session's observation date only to resolve explicit relative dates in that source, not as the default date of every fact.
 
-Use the shell to update `core.md` only for stable information that should be visible in every future interaction, such as persistent preferences, long-term goals, active ongoing work, or mandatory constraints. Keep source references in Core Memory.
+Update `core.md` only for stable information that should be visible in every future interaction, such as persistent preferences, long-term goals, active ongoing work, or mandatory constraints. Keep source references in Core Memory.
 
 Sessions:
 {sessions}"""

@@ -85,7 +85,7 @@ def retrieval_tools(
             if accepted is not None:
                 row["accepted"] = accepted
             state.trace.append(row)
-            if nonempty and name != "list_memory_files":
+            if nonempty:
                 state.evidence.append({"text": output, "date": ""})
             return {
                 "content": [{"type": "text", "text": output or "(no output)"}],

@@ -147,6 +147,10 @@ class SourceArchiveMixin:
                 known.add(record.source_id)
             if additions:
                 body = text.rstrip()
+                # Staged sources are read-only to the writer; archiving is the
+                # Runtime's own append and restores the mode afterwards.
+                if path.exists():
+                    path.chmod(0o644)
                 path.write_text(
                     (body + "\n\n" if body else f"# {rows[0].thread_id}\n\n")
                     + "\n".join(additions).rstrip()
@@ -155,4 +159,6 @@ class SourceArchiveMixin:
                 )
         if root is None:
             self._refresh_stage()
+        else:
+            self._protect_staged_sources()
         return refs

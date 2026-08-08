@@ -210,6 +210,15 @@ class BlockViewsMixin:
                 destination = self.memory_dir / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(source, destination)
+                # Staged sources are read-only so the writer cannot edit them.
+                # That guard belongs to the stage: the committed workspace is
+                # an ordinary tree the Runtime keeps appending to.
+                if destination.is_file():
+                    destination.chmod(0o644)
+                elif destination.is_dir():
+                    for path in destination.rglob("*"):
+                        if path.is_file():
+                            path.chmod(0o644)
                 installed.append(relative)
         except Exception:
             for relative in reversed(installed):

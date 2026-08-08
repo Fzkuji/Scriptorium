@@ -346,19 +346,13 @@ def test_scriptorium_inventory_and_file_reader_expose_sources(tmp_path):
     ) == "raw source\n"
 
 
-def test_scriptorium_file_reader_exposes_line_window_parameters(tmp_path):
+def test_scriptorium_file_reader_selects_a_line_window(tmp_path):
+    """Retrieval reads files through the built-in tools, but the view helper
+    still backs the visibility rules the conditions depend on."""
     path = tmp_path / "topics/notes.md"
     path.parent.mkdir()
     path.write_text("one\ntwo\nthree\n", encoding="utf-8")
-    tool = next(
-        definition
-        for definition in retrieval.TOOL_DEFINITIONS
-        if definition["function"]["name"] == "read_memory_file"
-    )
-    properties = tool["function"]["parameters"]["properties"]
 
-    assert properties["offset"]["minimum"] == 1
-    assert properties["limit"]["minimum"] == 1
     assert retrieval.read_memory_file(
         tmp_path, "topics/notes.md", offset=2, limit=1
     ) == "two\n"

@@ -9,7 +9,6 @@ from .embedding import MemoryEmbeddingIndex
 from .embedding import render_search_results as render_embedding_results
 
 from .shell import normalize_workspace_command, validate_read_only_command
-from .views import read_memory_file
 
 
 def _search_index(
@@ -73,22 +72,6 @@ def execute_tool_call(
             hide_raw=True,
         )
         return output, True, True
-    if name == "list_memory_files":
-        prefix = str(args.get("prefix", ""))
-        return "\n".join(
-            path.relative_to(memory_dir).as_posix()
-            for path in files
-            if path.relative_to(memory_dir).as_posix().startswith(prefix)
-        ), True, None
-    if name == "read_memory_file":
-        return read_memory_file(
-            memory_dir,
-            args.get("path"),
-            condition,
-            include_recent=include_recent,
-            offset=args.get("offset", 1),
-            limit=args.get("limit"),
-        ), True, None
     if name in {"bm25_search", "embedding_search"}:
         query = str(args.get("query", "")).strip()
         if not query:

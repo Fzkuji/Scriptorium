@@ -54,6 +54,13 @@ class MemoryWorkspace(
         self._refresh_stage()
 
     def _refresh_stage(self) -> None:
+        # Staged sources are chmod'd read-only, so restore write access before
+        # removing the tree: on some systems the file's own mode blocks it.
+        sources = self.stage_dir / "sources"
+        if sources.exists():
+            for path in sources.rglob("*"):
+                if path.is_file():
+                    path.chmod(0o644)
         shutil.rmtree(self.stage_dir, ignore_errors=True)
         self.stage_dir.mkdir()
         for name in ("topics", "timeline", "sources"):
@@ -75,6 +82,22 @@ class MemoryWorkspace(
         staged_runtime.parent.mkdir(parents=True, exist_ok=True)
         if runtime.exists():
             shutil.copy2(runtime, staged_runtime)
+        self._protect_staged_sources()
+
+    def _protect_staged_sources(self) -> None:
+        """Make the staged evidence record read-only on the filesystem.
+
+        Telling a writer that sources/ is off limits does not stop one from
+        editing it anyway, and the transaction only notices at the end of the
+        turn, discarding the good edits alongside the bad. A denied write
+        fails at the point of the attempt and reports why.
+        """
+        sources = self.stage_dir / "sources"
+        if not sources.exists():
+            return
+        for path in sources.rglob("*"):
+            if path.is_file():
+                path.chmod(0o444)
 
     def shell(
         self, command: str, *, allow_correction: bool = False

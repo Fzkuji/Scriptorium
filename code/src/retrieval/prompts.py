@@ -31,7 +31,6 @@ and use several literal queries when needed.
 
 When useful, first locate likely files, inspect their headings, and read only
 the relevant sections. This is a recommendation, not a required tool order.
-read_memory_file supports optional 1-based offset and limit parameters.
 
 For temporal, update, counting, comparison, and multi-session questions,
 inspect all relevant events. Preserve historical states; prefer the latest fact

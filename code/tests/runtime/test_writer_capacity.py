@@ -67,6 +67,15 @@ def test_explicit_writer_cap_batches_without_a_calibration_file(
         "session_2": [{"speaker": "user", "text": "b" * 3_000, "dia_id": "D2:1"}],
     }
 
+    # Each session must fit alone and no two may fit together. The rendered
+    # batch carries the writer prompt as well, so derive the cap from a real
+    # render rather than pinning it to a constant the prompt can outgrow.
+    one_session = len(build.render_writer_input([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "a" * 3_000)],
+        "refs": [build.benchmark_source_id("D1:1")],
+    }]).encode("utf-8"))
+
     build.build_memory(
         conversation,
         tmp_path,
@@ -74,7 +83,7 @@ def test_explicit_writer_cap_batches_without_a_calibration_file(
         model="test-model",
         config=build.BuildConfig(
             session_batch=10,
-            writer_input_token_cap=10_000,
+            writer_input_token_cap=one_session + 1_000,
             verify_writes=False,
             final_manage=False,
         ),
