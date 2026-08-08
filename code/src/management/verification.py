@@ -11,7 +11,7 @@ from typing import Any
 
 from .agent import _run_agent, render_conversation
 from .config import MemoryConfig
-from .prompts import (
+from ..prompts import (
     VERIFICATION_PROBE_TASK,
     VERIFICATION_REPAIR_TASK,
     VERIFICATION_RETRIEVAL_TASK,

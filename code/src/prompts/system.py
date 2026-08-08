@@ -1,4 +1,4 @@
-"""Prompts and tool schemas for memory writing and maintenance."""
+"""Contract every memory-editing agent works under."""
 
 SYSTEM_PROMPT = """You manage a file-native memory workspace.
 
@@ -49,7 +49,7 @@ Write and Edit are the only ways to change a file's contents. The shell is for l
 
 Files under sources/ are the evidence record and are read-only. Every Edit or Write touching a path that starts with `sources/` is rejected and discards your turn; never call Edit on one, not even to fix a heading or a date. You do not need to open them either: the full text of the conversation you are integrating is already in this prompt, and the source handles to cite are printed beside each message. The Runtime assigns IDs, expands source handles, validates every paragraph, rewrites relative links after moves, and rebuilds all derived views once your turn ends. If any check fails, every edit from that turn is discarded and you are told why."""
 
-WRITER_SHELL_EXAMPLES = """
+FEW_SHOT_INSTRUCTIONS = """
 Worked examples. These show what the files must contain. Use the file tools to
 produce them; the shapes below are file content, not commands to run.
 
@@ -111,101 +111,3 @@ In short: anything that reads `^7ffb575c` or `[^e-9bae588a38]` was written by th
 Runtime and is copied through verbatim. `[^e1]` and `[^e2]` are yours, and only
 for footnotes this edit introduces.
 """
-
-WRITER_TASK = """Integrate the following conversation session into the memory workspace.
-
-Every fact you record goes into a subject file under `topics/`, created or revised with the Write and Edit tools. A session is where facts come from, never where they are stored. Follow the Topic block and evidence-footnote contract in the system prompt.
-
-Decide which subject each fact belongs to and write it there: a person, a relationship, a recurring theme. `topics/people/calvin.md` is right; a file named after a session or a date is wrong.
-
-The complete source conversation is below and nothing needs to be copied anywhere. Files under `sources/` are read-only evidence and will refuse to be written; if an edit there fails, that is the workspace working as intended, and the fix is to write the fact into `topics/` instead.
-
-Preserve complete historical state changes. Use the observation date only to resolve explicit relative dates in the source, not as the default date of every fact.
-
-Update `core.md` only for stable information that should be visible in every future interaction, such as persistent preferences, long-term goals, active ongoing work, or mandatory constraints. Keep source references in Core Memory.
-
-Observation date:
-{observation_date}
-
-Conversation:
-{conversation}"""
-
-WRITER_BATCH_TASK = """Integrate the following conversation sessions into the memory workspace.
-
-Every fact you record goes into a subject file under `topics/`, created or revised with the Write and Edit tools. Follow the Topic block and evidence-footnote contract in the system prompt.
-
-Decide which subject each fact belongs to and write it there: a person, a relationship, a recurring theme. A session is where facts come from, never where they are stored, so `topics/people/calvin.md` is right and a file named after a session or a date is wrong.
-
-The complete source conversations are below and nothing needs to be copied anywhere. Files under `sources/` are read-only evidence and will refuse to be written; if an edit there fails, that is the workspace working as intended, and the fix is to write the fact into `topics/` instead. Integrate every supplied session before finishing.
-
-Preserve complete historical state changes. Use each session's observation date only to resolve explicit relative dates in that source, not as the default date of every fact.
-
-Update `core.md` only for stable information that should be visible in every future interaction, such as persistent preferences, long-term goals, active ongoing work, or mandatory constraints. Keep source references in Core Memory.
-
-Sessions:
-{sessions}"""
-
-MANAGER_TASK = """Organize the topic files into a coherent structure.
-
-Use the supplied workspace structure and shell. Split or merge existing topic files, headings, and paragraphs when appropriate. Preserve source-grounded facts, evidence footnotes, valid block links, and the complete dated history.
-
-Every block ID that exists now must still exist somewhere when you finish. Moving a paragraph carries its ID along. Splitting a paragraph keeps the original ID on one part; the other part gets no ID and the Runtime assigns one. Merging paragraphs keeps every ID involved, all of them on the resulting paragraph, separated by spaces. An ID that disappears breaks every view and link that reaches it."""
-
-LOCAL_MANAGER_TASK = """Organize only the following recently updated topic files and their local structure.
-
-Limit this maintenance pass to these topic files. Merge redundant headings, split or combine local files when useful, and repair their local links. Do not reorganize unrelated topics. Preserve source-grounded facts, evidence footnotes, and the complete dated history.
-
-Every block ID that exists now must still exist somewhere when you finish. Merging paragraphs keeps every ID involved, all of them on the resulting paragraph.
-
-Touched topic files:
-{topic_paths}"""
-
-VERIFICATION_PROBE_TASK = """Select one concrete factual detail from this session that should be recoverable from long-term memory.
-
-Output only JSON with this shape:
-{{"question":"a natural factual question","expected_answer":"the source-grounded answer","refs":["provider/thread_id/message_id"]}}
-
-Observation date:
-{observation_date}
-
-Conversation:
-{conversation}"""
-
-VERIFICATION_RETRIEVAL_TASK = """Answer this question using the supplied memory workspace.
-
-Inspect whichever memory views, files, and sections you consider appropriate. Do not assume where the answer should be stored.
-
-Question: {question}
-
-After inspection, output exactly one <answer>...</answer> block."""
-
-VERIFICATION_REPAIR_TASK = """Repair the memory workspace so that the question can be answered through the memory organization.
-
-Inspect the source records, the existing memory, and the retrieval trace. Make any changes you consider useful. You may add, revise, move, merge, reorder, or remove memory content while preserving valid historical information and source grounding.
-
-Apply all changes only to editable Topic or Core memory. Never modify files under sources/.
-
-Question: {question}
-Expected source-grounded answer: {expected_answer}
-Source references: {refs}
-Previous retrieval answer: {retrieved_answer}
-Previous retrieval trace:
-{trace}"""
-
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "shell",
-            "description": (
-                "Read the memory workspace or edit authoritative topics/ and core.md. "
-                "Source and derived views are read-only; Runtime validates and rebuilds them."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"command": {"type": "string"}},
-                "required": ["command"],
-            },
-        },
-    },
-]

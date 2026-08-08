@@ -5,7 +5,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class MemoryConfig:
     core_max_tokens: int = 2_000
-    writer_shell_examples: bool = False
+    few_shot_instructions: bool = False
     recent_limit: int = 50
     max_turns: int = 20
     max_budget_usd: float | None = None

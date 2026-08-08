@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import management as memory
+from .agent_runtime import AgentExecutionError
 from .conversation import (
     benchmark_source_id,
     build_turn_index,
@@ -190,13 +191,35 @@ def build_memory(
     for batch_index, batch in enumerate(batches):
         if batch_index < completed_batches:
             continue
-        audit = memory.write_sessions(
-            memory_dir,
-            agent=agent,
-            sessions=batch,
-            usage_logger=usage_logger,
-            config=config.memory_config,
-        )
+        # A batch whose agent exhausts its turn budget has written nothing,
+        # but the sessions after it are unaffected. Retry once, then record
+        # the loss and keep building. Anything else propagates, so the
+        # checkpoint can resume the run where it stopped.
+        try:
+            audit = memory.write_sessions(
+                memory_dir,
+                agent=agent,
+                sessions=batch,
+                usage_logger=usage_logger,
+                config=config.memory_config,
+            )
+        except AgentExecutionError:
+            try:
+                audit = memory.write_sessions(
+                    memory_dir,
+                    agent=agent,
+                    sessions=batch,
+                    usage_logger=usage_logger,
+                    config=config.memory_config,
+                )
+            except AgentExecutionError as exc:
+                audit = []
+                with verification_path.open("a", encoding="utf-8") as handle:
+                    handle.write(json.dumps({
+                        "write_sessions": "failed",
+                        "batch_index": batch_index,
+                        "error": f"{type(exc).__name__}: {exc}"[:500],
+                    }, ensure_ascii=False) + "\n")
         event_count += _written_blocks(audit)
         for record in audit:
             if record.get("status") == "ok":
@@ -248,13 +271,25 @@ def build_memory(
                 and completed_sessions < len(sessions)
                 and touched_topics
             ):
-                memory.organize_topics(
-                    memory_dir,
-                    agent=agent,
-                    touched=touched_topics,
-                    usage_logger=usage_logger,
-                    config=config.memory_config,
-                )
+                # Tidying is optional maintenance over memory that is already
+                # committed, so a pass that overruns its output budget or
+                # fails validation loses only the tidying, not the build.
+                try:
+                    memory.organize_topics(
+                        memory_dir,
+                        agent=agent,
+                        touched=touched_topics,
+                        usage_logger=usage_logger,
+                        config=config.memory_config,
+                    )
+                except Exception as exc:
+                    with verification_path.open(
+                        "a", encoding="utf-8"
+                    ) as handle:
+                        handle.write(json.dumps({
+                            "organize_topics": "failed",
+                            "error": f"{type(exc).__name__}: {exc}"[:500],
+                        }, ensure_ascii=False) + "\n")
                 touched_topics.clear()
 
         if progress_path:
@@ -273,12 +308,21 @@ def build_memory(
         and config.final_manage
         and progress.get("final_management") != "complete"
     ):
-        memory.manage_memory(
-            memory_dir,
-            agent=agent,
-            usage_logger=usage_logger,
-            config=config.memory_config,
-        )
+        # touched=None organizes every Topic file, not just recent ones.
+        try:
+            memory.organize_topics(
+                memory_dir,
+                agent=agent,
+                usage_logger=usage_logger,
+                config=config.memory_config,
+            )
+        except Exception as exc:
+            with verification_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({
+                    "organize_topics": "failed",
+                    "scope": "all",
+                    "error": f"{type(exc).__name__}: {exc}"[:500],
+                }, ensure_ascii=False) + "\n")
         progress["final_management"] = "complete"
     if progress_path:
         progress.update({

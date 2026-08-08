@@ -2,7 +2,7 @@
 
 from .agent import collect_answer
 from .config import QueryConfig
-from .prompts import ANSWER_PROMPT
+from ..prompts import ANSWER_PROMPT
 from .runtime import Runtime, create_runtime
 from .schemas import CONDITION_VIEWS, TOOL_DEFINITIONS
 from .shell import (

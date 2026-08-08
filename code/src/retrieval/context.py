@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ..runtime.tokenization import TokenCounter
-from .prompts import RETRIEVAL_PROMPT
+from ..prompts import RETRIEVAL_PROMPT
 
 
 def initialize_context(

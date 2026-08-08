@@ -8,7 +8,7 @@ from typing import Any
 
 from ..agent_runtime import ClaudeCodeAgent
 from .config import MemoryConfig
-from .prompts import SYSTEM_PROMPT, WRITER_SHELL_EXAMPLES
+from ..prompts import FEW_SHOT_INSTRUCTIONS, SYSTEM_PROMPT
 from .tools import management_tools
 from .workspace import MemoryWorkspace
 
@@ -86,8 +86,8 @@ def _run_agent(
         task = f"{task}\n\nCurrent workspace structure:\n{workspace.structure()}"
         audit: list[dict[str, Any]] = []
         system_prompt = (
-            f"{SYSTEM_PROMPT}\n{WRITER_SHELL_EXAMPLES}"
-            if config.writer_shell_examples
+            f"{SYSTEM_PROMPT}\n{FEW_SHOT_INSTRUCTIONS}"
+            if config.few_shot_instructions
             else SYSTEM_PROMPT
         )
         # Edits made through the built-in file tools never pass through the

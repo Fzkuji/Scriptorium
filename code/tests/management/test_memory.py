@@ -10,7 +10,6 @@ from src.agent_runtime import AgentResult
 from src.management import (
     MemoryWorkspace,
     _run_agent,
-    manage_memory,
     organize_topics,
     verify_session,
 )
@@ -114,12 +113,14 @@ def test_writer_delegates_tool_protocol_and_errors_to_agent(tmp_path: Path):
         ("shell", {"command": valid}),
     ])
 
-    audit = memory.write_session(
+    audit = memory.write_sessions(
         tmp_path,
         agent=agent,
-        observation_date="2023-05-23",
-        turns=[("user", "I bought a tank")],
-        refs=["D1:1"],
+        sessions=[{
+            "observation_date": "2023-05-23",
+            "turns": [("user", "I bought a tank")],
+            "refs": ["D1:1"],
+        }],
     )
 
     assert len(agent.calls) == 1
@@ -353,9 +354,11 @@ def test_append_event_reuses_existing_heading_prefix(tmp_path: Path):
 
 
 def test_manager_exposes_only_shell_and_uses_twenty_turn_limit(tmp_path):
+    (tmp_path / "topics").mkdir()
+    (tmp_path / "topics" / "a.md").write_text("# A\n", encoding="utf-8")
     agent = ScriptedAgent()
 
-    audit = manage_memory(tmp_path, agent=agent)
+    audit = organize_topics(tmp_path, agent=agent)
 
     assert [definition.name for definition in agent.calls[0]["tools"]] == [
         "shell"
@@ -374,20 +377,22 @@ def test_local_organizer_receives_only_touched_topic_scope(tmp_path):
     )
 
     task = agent.calls[0]["prompt"]
-    assert "Limit this maintenance pass to these topic files" in task
+    # Scoped to the touched files, and structural: the pass moves things
+    # around rather than reproducing prose and footnotes it did not change.
+    assert "Topic files" in task
+    assert "Never rewrite a whole file" in task
     assert "topics/projects/a.md" in task
     assert "topics/projects/b.md" in task
 
 
 def test_writer_may_read_but_must_not_modify_archived_sources():
-    from src.management.prompts import SYSTEM_PROMPT, WRITER_BATCH_TASK, WRITER_TASK
+    from src.prompts import SYSTEM_PROMPT, WRITE_MEMORY
 
-    for prompt in (WRITER_TASK, WRITER_BATCH_TASK):
-        # Reading the evidence is allowed; writing to it is not, and the task
-        # says where the fact goes instead.
-        assert "read-only" in prompt
-        assert "sources/" in prompt
-        assert "topics/" in prompt
+    # Reading the evidence is allowed; writing to it is not, and the task
+    # says where the fact goes instead.
+    assert "read-only" in WRITE_MEMORY
+    assert "sources/" in WRITE_MEMORY
+    assert "topics/" in WRITE_MEMORY
     assert "[^e1]" in SYSTEM_PROMPT
     assert (
         "[^e1]: Time: `<time>`; Sources: provider/thread_id/message_id"
@@ -894,7 +899,7 @@ def test_scriptorium_build_verifies_each_session_before_next_write(
     )
     monkeypatch.setattr(
         adapter.memory,
-        "manage_memory",
+        "organize_topics",
         lambda *args, **kwargs: calls.append(("manage", None)) or [],
     )
 
@@ -974,12 +979,10 @@ def test_scriptorium_build_runs_local_reorganization_at_fixed_session_intervals(
     monkeypatch.setattr(
         adapter.memory,
         "organize_topics",
-        lambda *args, **kwargs: local_calls.append(set(kwargs["touched"])) or [],
-    )
-    monkeypatch.setattr(
-        adapter.memory,
-        "manage_memory",
-        lambda *args, **kwargs: [],
+        lambda *args, **kwargs: (
+            local_calls.append(set(kwargs["touched"]))
+            if kwargs.get("touched") is not None else None
+        ) or [],
     )
 
     adapter.build_memory(
@@ -1030,7 +1033,7 @@ def test_scriptorium_final_management_requires_new_memory_and_can_be_disabled(
     )
     monkeypatch.setattr(
         adapter.memory,
-        "manage_memory",
+        "organize_topics",
         lambda *args, **kwargs: calls.append("manage") or [],
     )
 

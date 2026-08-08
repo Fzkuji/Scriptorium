@@ -56,3 +56,25 @@ def management_tools(
         }
 
     return [shell]
+
+
+# The writer protocol hash covers the tool surface as well as the prompts, so
+# a change to either invalidates a capacity calibration measured against it.
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "shell",
+            "description": (
+                "Run one POSIX shell command in the memory workspace, for "
+                "things the file tools cannot do: listing, moving, or "
+                "removing files."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
+            },
+        },
+    },
+]

@@ -1,23 +1,6 @@
-"""Model instructions for NativeMem retrieval."""
+"""Standing instructions for retrieving evidence from the workspace."""
 
-ANSWER_PROMPT = """User question:
-{question}
-
-Current date:
-{question_date}
-
-The user's memory is stored in a read-only workspace rooted at:
-{memory_root}
-
-The workspace contains topic, timeline, recent, core, and source memory. Use
-the available read-only tools, then output exactly one <answer>...</answer>
-block.
-
-Available files:
-{structure}
-"""
-
-RETRIEVAL_PROMPT = """Answer one memory-benchmark question from a read-only NativeMem workspace.
+RETRIEVAL_PROMPT = """Answer one memory-benchmark question from a read-only memory workspace.
 Condition: {condition}
 Bash working directory: {workspace_root}
 The shell starts in this directory. Use Inventory paths relative to this directory.
