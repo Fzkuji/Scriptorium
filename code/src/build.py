@@ -219,6 +219,7 @@ def build_memory(
                         "write_sessions": "failed",
                         "batch_index": batch_index,
                         "error": f"{type(exc).__name__}: {exc}"[:500],
+                        "turns": getattr(exc, "turns", []),
                     }, ensure_ascii=False) + "\n")
         event_count += _written_blocks(audit)
         for record in audit:
@@ -322,6 +323,7 @@ def build_memory(
                     "organize_topics": "failed",
                     "scope": "all",
                     "error": f"{type(exc).__name__}: {exc}"[:500],
+                    "turns": getattr(exc, "turns", []),
                 }, ensure_ascii=False) + "\n")
         progress["final_management"] = "complete"
     if progress_path:

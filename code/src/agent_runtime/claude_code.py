@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,55 @@ from claude_agent_sdk import (
 
 
 class AgentExecutionError(RuntimeError):
-    """Claude Code could not complete an agent trajectory."""
+    """Claude Code could not complete an agent trajectory.
+
+    ``turns`` carries whatever the trajectory managed before it failed,
+    which is the only record of what a run that hit its turn limit spent
+    those turns on.
+    """
+
+    def __init__(self, message: str, turns: list[dict[str, Any]] | None = None):
+        super().__init__(message)
+        self.turns = turns or []
+
+
+# Enough of a tool call to see what a turn attempted and whether it worked,
+# without carrying whole file contents into the log.
+_ARGUMENT_PREVIEW = 200
+_RESULT_PREVIEW = 300
+
+
+def _turn_records(message: Any) -> list[dict[str, Any]]:
+    """Tool calls and their results, as flat records.
+
+    The built-in file tools never reach the MCP layer, so without this a
+    trajectory that spent sixty turns retrying an Edit leaves no trace of
+    what it was retrying.
+    """
+    records: list[dict[str, Any]] = []
+    for block in getattr(message, "content", None) or []:
+        name = getattr(block, "name", None)
+        if name:
+            arguments = getattr(block, "input", None) or {}
+            records.append({
+                "tool": name,
+                "arguments": {
+                    key: str(value)[:_ARGUMENT_PREVIEW]
+                    for key, value in arguments.items()
+                },
+            })
+            continue
+        if getattr(block, "tool_use_id", None) is None:
+            continue
+        content = getattr(block, "content", None)
+        text = content if isinstance(content, str) else json.dumps(
+            content, ensure_ascii=False, default=str
+        )
+        records.append({
+            "result": text[:_RESULT_PREVIEW],
+            "is_error": bool(getattr(block, "is_error", False)),
+        })
+    return records
 
 
 @dataclass(frozen=True)
@@ -58,6 +107,9 @@ class AgentResult:
     duration_api_ms: int
     stop_reason: str | None
     session_id: str
+    # Every tool call and result, in order. Built-in file tools bypass the
+    # MCP layer, so this is the only record of what the turns did.
+    turns: list[dict[str, Any]] = field(default_factory=list)
 
 
 QueryFunction = Callable[..., AsyncIterator[Any]]
@@ -171,6 +223,7 @@ class ClaudeCodeAgent:
                 ),
             )
             texts: list[str] = []
+            turns: list[dict[str, Any]] = []
             final: ResultMessage | None = None
             try:
                 async for message in self._query(prompt=prompt, options=options):
@@ -180,16 +233,17 @@ class ClaudeCodeAgent:
                             for block in message.content
                             if isinstance(block, TextBlock)
                         )
-                    elif isinstance(message, ResultMessage):
+                    turns.extend(_turn_records(message))
+                    if isinstance(message, ResultMessage):
                         final = message
             except Exception as exc:
                 if final is None:
                     message = str(exc).replace(self.config.api_key, "[redacted]")
-                    raise AgentExecutionError(message) from exc
+                    raise AgentExecutionError(message, turns) from exc
 
             if final is None:
                 raise AgentExecutionError(
-                    "Claude Code ended without a result message"
+                    "Claude Code ended without a result message", turns
                 )
             if final.is_error:
                 details = "; ".join(final.errors or []) or (
@@ -198,7 +252,7 @@ class ClaudeCodeAgent:
                 if getattr(final, "api_error_status", None) is not None:
                     details += f"; API status {final.api_error_status}"
                 details = details.replace(self.config.api_key, "[redacted]")
-                raise AgentExecutionError(details)
+                raise AgentExecutionError(details, turns)
             usage = final.usage or {}
             return AgentResult(
                 text=(final.result or "\n".join(texts)).strip(),
@@ -217,4 +271,5 @@ class ClaudeCodeAgent:
                 duration_api_ms=int(final.duration_api_ms),
                 stop_reason=final.stop_reason,
                 session_id=final.session_id,
+                turns=turns,
             )

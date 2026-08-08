@@ -161,3 +161,78 @@ def test_agent_preserves_api_status_when_cli_exits_after_error_result(
 
     with pytest.raises(AgentExecutionError, match="API status 529"):
         agent.run(prompt="answer", system_prompt="system", cwd=tmp_path)
+
+
+def test_result_records_every_tool_call_and_its_outcome(tmp_path: Path) -> None:
+    """Built-in file tools never reach the MCP layer.
+
+    Without this record a trajectory that burned its turn budget retrying one
+    Edit leaves nothing behind to say what it was retrying.
+    """
+    from claude_agent_sdk import ToolResultBlock, ToolUseBlock
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage(
+            content=[ToolUseBlock(
+                id="call-1",
+                name="Edit",
+                input={"file_path": "topics/a.md", "old_string": ""},
+            )],
+            model="test-model",
+            usage={},
+        )
+        yield AssistantMessage(
+            content=[ToolResultBlock(
+                tool_use_id="call-1",
+                content="String to replace not found",
+                is_error=True,
+            )],
+            model="test-model",
+            usage={},
+        )
+        yield ResultMessage(
+            subtype="success", duration_ms=10, duration_api_ms=5,
+            is_error=False, num_turns=2, session_id="s",
+            total_cost_usd=0.0, usage={}, result="",
+        )
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig(base_url="https://x", api_key="k", model="m"),
+        query_fn=fake_query,
+    )
+
+    result = agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
+
+    assert result.turns[0]["tool"] == "Edit"
+    assert result.turns[0]["arguments"]["file_path"] == "topics/a.md"
+    assert result.turns[1]["is_error"] is True
+    assert "String to replace not found" in result.turns[1]["result"]
+
+
+def test_a_failed_trajectory_still_carries_its_turns(tmp_path: Path) -> None:
+    from claude_agent_sdk import ToolUseBlock
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage(
+            content=[ToolUseBlock(
+                id="call-1", name="Edit", input={"file_path": "topics/a.md"},
+            )],
+            model="test-model",
+            usage={},
+        )
+        yield ResultMessage(
+            subtype="error_max_turns", duration_ms=10, duration_api_ms=5,
+            is_error=True, num_turns=60, session_id="s",
+            total_cost_usd=0.0, usage={},
+            result="Reached maximum number of turns (60)",
+        )
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig(base_url="https://x", api_key="k", model="m"),
+        query_fn=fake_query,
+    )
+
+    with pytest.raises(AgentExecutionError) as failure:
+        agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
+
+    assert failure.value.turns[0]["tool"] == "Edit"

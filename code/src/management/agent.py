@@ -133,6 +133,7 @@ def _run_agent(
             "status": "ok",
             "reason": result.stop_reason or "complete",
             "rounds": result.num_turns,
+            "turns": result.turns,
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
             "anthropic_equivalent_cost_usd": (
