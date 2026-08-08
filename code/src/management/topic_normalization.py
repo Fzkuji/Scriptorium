@@ -18,6 +18,7 @@ from ..markdown import (
 # assigns look like e-1f4c7a2b90, so the digit-only suffix separates them.
 # ``new-evidence-<label>`` is the older placeholder form, still accepted.
 LOCAL_EVIDENCE_LABEL = re.compile(r"e\d+|new-evidence-[A-Za-z0-9-]+")
+CITATION = re.compile(r"\[\^([A-Za-z0-9_-]+)\]")
 
 
 def _is_local_label(value: str) -> bool:
@@ -100,6 +101,9 @@ class TopicNormalizationMixin:
         if core.is_file():
             paths.append(core)
         texts = {path: path.read_text(encoding="utf-8") for path in paths}
+        # What is on disk now. `texts` is rewritten in place below, so the
+        # final write needs its own record of the original to compare against.
+        on_disk = dict(texts)
 
         # Evidence labels are content-addressed, so the same claim keeps its
         # footnote ID no matter what else the edit touched.
@@ -124,6 +128,48 @@ class TopicNormalizationMixin:
                     ),
                     used_evidence,
                     prefix="e-",
+                )
+
+        # Appending to a paragraph, a writer often rewrites the citation it
+        # already carries as a fresh `[^eN]` without moving the definition.
+        # The definition is still in the file and evidence IDs are derived
+        # from its content, so the citation is recoverable: bind the orphan
+        # back to the definition that shares its paragraph. Discarding the
+        # turn instead would throw away correct new prose over a label.
+        for path, text in list(texts.items()):
+            lines = text.splitlines()
+            defined = {
+                match.group("id")
+                for line in lines
+                if (match := definition_match(line))
+            }
+            replaced = False
+            for start, end in self._paragraph_spans(text):
+                block = "\n".join(lines[start:end])
+                orphans = [
+                    label
+                    for label in CITATION.findall(block)
+                    if _is_local_label(label) and label not in defined
+                ]
+                if not orphans:
+                    continue
+                # The definitions that follow this paragraph, in order.
+                nearby = [
+                    match.group("id")
+                    for line in lines[end:]
+                    if (match := definition_match(line))
+                ][: len(orphans)]
+                for orphan, target in zip(orphans, nearby):
+                    if orphan == target:
+                        continue
+                    lines[start:end] = [
+                        line.replace(f"[^{orphan}]", f"[^{target}]")
+                        for line in lines[start:end]
+                    ]
+                    replaced = True
+            if replaced:
+                texts[path] = "\n".join(lines) + (
+                    "\n" if text.endswith("\n") else ""
                 )
 
         # A writer may still invent a trailing ID out of habit. Anything that
@@ -244,7 +290,7 @@ class TopicNormalizationMixin:
                     )
                 rendered.append(line)
             normalized = "\n".join(rendered).rstrip() + "\n"
-            if normalized != original:
+            if normalized != on_disk[path]:
                 path.write_text(normalized, encoding="utf-8")
 
     def _validate_topic_contract(

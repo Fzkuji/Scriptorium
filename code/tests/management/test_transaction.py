@@ -1,5 +1,6 @@
 """Structured write transaction used by the interactive MCP path."""
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -292,3 +293,35 @@ def test_workspace_revision_changes_with_content(tmp_path: Path):
     commit_move(workspace)
 
     assert workspace_revision(tmp_path) != before
+
+
+def test_rewritten_citation_binds_back_to_its_definition(tmp_path: Path):
+    """A writer appending prose often rewrites the citation it already has.
+
+    The definition stays in the file and evidence IDs are content-addressed,
+    so the citation is recoverable. Discarding the turn would throw away
+    correct new prose over a label the writer was never required to copy.
+    """
+    workspace = MemoryWorkspace(tmp_path)
+    commit_move(workspace)
+
+    topic = tmp_path / "topics/personal/residence.md"
+    committed = topic.read_text()
+    block_id = re.search(r"\^([0-9a-f]{8})\s*$", committed, re.M).group(1)
+    evidence_id = re.search(
+        r"\.\[\^(e-[0-9a-f]+)\]", committed
+    ).group(1)
+
+    before = workspace.baseline()
+    staged = workspace.stage_dir / "topics/personal/residence.md"
+    staged.write_text(committed.replace(f"[^{evidence_id}]", "[^e1]"))
+
+    workspace.commit_edits(*before)
+
+    installed = topic.read_text()
+    # The paragraph keeps its identity and the orphan citation is gone.
+    assert f"^{block_id}" in installed
+    assert "[^e1]" not in installed
+    # Whatever the citation now reads, a definition in the file defines it.
+    cited = re.search(r"\.\[\^(e-[0-9a-f]+)\]", installed).group(1)
+    assert f"[^{cited}]: Time:" in installed

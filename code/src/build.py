@@ -52,7 +52,9 @@ def _written_blocks(audit):
     return sum(
         int(record.get("count", 0))
         for record in audit
-        if record.get("tool") in {"shell", "save_memory"}
+        # Edits made through the built-in file tools are installed by an
+        # end-of-turn "commit" record rather than a shell call.
+        if record.get("tool") in {"shell", "save_memory", "commit"}
         and record.get("status", "ok") == "ok"
     )
 

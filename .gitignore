@@ -60,3 +60,9 @@ paper/
 *api-key*.txt
 *.key
 .memory/
+
+# Obsidian 的本机编辑器状态（主题、插件、窗口布局），与项目无关
+.obsidian/
+
+# Windows 本机运维脚本（WSL 迁移、环境变量），与项目无关
+*.ps1
