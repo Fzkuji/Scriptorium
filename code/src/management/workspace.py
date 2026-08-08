@@ -8,14 +8,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ..markdown import parse_topic_tree, topic_prose
+from ..markdown import parse_topic_tree
 from .block_views import BlockViewsMixin
 from .config import MemoryConfig
 from .event_writing import EventWritingMixin
 from .patching import apply_patch
 from .source_archive import SourceArchiveMixin
 from .topic_normalization import TopicNormalizationMixin
-from .topic_reconciliation import TopicReconciliationMixin
 from .transaction import (
     TransactionError,
     TransactionLimits,
@@ -34,7 +33,6 @@ from ..workspace_layout import TEMPORARY_PREFIX, is_internal_path, runtime_dir
 
 class MemoryWorkspace(
     TopicNormalizationMixin,
-    TopicReconciliationMixin,
     SourceArchiveMixin,
     EventWritingMixin,
     BlockViewsMixin,
@@ -42,7 +40,6 @@ class MemoryWorkspace(
     def __init__(
         self,
         memory_dir: str | Path,
-        reconciler: Any | None = None,
         *,
         config: MemoryConfig | None = None,
     ):
@@ -50,7 +47,6 @@ class MemoryWorkspace(
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         self.stage_dir = Path(tempfile.mkdtemp(prefix=f"{TEMPORARY_PREFIX}topics-"))
         self.pending: dict[str, dict[str, Any]] = {}
-        self.reconciler = reconciler
         self.config = config or MemoryConfig()
         self.committed = False
         self.last_changed_topics: list[str] = []
@@ -96,7 +92,6 @@ class MemoryWorkspace(
                 r"(?m)\^([A-Za-z0-9-]+)\s*$",
                 core.read_text(encoding="utf-8"),
             ))
-        before_prose = topic_prose(self.stage_dir / "topics")
         result = subprocess.run(
             command,
             cwd=self.stage_dir,
@@ -109,30 +104,79 @@ class MemoryWorkspace(
         if result.returncode != 0 and changed:
             self._refresh_stage()
         elif result.returncode == 0 and changed:
-            try:
-                if self._tree_fingerprint(self.stage_dir / "sources") != before_sources:
-                    raise ValueError("Source Memory is append-only")
-                self._normalize_topic_edits(before_block_ids)
-                self._validate_topic_contract(before_units)
-                self._reconcile_topic_edit(
-                    before_units, before_prose, allow_correction=allow_correction
-                )
-                self._synchronize()
-                after_units = parse_topic_tree(self.stage_dir / "topics")
-                after_topics = self._topic_fingerprints(self.stage_dir / "topics")
-                self.last_changed_topics = [
-                    "topics/" + path
-                    for path in sorted(set(before_topics) | set(after_topics))
-                    if before_topics.get(path) != after_topics.get(path)
-                ]
-                self.last_created_blocks = len(
-                    {unit.memory_id for unit in after_units}
-                    - {unit.memory_id for unit in before_units}
-                )
-            except Exception:
-                self._refresh_stage()
-                raise
+            self.commit_edits(
+                before_units, before_block_ids, before_topics, before_sources
+            )
         return result
+
+    def baseline(self) -> tuple[list[Any], set[str], dict[str, str], str]:
+        """Snapshot the staged tree so an edit can be committed against it."""
+        units = parse_topic_tree(self.stage_dir / "topics")
+        block_ids = {unit.memory_id for unit in units}
+        core = self.stage_dir / "core.md"
+        if core.is_file():
+            block_ids.update(re.findall(
+                r"(?m)\^([A-Za-z0-9-]+)\s*$",
+                core.read_text(encoding="utf-8"),
+            ))
+        return (
+            units,
+            block_ids,
+            self._topic_fingerprints(self.stage_dir / "topics"),
+            self._tree_fingerprint(self.stage_dir / "sources"),
+        )
+
+    def commit_edits(
+        self,
+        before_units: list[Any],
+        before_block_ids: set[str],
+        before_topics: dict[str, str],
+        before_sources: str,
+    ) -> None:
+        """Assign IDs, validate, rebuild derived views, and install.
+
+        Called per shell command, and once after an agent turn that edited
+        the stage through the built-in file tools. Any failure discards the
+        staged edits and re-raises.
+        """
+        self.last_changed_topics = []
+        self.last_created_blocks = 0
+        try:
+            if self._tree_fingerprint(self.stage_dir / "sources") != before_sources:
+                raise ValueError("Source Memory is append-only")
+            self._normalize_topic_edits(before_block_ids)
+            self._validate_topic_contract(before_units, before_block_ids)
+            self._synchronize()
+            after_units = parse_topic_tree(self.stage_dir / "topics")
+            after_topics = self._topic_fingerprints(self.stage_dir / "topics")
+            self.last_changed_topics = [
+                "topics/" + path
+                for path in sorted(set(before_topics) | set(after_topics))
+                if before_topics.get(path) != after_topics.get(path)
+            ]
+            self.last_created_blocks = len(
+                {unit.memory_id for unit in after_units}
+                - {unit.memory_id for unit in before_units}
+            )
+        except Exception:
+            self._refresh_stage()
+            raise
+
+    def stage_is_dirty(self) -> bool:
+        """Whether the stage differs from what is committed on disk."""
+        staged = {
+            path.relative_to(self.stage_dir).as_posix(): path.read_bytes()
+            for path in sorted(self.stage_dir.rglob("*"))
+            if path.is_file()
+            and not is_internal_path(path.relative_to(self.stage_dir))
+        }
+        committed = {
+            path.relative_to(self.memory_dir).as_posix(): path.read_bytes()
+            for path in sorted(self.memory_dir.rglob("*"))
+            if path.is_file()
+            and not is_internal_path(path.relative_to(self.memory_dir))
+        }
+        return staged != committed
 
     def revision(self) -> str:
         """Fingerprint of the committed workspace, for optimistic concurrency."""
@@ -266,11 +310,41 @@ class MemoryWorkspace(
         return digest.hexdigest()
 
     def structure(self) -> str:
-        paths = [
-            path.relative_to(self.stage_dir).as_posix()
-            for path in sorted(self.stage_dir.rglob("*"))
-            if path.is_file() and not is_internal_path(
-                path.relative_to(self.stage_dir)
-            )
-        ]
-        return "\n".join(paths) or "(empty workspace)"
+        """List the workspace, with each Topic file's headings and block IDs.
+
+        A bare path list tells the writer nothing about what a file already
+        holds, so it reads every file before editing any of them. Showing the
+        headings and IDs up front answers that question without a shell call.
+        """
+        lines = []
+        topics = self.stage_dir / "topics"
+        for path in sorted(self.stage_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(self.stage_dir)
+            if is_internal_path(relative):
+                continue
+            lines.append(relative.as_posix())
+            if path.suffix != ".md" or (
+                topics not in path.parents and path.name != "core.md"
+            ):
+                continue
+            heading = ""
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("#"):
+                    heading = line.strip()
+                    continue
+                block = re.search(r"\s\^([A-Za-z0-9-]+)\s*$", line)
+                if not block:
+                    continue
+                summary = re.sub(r"\[\^[^]]+\]", "", line[: block.start()])
+                summary = " ".join(summary.split())
+                if len(summary) > 90:
+                    summary = summary[:87] + "..."
+                lines.append(
+                    f"    ^{block.group(1)}"
+                    + (f"  [{heading.lstrip('# ')}]" if heading else "")
+                    + f"  {summary}"
+                )
+                heading = ""
+        return "\n".join(lines) or "(empty workspace)"

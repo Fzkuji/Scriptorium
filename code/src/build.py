@@ -209,15 +209,25 @@ def build_memory(
                 or completed_sessions == len(sessions)
             )
             if should_verify:
-                verification = memory.verify_session(
-                    memory_dir,
-                    agent=agent,
-                    observation_date=complete_session["observation_date"],
-                    turns=complete_session["turns"],
-                    refs=complete_session["refs"],
-                    usage_logger=usage_logger,
-                    config=config.memory_config,
-                )
+                # Verification is an optional self-check over memory that is
+                # already committed. A model that cannot hold up its end of it
+                # must not take the build down with it.
+                try:
+                    verification = memory.verify_session(
+                        memory_dir,
+                        agent=agent,
+                        observation_date=complete_session["observation_date"],
+                        turns=complete_session["turns"],
+                        refs=complete_session["refs"],
+                        usage_logger=usage_logger,
+                        config=config.memory_config,
+                    )
+                except Exception as exc:
+                    verification = {
+                        "skipped": True,
+                        "reason": "failed",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
             else:
                 verification = {
                     "skipped": True,

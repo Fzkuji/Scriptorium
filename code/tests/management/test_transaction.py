@@ -52,9 +52,8 @@ def test_source_and_topic_commit_atomically(tmp_path: Path):
 
     topic = (tmp_path / "topics/personal/residence.md").read_text()
     assert "new-source-move" not in topic
-    assert "new-block-residence" not in topic
     assert result.source_ids["new-source-move"].startswith("claude-code/")
-    assert result.block_ids["new-block-residence"]
+    assert result.block_ids["topics/personal/residence.md#0"]
     # Evidence and the topic citing it must land in the same install.
     archived = list((tmp_path / "sources" / "claude-code").glob("*.md"))
     assert len(archived) == 1

@@ -16,9 +16,11 @@ def management_tools(
     @tool(
         "shell",
         (
-            "Read the staged memory workspace or edit authoritative topics/ "
-            "and core.md. Never edit sources/. Runtime validates each edit and "
-            "rebuilds Timeline, Recent, and Relations."
+            "Run one POSIX shell command in the memory workspace, for things "
+            "the file tools cannot do: listing, moving, or removing files. "
+            "The argument must be an executable command such as `ls topics`, "
+            "never an instruction written in English. To create or change a "
+            "file's contents use the Write and Edit tools instead of this one."
         ),
         {
             "type": "object",

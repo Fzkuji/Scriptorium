@@ -24,14 +24,18 @@ def _block_unit(
     created_order: int,
     *,
     strict: bool,
-) -> tuple[MemoryUnit, set[str]] | None:
+) -> tuple[list[MemoryUnit], set[str]] | None:
     block = BLOCK_SUFFIX.search(paragraph)
     any_block = ANY_BLOCK_SUFFIX.search(paragraph)
     if any_block and not block:
         raise TopicFormatError(f"invalid block_id: {any_block.group('id')}")
     if not block:
         return None
-    memory_id = block.group("id")
+    # A merge keeps every absorbed ID on one paragraph. The last is this
+    # paragraph's identity; the rest are aliases the caller re-emits so
+    # links pointing at them still resolve.
+    absorbed = re.findall(r"\^([A-Za-z0-9-]+)", paragraph[block.start():])
+    memory_id = absorbed[-1]
     body = paragraph[:block.start()].rstrip()
     evidence = []
     used: set[str] = set()
@@ -65,8 +69,7 @@ def _block_unit(
             if ref not in refs:
                 refs.append(ref)
                 links.append(link)
-    return MemoryUnit(
-        memory_id=memory_id,
+    shared = dict(
         content=SINGLE_CITATION.sub("", body).strip(),
         when=next((item.when for item in evidence if item.when is not None), None),
         source_refs=tuple(refs),
@@ -78,7 +81,10 @@ def _block_unit(
         relation_targets=tuple(
             match.group("id") for match in BLOCK_LINK.finditer(body)
         ),
-    ), used
+    )
+    return [
+        MemoryUnit(memory_id=value, **shared) for value in absorbed
+    ], used
 
 
 def _legacy_units(
@@ -138,11 +144,14 @@ def parse_topic_tree(topics: Path, *, strict: bool = True) -> list[MemoryUnit]:
                 strict=strict,
             )
             if parsed:
-                unit, used = parsed
-                if unit.memory_id in seen:
-                    raise TopicFormatError(f"duplicate memory_id: {unit.memory_id}")
-                units.append(unit)
-                seen.add(unit.memory_id)
+                block_units, used = parsed
+                for unit in block_units:
+                    if unit.memory_id in seen:
+                        raise TopicFormatError(
+                            f"duplicate memory_id: {unit.memory_id}"
+                        )
+                    units.append(unit)
+                    seen.add(unit.memory_id)
                 used_definitions.update(used)
                 continue
             legacy, used = _legacy_units(

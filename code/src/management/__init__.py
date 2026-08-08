@@ -3,7 +3,6 @@
 from .api import manage_memory, organize_topics, write_session, write_sessions
 from .config import MemoryConfig
 from .agent import _run_agent, render_conversation
-from .model_reconciliation import _make_reconciler
 from .prompts import (
     LOCAL_MANAGER_TASK,
     MANAGER_TASK,

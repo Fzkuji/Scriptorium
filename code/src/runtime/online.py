@@ -25,7 +25,6 @@ class OnlineMemoryRuntime:
         token_threshold: int = 8_000,
         local_batch_threshold: int = 5,
         local_token_threshold: int = 40_000,
-        reconciler=None,
         memory_config: MemoryConfig | None = None,
     ):
         self.memory_dir = Path(memory_dir)
@@ -34,7 +33,6 @@ class OnlineMemoryRuntime:
         self.token_threshold = token_threshold
         self.local_batch_threshold = local_batch_threshold
         self.local_token_threshold = local_token_threshold
-        self.reconciler = reconciler
         self.memory_config = memory_config or MemoryConfig()
 
     def pending(self, records: list[SourceRecord]) -> list[SourceRecord]:
@@ -81,7 +79,6 @@ class OnlineMemoryRuntime:
 
         workspace = MemoryWorkspace(
             self.memory_dir,
-            reconciler=self.reconciler,
             config=self.memory_config,
         )
         workspace.archive_source_records(list(batch))

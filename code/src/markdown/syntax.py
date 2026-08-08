@@ -25,7 +25,9 @@ LEGACY_DEFINITION = re.compile(
     r"\s*·\s*Sources:\s*(?P<sources>.+?)\s*$"
 )
 LINK = re.compile(r"\[([^]]+)\]\(([^)]+)\)")
-BLOCK_SUFFIX = re.compile(rf"\s+\^(?P<id>{BLOCK_ID})\s*$")
+# A merged paragraph carries every ID it absorbed, so the suffix is a run.
+BLOCK_SUFFIX = re.compile(rf"(?:\s+\^{BLOCK_ID})*\s+\^(?P<id>{BLOCK_ID})\s*$")
+BLOCK_SUFFIX_RUN = re.compile(rf"(?:\s+\^{BLOCK_ID})+\s*$")
 ANY_BLOCK_SUFFIX = re.compile(r"\s+\^(?P<id>\S+)\s*$")
 BLOCK_LINK = re.compile(rf"\[[^]]+\]\([^)#]*#\^(?P<id>{BLOCK_ID})\)")
 SOURCE_HANDLE = re.compile(

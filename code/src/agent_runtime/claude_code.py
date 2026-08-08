@@ -119,12 +119,16 @@ class ClaudeCodeAgent:
             raise ValueError(f"agent working directory does not exist: {cwd}")
         server_name = "agent_memory"
         mcp_servers = {}
-        allowed_tools = []
+        # The workspace is a scratch directory, so the built-in file tools are
+        # safe here and are what the model is trained to reach for. Editing
+        # through them beats scripting the same change in a shell heredoc.
+        builtin_tools = ["Read", "Edit", "Write", "Grep", "Glob"]
+        allowed_tools = list(builtin_tools)
         if tools:
             mcp_servers[server_name] = create_sdk_mcp_server(
                 server_name, tools=tools
             )
-            allowed_tools = [
+            allowed_tools += [
                 f"mcp__{server_name}__{definition.name}"
                 for definition in tools
             ]
@@ -133,7 +137,11 @@ class ClaudeCodeAgent:
             prefix="agent-memory-claude-config-"
         ) as config_root:
             options = ClaudeAgentOptions(
-                tools=[],
+                # `tools` is what puts schemas on the wire; `allowed_tools` only
+                # filters what may run. Leaving this empty left weaker models
+                # with the MCP shell as their sole visible tool, so they wrote
+                # tool names into shell commands instead of calling the tools.
+                tools=builtin_tools,
                 allowed_tools=allowed_tools,
                 system_prompt=system_prompt,
                 mcp_servers=mcp_servers,

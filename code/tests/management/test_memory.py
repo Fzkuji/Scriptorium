@@ -249,21 +249,29 @@ def test_shell_resolves_temporary_cross_topic_block_link(tmp_path: Path):
     workspace.shell(
         "mkdir -p topics/people && "
         "printf '%s\\n' '# Caroline' '' "
-        "'On 2026-01-01 Caroline was friends with "
-        "[Melanie](melanie.md#^new-block-melanie)."
-        "[^new-evidence-caroline] ^new-block-caroline' '' "
-        "'[^new-evidence-caroline]: Time: `2026-01-01`; Sources: D1:1' "
+        "'On 2026-01-01 Caroline was friends with Melanie.[^e1]' '' "
+        "'[^e1]: Time: `2026-01-01`; Sources: D1:1' "
         "> topics/people/caroline.md && "
         "printf '%s\\n' '# Melanie' '' "
-        "'On 2026-01-01 Melanie was friends with Caroline."
-        "[^new-evidence-melanie] ^new-block-melanie' '' "
-        "'[^new-evidence-melanie]: Time: `2026-01-01`; Sources: D1:2' "
+        "'On 2026-01-01 Melanie was friends with Caroline.[^e2]' '' "
+        "'[^e2]: Time: `2026-01-01`; Sources: D1:2' "
         "> topics/people/melanie.md"
     )
 
     units = {unit.topic_path: unit for unit in parse_topic_tree(tmp_path / "topics")}
-    source = units["people/caroline.md"]
     target = units["people/melanie.md"]
+    workspace.shell(
+        "python3 - <<'PY'\n"
+        "from pathlib import Path\n"
+        "p = Path('topics/people/caroline.md'); t = p.read_text()\n"
+        "t = t.replace('friends with Melanie.',"
+        f" 'friends with [Melanie](melanie.md#^{target.memory_id}).')\n"
+        "p.write_text(t)\n"
+        "PY"
+    )
+
+    units = {unit.topic_path: unit for unit in parse_topic_tree(tmp_path / "topics")}
+    source = units["people/caroline.md"]
     assert f"melanie.md#^{target.memory_id}" in source.content
     relations = json.loads((tmp_path / "relations.json").read_text())
     assert relations["outbound"][source.memory_id] == [target.memory_id]
@@ -380,11 +388,12 @@ def test_writer_may_read_but_must_not_modify_archived_sources():
             in prompt
         )
         assert "Do not modify files under sources/." in prompt
-    assert "[^new-evidence-example] ^new-block-example" in SYSTEM_PROMPT
+    assert "[^e1]" in SYSTEM_PROMPT
     assert (
-        "Time: `<time>`; Sources: <complete-source-handle-from-input>"
+        "[^e1]: Time: `<time>`; Sources: provider/thread_id/message_id"
         in SYSTEM_PROMPT
     )
+    assert "Never write a block ID yourself." in SYSTEM_PROMPT
 
 
 def test_workspace_structure_lists_all_shell_visible_memory_views(tmp_path):
@@ -554,7 +563,6 @@ def test_shell_normalizes_and_validates_core_source_references(tmp_path: Path):
     assert re.search(r"\^[0-9a-f]{8}$", text, re.MULTILINE)
     assert (
         "[diagnostic/thread-1/msg-1]"
-        "(sources/diagnostic/thread-1.md#source-54a317afec5ee542)"
     ) in text
 
 
@@ -714,7 +722,8 @@ def test_shell_move_rewrites_cross_topic_block_link_and_installs_relations(
     assert relations["backlinks"][target_id] == [source_id]
 
 
-def test_deleting_last_topic_block_clears_only_derived_views(tmp_path: Path):
+def test_deleting_a_topic_block_is_rejected(tmp_path: Path):
+    """A block ID is how every view reaches a memory, so it cannot vanish."""
     workspace = MemoryWorkspace(tmp_path)
     workspace.archive_sessions([{
         "observation_date": "2026-01-01",
@@ -726,14 +735,11 @@ def test_deleting_last_topic_block_clears_only_derived_views(tmp_path: Path):
         "topic_path": "a.md", "headings": ["A"],
     }])
 
-    workspace.shell("rm topics/a.md")
+    with pytest.raises(ValueError, match="block ID must not be removed"):
+        workspace.shell("rm topics/a.md")
 
-    assert (tmp_path / "recent_events.jsonl").read_text() == ""
-    assert not list((tmp_path / "timeline").rglob("*.md"))
-    assert json.loads((tmp_path / "relations.json").read_text()) == {
-        "backlinks": {}, "outbound": {}
-    }
-    assert "fact" in (tmp_path / "sources/D1.md").read_text()
+    assert (tmp_path / "topics/a.md").is_file()
+    assert json.loads((tmp_path / "relations.json").read_text())["outbound"]
 
 
 def test_recent_fifo_keeps_full_creation_order_outside_the_window(

@@ -1,6 +1,6 @@
 """Structured write transaction for interactive memory editing.
 
-``MemoryWorkspace.shell()`` runs the same validate-normalize-reconcile-install
+``MemoryWorkspace.shell()`` runs the same normalize-validate-install
 pipeline but reaches it by executing an arbitrary shell command in the stage.
 That is acceptable for a controlled experiment agent and unacceptable for a
 tool exposed to a user's editor session, so this module drives the identical
@@ -306,7 +306,7 @@ def install_state(
     Mirrors the successful branch of ``MemoryWorkspace.shell()``.
     """
     workspace._normalize_topic_edits(before_block_ids)
-    workspace._validate_topic_contract(before_units)
+    workspace._validate_topic_contract(before_units, before_block_ids)
     workspace._synchronize()
 
 

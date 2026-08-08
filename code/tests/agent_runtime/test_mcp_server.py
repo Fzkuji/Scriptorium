@@ -115,7 +115,7 @@ def test_update_commits_source_and_topic(server, tmp_path: Path):
     })
 
     assert result["ok"] is True
-    assert result["data"]["block_ids"]["new-block-residence"]
+    assert result["data"]["block_ids"]["topics/personal/residence.md#0"]
     assert result["data"]["git_committed"] is False
     assert (tmp_path / "topics/personal/residence.md").is_file()
     # Derived views must be rebuilt by the same transaction.

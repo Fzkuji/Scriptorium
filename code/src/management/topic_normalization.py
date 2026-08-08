@@ -14,6 +14,15 @@ from ..markdown import (
     render_definition,
 )
 
+# Footnote labels the writer supplies, e.g. [^e1]. Stable IDs the Runtime
+# assigns look like e-1f4c7a2b90, so the digit-only suffix separates them.
+# ``new-evidence-<label>`` is the older placeholder form, still accepted.
+LOCAL_EVIDENCE_LABEL = re.compile(r"e\d+|new-evidence-[A-Za-z0-9-]+")
+
+
+def _is_local_label(value: str) -> bool:
+    return bool(LOCAL_EVIDENCE_LABEL.fullmatch(value))
+
 
 class TopicNormalizationMixin:
     @staticmethod
@@ -41,6 +50,44 @@ class TopicNormalizationMixin:
                 return value
             counter += 1
 
+    @staticmethod
+    def _paragraph_spans(text: str) -> list[tuple[int, int]]:
+        """Line ranges of prose paragraphs, as [start, end) index pairs.
+
+        Headings, fenced code, footnote definitions, HTML anchors, and blank
+        runs are not paragraphs. The writer no longer supplies block IDs, so
+        this is how a paragraph needing one gets found.
+        """
+        lines = text.splitlines()
+        spans: list[tuple[int, int]] = []
+        start: int | None = None
+        fenced = False
+        for index, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                fenced = not fenced
+                if start is not None:
+                    spans.append((start, index))
+                    start = None
+                continue
+            breaks = (
+                fenced
+                or not stripped
+                or stripped.startswith("#")
+                or stripped.startswith("<")
+                or definition_match(line) is not None
+                or re.match(r"^\[\^[A-Za-z0-9_-]+\]:", stripped) is not None
+            )
+            if breaks:
+                if start is not None:
+                    spans.append((start, index))
+                    start = None
+            elif start is None:
+                start = index
+        if start is not None:
+            spans.append((start, len(lines)))
+        return spans
+
     def _normalize_topic_edits(self, existing_block_ids: set[str]) -> None:
         # Callers that need to report assigned IDs read these afterwards.
         self.last_block_id_map: dict[str, str] = {}
@@ -53,53 +100,105 @@ class TopicNormalizationMixin:
         if core.is_file():
             paths.append(core)
         texts = {path: path.read_text(encoding="utf-8") for path in paths}
-        current_block_ids = {
-            match.group(1)
-            for text in texts.values()
-            for match in re.finditer(r"(?m)\^([A-Za-z0-9-]+)\s*$", text)
-        }
-        block_placeholders = {
-            block_id for block_id in current_block_ids
-            if block_id.startswith("new-block-")
-            or block_id not in existing_block_ids
-        }
-        used_blocks = current_block_ids - block_placeholders | existing_block_ids
-        block_ids = {
-            placeholder: self._stable_local_id(
-                f"block|{placeholder}|" + "".join(texts.values()),
-                used_blocks,
-            )
-            for placeholder in sorted(block_placeholders)
-        }
+
+        # Evidence labels are content-addressed, so the same claim keeps its
+        # footnote ID no matter what else the edit touched.
         used_evidence = {
             match.group(1)
             for text in texts.values()
             for match in re.finditer(r"(?m)^\[\^([A-Za-z0-9_-]+)\]:", text)
-            if not match.group(1).startswith("new-evidence-")
+            if not _is_local_label(match.group(1))
         }
-        evidence_placeholders = {
+        evidence_ids: dict[str, str] = {}
+        for text in texts.values():
+            for line in text.splitlines():
+                match = definition_match(line)
+                if match is None or not _is_local_label(match.group("id")):
+                    continue
+                label = match.group("id")
+                if label in evidence_ids:
+                    continue
+                evidence_ids[label] = self._stable_local_id(
+                    "evidence|{}|{}".format(
+                        match.group("when"), match.group("sources").strip()
+                    ),
+                    used_evidence,
+                    prefix="e-",
+                )
+
+        # A writer may still invent a trailing ID out of habit. Anything that
+        # was not already committed is stripped so the paragraph is treated as
+        # new and the Runtime assigns the real ID.
+        invented = re.compile(
+            r"[ \t]*\^(?!(?:" + "|".join(
+                re.escape(value) for value in sorted(existing_block_ids)
+            ) + r")\b)[A-Za-z0-9-]+(?=\s*$)"
+            if existing_block_ids
+            else r"[ \t]*\^[A-Za-z0-9-]+(?=\s*$)",
+            re.MULTILINE,
+        )
+        for path, text in list(texts.items()):
+            stripped = invented.sub("", text)
+            if stripped != text:
+                texts[path] = stripped
+
+        # Block IDs are assigned to paragraphs that carry none. An existing
+        # ID is never rewritten: other views reach the paragraph through it.
+        used_blocks = set(existing_block_ids) | {
             match.group(1)
             for text in texts.values()
-            for match in re.finditer(
-                r"(?m)^\[\^(new-evidence-[A-Za-z0-9-]+)\]:", text
-            )
+            for match in re.finditer(r"(?m)\^([A-Za-z0-9-]+)\s*$", text)
         }
-        evidence_ids = {
-            placeholder: self._stable_local_id(
-                f"evidence|{placeholder}|" + "".join(texts.values()),
-                used_evidence,
-                prefix="e-",
-            )
-            for placeholder in sorted(evidence_placeholders)
+        assigned: dict[Path, dict[int, str]] = {}
+        for path, text in texts.items():
+            lines = text.splitlines()
+            for start, end in self._paragraph_spans(text):
+                last = lines[end - 1]
+                if re.search(r"\s\^[A-Za-z0-9-]+\s*$", last):
+                    continue
+                body = " ".join(
+                    " ".join(lines[start:end]).split()
+                )
+                # Only evidence-bearing prose is a memory. Core.md summaries
+                # and topic intros carry no footnote and stay unidentified.
+                if not body or "[^" not in body:
+                    continue
+                assigned.setdefault(path, {})[end - 1] = (
+                    self._stable_local_id(
+                        f"block|{path.name}|{body}", used_blocks
+                    )
+                )
+
+        # Keyed by the workspace-relative file and the assignment order
+        # within it, so a caller can tell which paragraph got which ID.
+        self.last_block_id_map = {
+            "{}#{}".format(
+                "core.md"
+                if path == core
+                else (Path("topics") / path.relative_to(topics)).as_posix(),
+                index,
+            ): value
+            for path, rows in assigned.items()
+            for index, (_line, value) in enumerate(sorted(rows.items()))
         }
-        self.last_block_id_map = dict(block_ids)
         self.last_evidence_id_map = dict(evidence_ids)
         for path, original in texts.items():
             text = original
-            for placeholder, stable in block_ids.items():
-                text = text.replace(f"^{placeholder}", f"^{stable}")
-            for placeholder, stable in evidence_ids.items():
-                text = text.replace(f"[^{placeholder}]", f"[^{stable}]")
+            for label, stable in evidence_ids.items():
+                text = re.sub(
+                    rf"\[\^{re.escape(label)}\](?![A-Za-z0-9_-])",
+                    f"[^{stable}]",
+                    text,
+                )
+            rows = assigned.get(path)
+            if rows:
+                lines = text.splitlines()
+                for line_number, value in rows.items():
+                    if line_number < len(lines):
+                        lines[line_number] = (
+                            lines[line_number].rstrip() + f" ^{value}"
+                        )
+                text = "\n".join(lines)
             rendered = []
             topic_path = (
                 Path("core.md")
@@ -148,18 +247,35 @@ class TopicNormalizationMixin:
             if normalized != original:
                 path.write_text(normalized, encoding="utf-8")
 
-    def _validate_topic_contract(self, before_units: list[Any]) -> None:
-        """Reject invalid Topic links introduced by an edit."""
+    def _validate_topic_contract(
+        self,
+        before_units: list[Any],
+        before_block_ids: set[str] | None = None,
+    ) -> None:
+        """Reject edits that drop a block ID or break a Topic link.
+
+        A block ID is how Timeline, Relations, and other paragraphs reach a
+        memory. Content may change and paragraphs may move or merge, but an
+        ID that existed before the edit must still be findable after it.
+        """
         before = {unit.memory_id: unit for unit in before_units}
-        for unit in parse_topic_tree(self.stage_dir / "topics"):
-            previous = before.get(unit.memory_id)
-            if previous is None and not re.fullmatch(
-                rf"[0-9a-f]{{{BLOCK_ID_LENGTH}}}", unit.memory_id
-            ):
+        units = parse_topic_tree(self.stage_dir / "topics")
+        if before_block_ids:
+            surviving = {unit.memory_id for unit in units}
+            core = self.stage_dir / "core.md"
+            if core.is_file():
+                surviving.update(re.findall(
+                    r"(?m)\^([A-Za-z0-9-]+)\s*$",
+                    core.read_text(encoding="utf-8"),
+                ))
+            lost = before_block_ids - surviving
+            if lost:
                 raise ValueError(
-                    "new memory blocks must use ^new-block-<label>; "
-                    "Runtime assigns the stable block ID"
+                    "block ID must not be removed: "
+                    + ", ".join(sorted(lost)[:5])
                 )
+        for unit in units:
+            previous = before.get(unit.memory_id)
             if previous is not None and (
                 unit.content,
                 unit.evidence,

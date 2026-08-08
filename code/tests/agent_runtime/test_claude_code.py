@@ -84,8 +84,10 @@ def test_agent_uses_isolated_bare_nonpersistent_claude_code(
     assert result.cache_creation_input_tokens == 40
     assert result.cache_read_input_tokens == 900
     assert result.anthropic_equivalent_cost_usd == 0.002
-    assert options.tools == []
-    assert options.allowed_tools == []
+    # The built-in file tools must be sent as schemas, not merely permitted:
+    # `allowed_tools` filters, `tools` is what the model actually sees.
+    assert options.tools == ["Read", "Edit", "Write", "Grep", "Glob"]
+    assert options.allowed_tools == ["Read", "Edit", "Write", "Grep", "Glob"]
     assert options.setting_sources == []
     assert options.thinking == {"type": "disabled"}
     assert options.extra_args == {
