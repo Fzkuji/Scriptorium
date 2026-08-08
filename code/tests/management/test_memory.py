@@ -1204,3 +1204,72 @@ def test_verify_session_repairs_then_retries_same_question(tmp_path):
     assert result["post_repair"]["question"] == result["probe"]["question"]
     assert (tmp_path / "topics/routines/daily.md").exists()
     assert (tmp_path / "timeline/2023/05/23.md").exists()
+
+
+def test_every_agent_run_is_recorded_with_what_it_was_sent(tmp_path):
+    """Usage counters say a batch took N turns; the history says what it did."""
+    import json as _json
+    from src.workspace_layout import runtime_dir
+
+    agent = ScriptedAgent(text="wrote it")
+
+    memory.write_sessions(
+        tmp_path,
+        agent=agent,
+        sessions=[{
+            "observation_date": "2023-05-23",
+            "turns": [("user", "I bought a tank")],
+            "refs": ["D1:1"],
+        }],
+    )
+
+    history = runtime_dir(tmp_path) / "agent-history.jsonl"
+    records = [_json.loads(line) for line in history.read_text().splitlines()]
+
+    assert len(records) == 1
+    assert records[0]["stage"] == "write"
+    # What the model was sent, and what it sent back.
+    assert "I bought a tank" in records[0]["prompt"]
+    assert "memory workspace" in records[0]["system_prompt"]
+    assert records[0]["reply"] == "wrote it"
+    assert "turns" in records[0]
+    # The log describes how memory was made; it is not itself memory.
+    assert not (tmp_path / "agent-history.jsonl").exists()
+
+
+def test_a_failed_shell_command_is_told_which_tool_to_use(tmp_path):
+    """A shell error explains itself in the shell's terms.
+
+    Naming the tool that does the job turns a retry-the-same-thing loop into
+    one corrected call.
+    """
+    import asyncio as _asyncio
+    from src.management.tools import management_tools
+
+    workspace = MemoryWorkspace(tmp_path)
+    shell = management_tools(workspace, [])[0]
+
+    result = _asyncio.run(shell.handler(
+        {"command": "cat > topics/people/new.md <<'EOF'\nhi\nEOF"}
+    ))
+
+    text = result["content"][0]["text"]
+    assert result["is_error"] is True
+    assert "No such file or directory" in text
+    assert "Use the Write tool" in text
+
+
+def test_a_rejected_edit_is_told_what_to_change(tmp_path):
+    from src.management.agent import _repair_guidance
+
+    assert "keeps that ID" in _repair_guidance(
+        "ValueError: block ID must not be removed: 7ffb575c"
+    )
+    assert "definition line" in _repair_guidance(
+        "TopicFormatError: memory source links required: e1"
+    )
+    assert "topics/" in _repair_guidance(
+        "ValueError: Source Memory is append-only"
+    )
+    # An error with no known correction adds nothing rather than guessing.
+    assert _repair_guidance("ValueError: something else entirely") == ""

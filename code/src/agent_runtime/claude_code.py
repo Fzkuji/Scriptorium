@@ -28,9 +28,18 @@ class AgentExecutionError(RuntimeError):
     those turns on.
     """
 
-    def __init__(self, message: str, turns: list[dict[str, Any]] | None = None):
+    def __init__(
+        self,
+        message: str,
+        turns: list[dict[str, Any]] | None = None,
+        *,
+        system_prompt: str = "",
+        prompt: str = "",
+    ):
         super().__init__(message)
         self.turns = turns or []
+        self.system_prompt = system_prompt
+        self.prompt = prompt
 
 
 # Enough of a tool call to see what a turn attempted and whether it worked,
@@ -110,6 +119,11 @@ class AgentResult:
     # Every tool call and result, in order. Built-in file tools bypass the
     # MCP layer, so this is the only record of what the turns did.
     turns: list[dict[str, Any]] = field(default_factory=list)
+    # Exactly what the model was sent. Reading a trajectory back means
+    # knowing what it was answering, not only what it then did.
+    system_prompt: str = ""
+    prompt: str = ""
+    reply: str = """"""
 
 
 QueryFunction = Callable[..., AsyncIterator[Any]]
@@ -239,11 +253,15 @@ class ClaudeCodeAgent:
             except Exception as exc:
                 if final is None:
                     message = str(exc).replace(self.config.api_key, "[redacted]")
-                    raise AgentExecutionError(message, turns) from exc
+                    raise AgentExecutionError(
+                        message, turns,
+                        system_prompt=system_prompt, prompt=prompt,
+                    ) from exc
 
             if final is None:
                 raise AgentExecutionError(
-                    "Claude Code ended without a result message", turns
+                    "Claude Code ended without a result message", turns,
+                    system_prompt=system_prompt, prompt=prompt,
                 )
             if final.is_error:
                 details = "; ".join(final.errors or []) or (
@@ -252,7 +270,10 @@ class ClaudeCodeAgent:
                 if getattr(final, "api_error_status", None) is not None:
                     details += f"; API status {final.api_error_status}"
                 details = details.replace(self.config.api_key, "[redacted]")
-                raise AgentExecutionError(details, turns)
+                raise AgentExecutionError(
+                    details, turns,
+                    system_prompt=system_prompt, prompt=prompt,
+                )
             usage = final.usage or {}
             return AgentResult(
                 text=(final.result or "\n".join(texts)).strip(),
@@ -272,4 +293,7 @@ class ClaudeCodeAgent:
                 stop_reason=final.stop_reason,
                 session_id=final.session_id,
                 turns=turns,
+                system_prompt=system_prompt,
+                prompt=prompt,
+                reply="\n".join(texts),
             )

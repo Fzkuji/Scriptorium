@@ -13,6 +13,33 @@ def management_tools(
     workspace: MemoryWorkspace,
     audit: list[dict[str, Any]],
 ) -> list[Any]:
+    def _guidance(command: str, output: str) -> str:
+        """What to do about a failure, appended to the raw error.
+
+        A shell error says what went wrong in the shell's terms. Naming the
+        tool that does the job turns a retry-the-same-thing loop into one
+        corrected call.
+        """
+        if "No such file or directory" in output and ">" in command:
+            return (
+                "Redirecting into a path whose directory does not exist fails. "
+                "Use the Write tool instead: it creates parent directories and "
+                "takes the finished file in one call."
+            )
+        if "Read-only file system" in output or "Permission denied" in output:
+            return (
+                "Files under sources/ are the read-only evidence record. The "
+                "conversation text is already in your prompt; write the fact "
+                "into a Topic file under topics/ instead."
+            )
+        if "command not found" in output or "syntax error" in output:
+            return (
+                "This argument has to be an executable command. To create or "
+                "change a file's contents, call the Write or Edit tool rather "
+                "than describing the change here."
+            )
+        return ""
+
     @tool(
         "shell",
         (
@@ -50,6 +77,10 @@ def management_tools(
             output = f"{type(exc).__name__}: {exc}"
             record.update({"status": "error", "output": output})
         audit.append(record)
+        if record["status"] == "error":
+            advice = _guidance(command, output)
+            if advice:
+                output = f"{output}\n\n{advice}" if output else advice
         return {
             "content": [{"type": "text", "text": output or "(no output)"}],
             "is_error": record["status"] == "error",

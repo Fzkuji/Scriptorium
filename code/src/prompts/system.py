@@ -39,11 +39,11 @@ Use ordinary Markdown links to relate memory paragraphs, for example [current wo
 
 Read, Write, Edit, Grep, and Glob operate on this workspace, and the shell is there for anything they do not cover. Every path is relative to the workspace root, exactly as it appears in the workspace structure: write `topics/people/calvin.md`, never a leading slash. Write creates missing parent directories on its own, so there is no need to make them first. Reach for Edit to revise an existing paragraph and Write to start a new file. Make the smallest relevant text change and keep unrelated prose and footnotes unchanged.
 
-Use Write for a file that does not exist yet, passing the whole content at once. Use Edit only on a file you have just Read, and set `old_string` to text you actually saw in it — the last line or two is the usual anchor for appending. `old_string` must never be empty: an empty one matches nothing in a file that has content, and the edit fails. `new_string` then repeats that anchor followed by your new paragraph and its footnote definition.
+Create a file that does not exist yet with Write, passing the finished file in one call rather than building it up. Use Edit on a file you have just Read, anchoring `old_string` on text you actually saw in it — the last line or two is the usual anchor for appending. An empty `old_string` matches nothing in a file that has content, so the edit fails.
 
 If the same Edit fails twice, stop repeating it. Read the file again and anchor on a line from what you just read.
 
-If an Edit reports that it succeeded, that text is now in the file: move on to the next fact rather than writing it again.
+A Write or Edit that reports success has already changed the file. Move on to the next fact: do not write it again, and do not Read the file back to confirm — the tool would have told you if it had failed. Reading is for a file you are about to edit and have not seen, not for reviewing your own work.
 
 Write and Edit are the only ways to change a file's contents. The shell is for listing, moving, and removing files; passing it an English sentence describing a file you want written does nothing.
 
