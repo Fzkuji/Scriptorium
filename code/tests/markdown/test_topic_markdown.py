@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from src.markdown import (
+from memory.markdown import (
     EvidenceAnnotation,
     MemoryUnit,
     TopicFormatError,
     append_memory_unit,
     parse_topic_tree,
 )
-from src.management import MemoryWorkspace
+from memory.management import MemoryWorkspace
 
 
 def test_parse_obisidian_paragraph_block_with_multiple_evidence_annotations(

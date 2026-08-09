@@ -9,7 +9,7 @@ from claude_agent_sdk import (
     tool,
 )
 
-from src.agent_runtime import (
+from memory.agent_runtime import (
     AgentExecutionError,
     ClaudeCodeAgent,
     ClaudeCodeConfig,
@@ -84,8 +84,10 @@ def test_agent_uses_isolated_bare_nonpersistent_claude_code(
     assert result.cache_creation_input_tokens == 40
     assert result.cache_read_input_tokens == 900
     assert result.anthropic_equivalent_cost_usd == 0.002
-    assert options.tools == []
-    assert options.allowed_tools == []
+    # The built-in file tools must be sent as schemas, not merely permitted:
+    # `allowed_tools` filters, `tools` is what the model actually sees.
+    assert options.tools == ["Read", "Edit", "Write", "Grep", "Glob"]
+    assert options.allowed_tools == ["Read", "Edit", "Write", "Grep", "Glob"]
     assert options.setting_sources == []
     assert options.thinking == {"type": "disabled"}
     assert options.extra_args == {
@@ -159,3 +161,128 @@ def test_agent_preserves_api_status_when_cli_exits_after_error_result(
 
     with pytest.raises(AgentExecutionError, match="API status 529"):
         agent.run(prompt="answer", system_prompt="system", cwd=tmp_path)
+
+
+def test_result_records_every_tool_call_and_its_outcome(tmp_path: Path) -> None:
+    """Built-in file tools never reach the MCP layer.
+
+    Without this record a trajectory that burned its turn budget retrying one
+    Edit leaves nothing behind to say what it was retrying.
+    """
+    from claude_agent_sdk import ToolResultBlock, ToolUseBlock
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage(
+            content=[ToolUseBlock(
+                id="call-1",
+                name="Edit",
+                input={"file_path": "topics/a.md", "old_string": ""},
+            )],
+            model="test-model",
+            usage={},
+        )
+        yield AssistantMessage(
+            content=[ToolResultBlock(
+                tool_use_id="call-1",
+                content="String to replace not found",
+                is_error=True,
+            )],
+            model="test-model",
+            usage={},
+        )
+        yield ResultMessage(
+            subtype="success", duration_ms=10, duration_api_ms=5,
+            is_error=False, num_turns=2, session_id="s",
+            total_cost_usd=0.0, usage={}, result="",
+        )
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig(base_url="https://x", api_key="k", model="m"),
+        query_fn=fake_query,
+    )
+
+    result = agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
+
+    assert result.turns[0]["tool"] == "Edit"
+    assert result.turns[0]["arguments"]["file_path"] == "topics/a.md"
+    assert result.turns[1]["is_error"] is True
+    assert "String to replace not found" in result.turns[1]["result"]
+
+
+def test_a_failed_trajectory_still_carries_its_turns(tmp_path: Path) -> None:
+    from claude_agent_sdk import ToolUseBlock
+
+    async def fake_query(*, prompt, options):
+        yield AssistantMessage(
+            content=[ToolUseBlock(
+                id="call-1", name="Edit", input={"file_path": "topics/a.md"},
+            )],
+            model="test-model",
+            usage={},
+        )
+        yield ResultMessage(
+            subtype="error_max_turns", duration_ms=10, duration_api_ms=5,
+            is_error=True, num_turns=60, session_id="s",
+            total_cost_usd=0.0, usage={},
+            result="Reached maximum number of turns (60)",
+        )
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig(base_url="https://x", api_key="k", model="m"),
+        query_fn=fake_query,
+    )
+
+    with pytest.raises(AgentExecutionError) as failure:
+        agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
+
+    assert failure.value.turns[0]["tool"] == "Edit"
+
+
+def test_an_inherited_config_needs_no_endpoint_key_or_model():
+    config = ClaudeCodeConfig.inherited()
+
+    assert config.inherit_auth is True
+    assert (config.base_url, config.api_key, config.model) == ("", "", "")
+
+
+def test_an_ordinary_config_still_demands_a_key():
+    with pytest.raises(ValueError, match="api_key is required"):
+        ClaudeCodeConfig(base_url="https://x", api_key="", model="m")
+
+
+def test_an_inherited_run_leaves_the_user_s_own_login_alone(tmp_path):
+    captured = {}
+
+    async def fake_query(*, prompt, options):
+        captured["options"] = options
+        yield ResultMessage(
+            subtype="success", duration_ms=1, duration_api_ms=1,
+            is_error=False, num_turns=1, session_id="s",
+            total_cost_usd=0.0, usage={}, result="ok",
+        )
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig.inherited(), query_fn=fake_query
+    )
+    agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
+
+    # Setting any of these would point the CLI away from the user's own
+    # configuration directory and keychain.
+    assert captured["options"].env is None
+    assert captured["options"].model is None
+
+
+def test_an_empty_key_does_not_shred_the_error_message(tmp_path):
+    async def fake_query(*, prompt, options):
+        raise RuntimeError("connection refused")
+        yield  # pragma: no cover - generator shape only
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig.inherited(), query_fn=fake_query
+    )
+
+    with pytest.raises(AgentExecutionError) as failure:
+        agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
+
+    # `"text".replace("", x)` inserts x between every character.
+    assert str(failure.value) == "connection refused"

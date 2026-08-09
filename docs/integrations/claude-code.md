@@ -13,9 +13,33 @@ the server described here.
 
 ```bash
 pip install git+https://github.com/Fzkuji/Scriptorium.git
+claude plugin marketplace add Fzkuji/Scriptorium
+claude plugin install scriptorium@scriptorium
 ```
 
-Python 3.12 or newer is required.
+Python 3.12 or newer is required. Start a new session and memory is live:
+the plugin brings its own MCP server pointed at `~/.scriptorium/memory`,
+created on first use, and injects the protocol that makes the model use it.
+
+To keep memory somewhere else, or to run one workspace per project, skip
+the plugin's server and register your own — see *Register the server*
+below. The sections after it explain the workspace layout and the tools;
+none of it is required reading to start.
+
+### Codex
+
+The same plugin directory carries a `.codex-plugin/plugin.json`, so Codex
+picks up the skill, the hooks and the MCP server from it unchanged. Nothing
+to install by hand.
+
+### What runs in the background
+
+A Stop hook passes each finished turn to `scriptorium ingest`, which holds
+new turns until about 16k tokens have accumulated and then writes them into
+memory. Below that it exits immediately and costs nothing. The write runs
+as you — your existing login, your default model — so there is no second
+API key to provision. Point it somewhere cheaper with `--model`, and read
+what it did in `<workspace>/.scriptorium/ingest.log`.
 
 ## Create a workspace (optional)
 
@@ -110,6 +134,21 @@ made atomic together, so the two outcomes are reported separately rather than
 one being described as a rollback of the other.
 
 To version memory, run `git init` inside the workspace before registering.
+
+## Install the plugin
+
+The server makes memory possible; the plugin makes it happen. Registering
+the server alone leaves the model with six tools it is free to ignore, and
+a workspace nobody searches or writes to stays empty.
+
+```bash
+claude plugin validate ./claude-plugin --strict
+```
+
+The plugin adds a SessionStart hook that injects a memory protocol — when to
+search before answering, when to save a fact, and the reasoning that loses
+facts — plus a skill covering the mechanics of each call. It registers no
+server of its own, so it cannot collide with the registration above.
 
 ## Tools
 

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from scripts.model_capacity.calibrate_writer import evaluate_probe
-from src.runtime.capacity import (
+from memory.runtime.capacity import (
     SCHEMA,
     WriterCapacity,
     find_capacity_inversions,

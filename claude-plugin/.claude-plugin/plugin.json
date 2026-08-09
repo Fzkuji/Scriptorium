@@ -2,10 +2,14 @@
   "name": "scriptorium",
   "displayName": "Scriptorium",
   "version": "0.1.0",
-  "description": "Guidance for reading and updating a Markdown memory workspace over the scriptorium MCP server.",
+  "description": "Persistent Markdown memory. Searches memory before answering and writes the conversation back in the background, as files you can read and diff.",
   "author": {
     "name": "Scriptorium"
   },
   "license": "MIT",
-  "keywords": ["memory", "markdown", "mcp"]
+  "keywords": [
+    "memory",
+    "markdown",
+    "mcp"
+  ]
 }

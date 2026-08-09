@@ -6,9 +6,9 @@ from types import ModuleType
 
 import pytest
 
-import src.retrieval.embedding as embedding
-from src.retrieval.embedding import MemoryEmbeddingIndex
-from src.management import MemoryWorkspace
+import memory.retrieval.embedding as embedding
+from memory.retrieval.embedding import MemoryEmbeddingIndex
+from memory.management import MemoryWorkspace
 
 
 def _write_events(memory_dir: Path, events: list[dict]) -> None:
@@ -85,15 +85,19 @@ def test_embedding_search_ranks_topic_events_without_writing_files(tmp_path: Pat
     assert after == before
 
 
-def test_embedding_search_hard_caps_top_k_at_ten(tmp_path: Path):
+def test_embedding_search_hard_caps_top_k_at_fifty(tmp_path: Path):
+    # The index-level cap is 50 so fused search can widen candidates; the
+    # embedding_search tool still clamps top_k at 10 in tools.py.
     memory_dir = tmp_path / "memory"
     topic = memory_dir / "topics/events.md"
     topic.parent.mkdir(parents=True)
     topic.write_text(
         "# Events\n\n"
         + "\n".join(
-            f"[2023-05-{day:02d}] Event {day} [D1:{day}]"
-            for day in range(1, 13)
+            f"[2023-05-{day:02d}] Event {number} [D1:{number}]"
+            for number, day in enumerate(
+                list(range(1, 29)) * 3, start=1
+            )
         )
         + "\n",
         encoding="utf-8",
@@ -103,7 +107,7 @@ def test_embedding_search_hard_caps_top_k_at_ten(tmp_path: Path):
         "events", top_k=999
     )
 
-    assert len(results) == 10
+    assert len(results) == 50
 
 
 def test_embedding_search_filters_by_partial_temporal_window(tmp_path: Path):

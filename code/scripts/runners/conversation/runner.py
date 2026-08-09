@@ -6,15 +6,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from typing import Any
 
-from src import build as adapter
-from src import management as memory
-from src import retrieval
+from memory import build as adapter
+from memory import management as memory
+from memory import retrieval
 
 from scripts.runners.common import atomic_json, read_json, tree_sha256, utc_now
 from .config import parse_args
 from .data import check_benchmark, load_sample, sample_inventory
 from .evaluation import run_evaluator, verify_evaluator
-from src.runtime.billing import read_spend, spend_delta
+from memory.runtime.billing import read_spend, spend_delta
 
 from .metrics import latency_summary, memory_inventory, summarize_usage
 from .query import answer_question

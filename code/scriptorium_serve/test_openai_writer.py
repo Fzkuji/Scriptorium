@@ -22,7 +22,7 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from scriptorium_serve import server  # noqa: E402
-from src.agent_runtime import OpenAIAgentConfig, OpenAIWriterAgent  # noqa: E402
+from memory.agent_runtime import OpenAIAgentConfig, OpenAIWriterAgent  # noqa: E402
 
 USER = "eval:run_stub:locomo:conv-0"
 
@@ -160,7 +160,7 @@ def test_writer_reports_endpoint_failures(monkeypatch) -> None:
         ),
         client=SimpleNamespace(chat=SimpleNamespace(completions=_Failing())),
     )
-    from src.agent_runtime import AgentExecutionError
+    from memory.agent_runtime import AgentExecutionError
 
     with tempfile.TemporaryDirectory() as cwd:
         with pytest.raises(AgentExecutionError):
@@ -179,7 +179,7 @@ def test_api_key_is_redacted_from_errors() -> None:
         ),
         client=SimpleNamespace(chat=SimpleNamespace(completions=_Leaky())),
     )
-    from src.agent_runtime import AgentExecutionError
+    from memory.agent_runtime import AgentExecutionError
 
     with tempfile.TemporaryDirectory() as cwd:
         with pytest.raises(AgentExecutionError) as caught:

@@ -3,15 +3,15 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from src.runtime.state import (
+from memory.runtime.state import (
     RuntimeStateStore,
     SourceRecord,
     should_global_manage,
     should_incremental_write,
     should_local_reorganize,
 )
-from src.runtime.online import OnlineMemoryRuntime
-from src.management import MemoryWorkspace
+from memory.runtime.online import OnlineMemoryRuntime
+from memory.management import MemoryWorkspace
 
 
 def test_source_record_preserves_opaque_provider_ids_and_order():

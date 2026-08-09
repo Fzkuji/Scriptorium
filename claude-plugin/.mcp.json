@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "scriptorium": {
+      "command": "scriptorium",
+      "args": ["mcp", "--workspace", "~/.scriptorium/memory"]
+    }
+  }
+}

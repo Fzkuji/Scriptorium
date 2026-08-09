@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.runners.common import run_config, stop_on_signal
-from src import retrieval
+from memory import retrieval
 
 from .execution import answer_one, lme, run_pending
 from .results import load_completed_results, source_records, write_results

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from src.runtime.derived_views import rebuild_derived_views
-from src.markdown import EvidenceAnnotation, MemoryUnit
+from memory.runtime.derived_views import rebuild_derived_views
+from memory.markdown import EvidenceAnnotation, MemoryUnit
 
 
 def unit(memory_id, content, when, topic_path, order, ref="D1:1"):

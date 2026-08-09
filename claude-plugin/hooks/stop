@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Stop hook: hand the finished turn to the memory writer, in the background.
+#
+# The host passes the transcript path on stdin, so this never searches for
+# session files. `scriptorium ingest` decides whether there is enough new
+# conversation to be worth an agent call; the common answer is no, and it
+# costs nothing to ask.
+#
+# Detached on purpose: writing memory runs a model, and nobody should wait
+# on that between turns.
+
+set -uo pipefail
+
+command -v scriptorium >/dev/null 2>&1 || exit 0
+
+input=$(cat 2>/dev/null || true)
+[ -n "$input" ] || exit 0
+
+transcript=$(printf '%s' "$input" | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin).get("transcript_path") or "")
+except Exception:
+    pass
+' 2>/dev/null || true)
+
+[ -n "$transcript" ] && [ -f "$transcript" ] || exit 0
+
+workspace="${SCRIPTORIUM_WORKSPACE:-$HOME/.scriptorium/memory}"
+log="${workspace}/.scriptorium/ingest.log"
+mkdir -p "$(dirname "$log")" 2>/dev/null || true
+
+# nohup rather than setsid: setsid is Linux-only and this has to work on
+# macOS too. Backgrounded and detached from the hook's terminal so the
+# session never waits on a model call.
+nohup scriptorium ingest \
+    --transcript "$transcript" \
+    --workspace "$workspace" \
+    >>"$log" 2>&1 &
+disown 2>/dev/null || true
+
+exit 0

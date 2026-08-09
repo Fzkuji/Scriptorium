@@ -25,13 +25,28 @@ from scripts.runners.longmemeval.selection import (  # noqa: E402
     question_type_indices,
     round_robin_indices,
 )
-from src import build as adapter  # noqa: E402
-from src import management as memory  # noqa: E402
-from src import retrieval  # noqa: E402
+from memory import build as adapter  # noqa: E402
+from memory import management as memory  # noqa: E402
+from memory import retrieval  # noqa: E402
 
 
 # Config values naming a file resolve against the config file's directory.
-_PATH_KEYS = ("data", "output_dir", "writer_calibration", "claim_db", "claude_cli")
+_PATH_KEYS = (
+    "data", "output_dir", "writer_calibration", "claim_db", "claude_cli",
+    "answer_claude_cli", "api_key_file", "answer_api_key_file",
+)
+
+
+def _read_private_key(path: Path) -> str:
+    resolved = path.expanduser().resolve()
+    if not resolved.is_file():
+        raise ValueError(f"API key file does not exist: {resolved}")
+    if resolved.stat().st_mode & 0o077:
+        raise ValueError(f"API key file permissions must be 600: {resolved}")
+    value = resolved.read_text(encoding="utf-8").strip()
+    if not value:
+        raise ValueError(f"API key file is empty: {resolved}")
+    return value
 
 
 def parser() -> argparse.ArgumentParser:
@@ -43,11 +58,21 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--limit", type=int, required=True)
     result.add_argument("--base-url", required=True)
     result.add_argument("--model", default="gpt-5.5")
-    result.add_argument("--provider-name", default="provider")
-    result.add_argument("--api-key", required=True)
+    result.add_argument("--provider-name", default="frontier-intelligence")
+    builder_key = result.add_mutually_exclusive_group(required=True)
+    builder_key.add_argument("--api-key")
+    builder_key.add_argument("--api-key-file", type=Path)
     result.add_argument("--claude-cli")
+    result.add_argument("--answer-base-url")
+    result.add_argument("--answer-model")
+    answer_key = result.add_mutually_exclusive_group()
+    answer_key.add_argument("--answer-api-key")
+    answer_key.add_argument("--answer-api-key-file", type=Path)
+    result.add_argument("--answer-provider-name")
+    result.add_argument("--answer-claude-cli")
     result.add_argument("--max-turns", type=int, default=20)
     result.add_argument("--max-budget-usd", type=float)
+    result.add_argument("--build-only", action="store_true")
     result.add_argument("--resume", action="store_true")
     order = result.add_mutually_exclusive_group()
     order.add_argument("--round-robin-types", action="store_true")
@@ -80,6 +105,17 @@ def main() -> int:
     except run_config.ConfigError as exc:
         built.error(str(exc))
     args = built.parse_args()
+    try:
+        builder_api_key = (
+            _read_private_key(args.api_key_file)
+            if args.api_key_file else args.api_key
+        )
+        answer_api_key = (
+            _read_private_key(args.answer_api_key_file)
+            if args.answer_api_key_file else args.answer_api_key
+        )
+    except ValueError as exc:
+        built.error(str(exc))
     if args.writer_input_token_cap is not None and args.writer_input_token_cap < 1:
         raise SystemExit("--writer-input-token-cap must be positive")
 
@@ -129,11 +165,18 @@ def main() -> int:
     backend = retrieval.create_runtime(
         args.base_url,
         model=args.model,
-        api_key=args.api_key,
+        api_key=builder_api_key,
         cli_path=args.claude_cli,
+        query_base_url=args.answer_base_url,
+        query_model=args.answer_model,
+        query_api_key=answer_api_key,
+        query_cli_path=args.answer_claude_cli,
         build_config=build_config,
         query_config=query_config,
     )
+    answer_model = args.answer_model or args.model
+    answer_provider = args.answer_provider_name or args.provider_name
+    answer_base_url = args.answer_base_url or args.base_url
     config = {
         "build": asdict(build_config),
         "query": asdict(query_config),
@@ -142,14 +185,16 @@ def main() -> int:
         "method": {
             "name": "NativeMem",
             "implementation": "current",
-            "single_model_retrieve_answer": True,
+            "single_model_retrieve_answer": answer_model == args.model,
         },
         "models": {
             "builder": args.model,
-            "retriever": args.model,
-            "answerer": args.model,
-            "provider": args.provider_name,
-            "base_url": args.base_url,
+            "retriever": answer_model,
+            "answerer": answer_model,
+            "builder_provider": args.provider_name,
+            "answerer_provider": answer_provider,
+            "builder_base_url": args.base_url,
+            "answerer_base_url": answer_base_url,
         },
         "config": config,
         "code": {
@@ -190,7 +235,13 @@ def main() -> int:
         print(f"[{position}/{len(indices)}] item {index} {item['question_id']}", flush=True)
         try:
             ok, detail, _ = common.run_item(
-                index, item, output_dir, backend, run_meta, args.resume
+                index,
+                item,
+                output_dir,
+                backend,
+                run_meta,
+                args.resume,
+                build_only=args.build_only,
             )
         except common.ExistingStateError as exc:
             ok, detail = False, str(exc)
@@ -203,7 +254,9 @@ def main() -> int:
 
     manifest["last_invocation_finished_at"] = common.utc_now()
     manifest["last_invocation_failures"] = failures
-    manifest["status"] = "failed" if failures else "complete"
+    manifest["status"] = (
+        "failed" if failures else "built" if args.build_only else "complete"
+    )
     common.refresh_outputs(output_dir, manifest)
     return 1 if failures else 0
 

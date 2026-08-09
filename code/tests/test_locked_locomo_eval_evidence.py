@@ -17,7 +17,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 EVALUATOR = ROOT / "scripts" / "evaluation" / "eval_full.py"
 EXPECTED_EVALUATOR_SHA256 = (
-    "17ef2179cd2781880649eed4a7d62988c069123b5044f007c194cdab8e63f88b"
+    "17a47459994dfaf00074598dd0a7090b8bacb8a377d69ad482d04dd0b4bdf0b0"
 )
 
 

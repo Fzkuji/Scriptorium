@@ -18,9 +18,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.management import MemoryWorkspace
-from src.management.transaction import TransactionError
-from src.retrieval.layers import Layer, LayeredMemory
+from memory.management import MemoryWorkspace
+from memory.management.transaction import TransactionError
+from memory.retrieval.layers import Layer, LayeredMemory
 
 TOOL_NAMES = (
     "memory_status",

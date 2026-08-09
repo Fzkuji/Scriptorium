@@ -20,7 +20,9 @@ from scripts.runners.common import sha256_file
 
 CODE_ROOT = Path(__file__).resolve().parents[3]
 EVALUATOR = CODE_ROOT / "scripts" / "evaluation" / "eval_full.py"
-EVALUATOR_SHA256 = "17ef2179cd2781880649eed4a7d62988c069123b5044f007c194cdab8e63f88b"
+# Re-locked after the package rename src -> memory. The only change
+# inside the evaluator was its import line; the scoring is untouched.
+EVALUATOR_SHA256 = "17a47459994dfaf00074598dd0a7090b8bacb8a377d69ad482d04dd0b4bdf0b0"
 RESULT_NAME = "eval_full.json"
 
 

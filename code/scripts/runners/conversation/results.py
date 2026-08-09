@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from src import build as adapter
+from memory import build as adapter
 
 from scripts.runners.common import atomic_json, read_json, tree_sha256, utc_now
 from .metrics import memory_inventory

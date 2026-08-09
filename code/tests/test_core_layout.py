@@ -5,7 +5,7 @@ CODE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_current_core_is_imported_without_a_version_namespace():
-    from src import (
+    from memory import (
         BuildConfig,
         MemoryConfig,
         MemoryWorkspace,
@@ -14,16 +14,16 @@ def test_current_core_is_imported_without_a_version_namespace():
         collect_answer,
     )
 
-    assert BuildConfig.__module__ == "src.build"
-    assert MemoryConfig.__module__.startswith("src.management")
-    assert MemoryWorkspace.__module__.startswith("src.management")
-    assert QueryConfig.__module__ == "src.retrieval.config"
+    assert BuildConfig.__module__ == "memory.build"
+    assert MemoryConfig.__module__.startswith("memory.management")
+    assert MemoryWorkspace.__module__.startswith("memory.management")
+    assert QueryConfig.__module__ == "memory.retrieval.config"
     assert callable(build_memory)
     assert callable(collect_answer)
 
 
 def test_src_contains_only_core_packages():
-    source = CODE_ROOT / "src"
+    source = CODE_ROOT / "memory"
     assert not (source / "adapters").exists()
     for filename in (
         "chatgpt_proxy.py",
@@ -34,22 +34,22 @@ def test_src_contains_only_core_packages():
 
 
 def test_locked_evaluator_uses_the_scripts_evaluation_compatibility_link():
-    compatibility = CODE_ROOT / "src" / "evaluation"
+    compatibility = CODE_ROOT / "memory" / "evaluation"
     assert compatibility.is_symlink()
     assert compatibility.resolve() == (CODE_ROOT / "scripts" / "evaluation").resolve()
 
-    from src.evaluation.answerer import generate_answer
+    from memory.evaluation.answerer import generate_answer
 
     assert callable(generate_answer)
 
 
 def test_no_active_version_router_or_old_native_memory_modules():
     for relative in (
-        "src/nativemem.py",
-        "src/v8_memory.py",
-        "src/v10_memory.py",
-        "src/nativemem_versions",
-        "src/legacy",
+        "memory/nativemem.py",
+        "memory/v8_memory.py",
+        "memory/v10_memory.py",
+        "memory/nativemem_versions",
+        "memory/legacy",
         "baselines/adapters/run_nativemem.py",
     ):
         assert not (CODE_ROOT / relative).exists()

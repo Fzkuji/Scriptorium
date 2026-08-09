@@ -1,4 +1,4 @@
-from src.conversation import normalize_date
+from memory.conversation import normalize_date
 
 
 def test_normalize_locomo_date():

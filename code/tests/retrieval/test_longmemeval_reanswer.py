@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.runners import reanswer_longmemeval as MOD
-from src import retrieval
-from src.agent_runtime import AgentResult
-from src.retrieval import tools as retrieval_tools
-from src.retrieval.embedding import MemoryEmbeddingIndex
+from memory import retrieval
+from memory.agent_runtime import AgentResult
+from memory.retrieval import tools as retrieval_tools
+from memory.retrieval.embedding import MemoryEmbeddingIndex
 
 
 class ScriptedQueryAgent:
@@ -78,6 +78,7 @@ def test_query_agent_uses_framework_tools_and_reports_usage(tmp_path):
         {"question": "Where did the user move?"},
         memory_dir,
         {},
+        config=retrieval.QueryConfig(search_tools="split"),
     )
 
     assert answer == "Shanghai"
@@ -111,6 +112,25 @@ def test_create_runtime_uses_explicit_agent_without_mutating_environment(
     assert result.model == "deepseek-v4"
     assert os.environ["MODEL"] == "inherited-model"
     assert os.environ["BUILDER_KEY"] == "inherited-key"
+
+
+def test_runtime_keeps_builder_and_query_agents_separate():
+    builder = object()
+    answerer = object()
+
+    result = retrieval.create_runtime(
+        "https://builder.example/v1",
+        model="deepseek-builder",
+        api_key="builder-key",
+        agent=builder,
+        query_model="gpt-answerer",
+        query_agent=answerer,
+    )
+
+    assert result.builder_agent is builder
+    assert result.builder_model == "deepseek-builder"
+    assert result.agent is answerer
+    assert result.model == "gpt-answerer"
 
 
 def test_runtime_constructs_each_retrieval_index_once_across_threads():
@@ -239,7 +259,8 @@ def test_query_agent_can_choose_read_only_bm25(tmp_path):
     backend, _logged = scripted_backend(agent)
 
     memories, _steps, answer, trace = retrieval.collect_answer(
-        backend, {"question": "What degree?"}, memory_dir, {}
+        backend, {"question": "What degree?"}, memory_dir, {},
+        config=retrieval.QueryConfig(search_tools="split"),
     )
 
     assert answer == "Business Administration"
@@ -291,6 +312,7 @@ def test_query_agent_forwards_time_window_to_embedding_search(
         {"question": "What did Melanie paint in 2023?"},
         memory_dir,
         {},
+        config=retrieval.QueryConfig(search_tools="split"),
     )
 
     assert answer == "spring sunrise"
@@ -327,19 +349,13 @@ def test_scriptorium_inventory_and_file_reader_expose_sources(tmp_path):
     ) == "raw source\n"
 
 
-def test_scriptorium_file_reader_exposes_line_window_parameters(tmp_path):
+def test_scriptorium_file_reader_selects_a_line_window(tmp_path):
+    """Retrieval reads files through the built-in tools, but the view helper
+    still backs the visibility rules the conditions depend on."""
     path = tmp_path / "topics/notes.md"
     path.parent.mkdir()
     path.write_text("one\ntwo\nthree\n", encoding="utf-8")
-    tool = next(
-        definition
-        for definition in retrieval.TOOL_DEFINITIONS
-        if definition["function"]["name"] == "read_memory_file"
-    )
-    properties = tool["function"]["parameters"]["properties"]
 
-    assert properties["offset"]["minimum"] == 1
-    assert properties["limit"]["minimum"] == 1
     assert retrieval.read_memory_file(
         tmp_path, "topics/notes.md", offset=2, limit=1
     ) == "two\n"
@@ -402,10 +418,10 @@ def test_scriptorium_ablation_conditions_change_views_and_tools(tmp_path):
         )
     } == {"topics/topic.md", "timeline/day.md", "sources/thread.md"}
 
-    def tool_names(condition):
+    def tool_names(condition, search_tools="fused"):
         return {
             tool["function"]["name"]
-            for tool in retrieval.tools_for(condition)
+            for tool in retrieval.tools_for(condition, search_tools)
         }
 
     def tool_properties(name):
@@ -418,9 +434,18 @@ def test_scriptorium_ablation_conditions_change_views_and_tools(tmp_path):
 
     assert "search_memory" not in tool_names("native")
     assert "bash" not in tool_names("dual_source")
-    assert {"bm25_search", "embedding_search"} <= tool_names("dual_source")
-    assert "bm25_search" not in tool_names("timeline_source")
-    assert "embedding_search" not in tool_names("timeline_source")
+    # Search defaults to the fused entry point; the two backends it replaced
+    # stay available as an ablation, and neither set appears without an index.
+    assert "memory_search" in tool_names("dual_source")
+    assert not {"bm25_search", "embedding_search"} & tool_names("dual_source")
+    assert {"bm25_search", "embedding_search"} <= tool_names(
+        "dual_source", "split"
+    )
+    assert "memory_search" not in tool_names("dual_source", "split")
+    for search_tools in ("fused", "split"):
+        assert not {
+            "bm25_search", "embedding_search", "memory_search"
+        } & tool_names("timeline_source", search_tools)
     assert "resolve_sources" not in tool_names("native")
     assert {"date_from", "date_to"} <= tool_properties("bm25_search")
     assert {"date_from", "date_to"} <= tool_properties(

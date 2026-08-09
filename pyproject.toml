@@ -21,7 +21,7 @@ package-dir = { "" = "code" }
 
 [tool.setuptools.packages.find]
 where = ["code"]
-include = ["scriptorium*", "src*"]
+include = ["scriptorium*", "memory*"]
 
 # pytest config stays in code/pytest.ini, which the documented test commands
 # already use; duplicating it here would silently change how tests resolve.

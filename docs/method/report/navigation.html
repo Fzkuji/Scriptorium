@@ -1,0 +1,226 @@
+<title>NativeMem · 导航短板图解</title>
+<style>
+  :root {
+    --ground: #f7f5f0; --surface: #fffefb; --ink: #1c1e24; --ink-soft: #4a4e58;
+    --ink-faint: #8b8f99; --rule: #e2ddd2; --rule-soft: #ece8df; --accent: #2f6f8f;
+    --accent-soft: #dcebf1; --good: #2e7d54; --good-bg: #e0f0e6; --warn: #a8721a;
+    --warn-bg: #f5ead2; --crit: #b23b3b; --crit-bg: #f7e0dd; --dim: #c9c3b6;
+    --mono: "SFMono-Regular","JetBrains Mono","Menlo","Consolas",monospace;
+    --sans: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:#14161b; --surface:#1b1e25; --ink:#e8e6df; --ink-soft:#b0b3bc;
+      --ink-faint:#7d818c; --rule:#2c303a; --rule-soft:#23262f; --accent:#6cb6d6;
+      --accent-soft:#1e3844; --good:#66c58c; --good-bg:#163325; --warn:#d6a545;
+      --warn-bg:#33290f; --crit:#e07a7a; --crit-bg:#3a201f; --dim:#3a3e48;
+    }
+  }
+  :root[data-theme="light"]{--ground:#f7f5f0;--surface:#fffefb;--ink:#1c1e24;--ink-soft:#4a4e58;--ink-faint:#8b8f99;--rule:#e2ddd2;--rule-soft:#ece8df;--accent:#2f6f8f;--accent-soft:#dcebf1;--good:#2e7d54;--good-bg:#e0f0e6;--warn:#a8721a;--warn-bg:#f5ead2;--crit:#b23b3b;--crit-bg:#f7e0dd;--dim:#c9c3b6;}
+  :root[data-theme="dark"]{--ground:#14161b;--surface:#1b1e25;--ink:#e8e6df;--ink-soft:#b0b3bc;--ink-faint:#7d818c;--rule:#2c303a;--rule-soft:#23262f;--accent:#6cb6d6;--accent-soft:#1e3844;--good:#66c58c;--good-bg:#163325;--warn:#d6a545;--warn-bg:#33290f;--crit:#e07a7a;--crit-bg:#3a201f;--dim:#3a3e48;}
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink); font-family:var(--sans); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width: 960px; margin:0 auto; padding: 3.5rem 1.5rem 5rem; }
+  .eyebrow { font-family:var(--mono); font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; color:var(--accent); margin:0 0 .6rem; }
+  h1 { font-family:var(--mono); font-weight:600; font-size:clamp(1.7rem,3.6vw,2.4rem); letter-spacing:-.01em; margin:0 0 .7rem; line-height:1.15; text-wrap:balance; }
+  .sub { color:var(--ink-soft); font-size:1.02rem; max-width:62ch; margin:0 0 2.6rem; }
+
+  h2 { font-family:var(--mono); font-size:1.15rem; font-weight:600; margin:0 0 .3rem; }
+  .lead-in { color:var(--ink-soft); font-size:.94rem; margin:0 0 1.2rem; max-width:66ch; }
+  section { margin-bottom: 3.2rem; }
+  code, .kw { font-family:var(--mono); font-size:.86em; background:var(--rule-soft); padding:.08em .38em; border-radius:3px; }
+
+  /* 双视图仓库 */
+  .repo { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin:1.2rem 0; }
+  @media (max-width:640px){ .repo{ grid-template-columns:1fr; } }
+  .view { border:1px solid var(--rule); border-radius:10px; background:var(--surface); overflow:hidden; }
+  .view-hd { font-family:var(--mono); font-size:.78rem; font-weight:600; padding:.6rem .9rem; letter-spacing:.04em; border-bottom:1px solid var(--rule); display:flex; align-items:center; gap:.5rem; }
+  .view.timeline .view-hd { background:var(--warn-bg); color:var(--warn); }
+  .view.topics .view-hd { background:var(--accent-soft); color:var(--accent); }
+  .view-body { padding:.7rem .9rem; font-family:var(--mono); font-size:.8rem; color:var(--ink-soft); }
+  .view-body .f { padding:.16rem 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .view-body .f b { color:var(--ink); font-weight:600; }
+  .tag { font-family:var(--mono); font-size:.62rem; padding:.05em .45em; border-radius:20px; margin-left:auto; letter-spacing:.05em; }
+  .tag.seen { background:var(--good-bg); color:var(--good); }
+  .tag.blind { background:var(--crit-bg); color:var(--crit); }
+
+  /* 地图对比 */
+  .maps { display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin:1.4rem 0; }
+  @media (max-width:640px){ .maps{ grid-template-columns:1fr; } }
+  .map { border:1.5px solid var(--rule); border-radius:10px; background:var(--surface); padding:1.1rem 1.2rem; }
+  .map.now { border-color:var(--crit); }
+  .map.fix { border-color:var(--good); }
+  .map-hd { font-family:var(--mono); font-size:.82rem; font-weight:600; margin:0 0 .2rem; display:flex; align-items:center; gap:.5rem; }
+  .map.now .map-hd { color:var(--crit); }
+  .map.fix .map-hd { color:var(--good); }
+  .map-cap { font-size:.8rem; color:var(--ink-faint); margin:0 0 .9rem; }
+  .map pre { font-family:var(--mono); font-size:.78rem; line-height:1.55; margin:0; white-space:pre-wrap; color:var(--ink-soft); }
+  .map pre .on { color:var(--accent); font-weight:600; }
+  .map pre .newline { color:var(--good); font-weight:600; }
+  .map pre .gone { color:var(--dim); }
+
+  /* 走位剧情 */
+  .story { border:1px solid var(--rule); border-radius:10px; background:var(--surface); overflow:hidden; margin:1.2rem 0; }
+  .step { display:grid; grid-template-columns:2.2rem 1fr; gap:.8rem; padding:.9rem 1.1rem; border-bottom:1px solid var(--rule-soft); align-items:start; }
+  .step:last-child { border-bottom:none; }
+  .step .n { font-family:var(--mono); font-size:.78rem; font-weight:600; color:var(--ink-faint); padding-top:.1rem; }
+  .step.bad { background:var(--crit-bg); }
+  .step.bad .n { color:var(--crit); }
+  .step .txt { font-size:.9rem; }
+  .step .txt b { font-family:var(--mono); }
+  .step .why { display:block; font-size:.8rem; color:var(--ink-faint); margin-top:.15rem; }
+
+  .callout { border-left:3px solid var(--accent); background:var(--accent-soft); padding:.9rem 1.1rem; border-radius:0 6px 6px 0; margin:1.3rem 0; font-size:.93rem; }
+  .callout b { color:var(--accent); }
+  .callout.crit { border-left-color:var(--crit); background:var(--crit-bg); }
+  .callout.crit b { color:var(--crit); }
+
+  .code-src { border:1px solid var(--rule); border-radius:10px; background:var(--surface); padding:1rem 1.1rem; margin:1.1rem 0; overflow-x:auto; }
+  .code-src pre { font-family:var(--mono); font-size:.8rem; line-height:1.6; margin:0; color:var(--ink-soft); white-space:pre; }
+  .code-src .cmt { color:var(--ink-faint); }
+  .code-src .hl-bad { color:var(--crit); font-weight:600; background:var(--crit-bg); padding:.05em .3em; border-radius:3px; }
+
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin:1rem 0; }
+  @media (max-width:640px){ .split{ grid-template-columns:1fr; } }
+  .split-col { border:1px solid var(--rule); border-radius:8px; padding:.8rem 1rem; background:var(--surface); }
+  .split-col.ok { border-left:3px solid var(--good); }
+  .split-col.bad { border-left:3px solid var(--crit); }
+  .split-hd { font-family:var(--mono); font-size:.82rem; font-weight:600; margin:0 0 .3rem; }
+  .split-col.ok .split-hd { color:var(--good); }
+  .split-col.bad .split-hd { color:var(--crit); }
+  .split-txt { font-size:.86rem; color:var(--ink-soft); margin:0; }
+
+  .breakdown { display:flex; gap:.5rem; margin:1.2rem 0; height:44px; border-radius:8px; overflow:hidden; font-family:var(--mono); font-size:.74rem; }
+  .breakdown .seg { display:flex; align-items:center; justify-content:center; color:#fff; font-weight:600; }
+  .seg.nav { background:var(--crit); flex:12; }
+  .seg.write { background:var(--warn); flex:2; }
+  .seg.ans { background:var(--ink-faint); flex:1; }
+  .legend { display:flex; flex-wrap:wrap; gap:1.2rem; font-size:.82rem; color:var(--ink-soft); margin-top:.6rem; }
+  .legend i { display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:.4rem; vertical-align:middle; }
+
+  footer { border-top:1px solid var(--rule); margin-top:3.5rem; padding-top:1.2rem; font-family:var(--mono); font-size:.75rem; color:var(--ink-faint); }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">NativeMem v8 · 短板图解</p>
+  <h1>模型进门,只拿到半张地图</h1>
+  <p class="sub">open-domain 15 道错题里,12 道不是记忆没存,而是模型<b>导航到错地方</b>。下面用三步说清楚它错在哪、怎么修。</p>
+
+  <!-- 1 -->
+  <section>
+    <h2>1 · 记忆有两个视图,信息其实都存了</h2>
+    <p class="lead-in">每条对话蒸馏出的事件,同时写进<b>时间线</b>(按年-月排)和<b>主题</b>(按人-事聚合)。以"Maria 去 hiking"为例,两边都有它。</p>
+    <div class="repo">
+      <div class="view timeline">
+        <div class="view-hd">📅 timeline/2023/07-Jul.md</div>
+        <div class="view-body">
+          <div class="f"><b>D24:6</b> · Maria 教会野餐 <span class="tag seen">存了</span></div>
+          <div class="f"><b>D25:2</b> · Maria 和教友去 hiking <span class="tag seen">存了</span></div>
+          <div class="f"><b>D27:1</b> · Maria 报名 aerial yoga <span class="tag seen">存了</span></div>
+        </div>
+      </div>
+      <div class="view topics">
+        <div class="view-hd">🗂 topics/Maria-outdoor.md</div>
+        <div class="view-body">
+          <div class="f"><b>D25:2</b> · hiking with church friends <span class="tag seen">存了</span></div>
+          <div class="f"><b>D24:6</b> · church picnic <span class="tag seen">存了</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="lead-in" style="margin-bottom:0">写入没问题——金标信息在两个视图里<b>都能 grep 到</b>。瓶颈在下一步。</p>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2>2 · 但模型进门拿到的"地图"只列了主题,没列时间线</h2>
+    <p class="lead-in">检索起点,代码把一张目录清单(<code>_v8_topic_list</code>)喂给模型当地图。问题:这张清单<b>只列 topics/ 文件名,完全不列 timeline/</b>。</p>
+    <div class="maps">
+      <div class="map now">
+        <p class="map-hd">✕ 现在的地图</p>
+        <p class="map-cap">模型第一眼只看得到主题文件</p>
+<pre>topics/
+  <span class="on">Maria-outdoor.md</span>
+  <span class="on">Maria-work.md</span>
+  <span class="on">John-family.md</span>
+  ...
+
+<span class="gone">timeline/  ← 看不见</span>
+<span class="gone">  2023/07-Jul.md</span>
+<span class="gone">  2023/08-Aug.md</span></pre>
+      </div>
+      <div class="map fix">
+        <p class="map-hd">✓ 补上之后</p>
+        <p class="map-cap">主题 + 时间线骨架都在起点可见</p>
+<pre>topics/
+  <span class="on">Maria-outdoor.md</span>
+  <span class="on">Maria-work.md</span>
+  ...
+
+timeline/
+  <span class="newline">2023/07-Jul.md  (14 事件)</span>
+  <span class="newline">2023/08-Aug.md  (9 事件)</span></pre>
+      </div>
+    </div>
+    <p class="callout crit"><b>后果</b> — 问"Maria 七月做了什么户外活动",模型看不到 timeline 的月份索引,只能在主题文件里盲翻,很容易抓到<b>同月相邻</b>的错事件。</p>
+  </section>
+
+  <!-- 2.5 -->
+  <section>
+    <h2>为什么时间线没看到?——不是丢了,是当初就没喂</h2>
+    <p class="lead-in">追到代码里,原因就在这个 7 行的地图函数 <code>_v8_topic_list</code>(<span class="kw">run_nativemem.py:286</span>)。它<b>只 listdir 了 topics/ 目录,从头到尾没碰 timeline/</b>。</p>
+    <div class="code-src">
+<pre><span class="cmt"># 列出 topics/ 下所有话题文件名，当检索的"地图"喂给模型。</span>
+def _v8_topic_list(memory_dir):
+    topics_dir = os.path.join(memory_dir, <span class="hl-bad">"topics"</span>)   <span class="cmt">← 写死只看 topics</span>
+    names = sorted(fn[:-3] for fn in os.listdir(topics_dir)
+                   if fn.endswith(".md"))
+    return "\n".join(f"- {n}" for n in names)
+    <span class="cmt"># timeline/ 目录:这里一次都没出现</span></pre>
+    </div>
+    <p class="lead-in" style="margin:1rem 0 0">不是 bug,是<b>入口和存储脱节</b>:</p>
+    <div class="split">
+      <div class="split-col ok">
+        <p class="split-hd">✓ 存储层(distill 时)</p>
+        <p class="split-txt">两个视图都写。timeline/ 和 topics/ 里信息都齐。</p>
+      </div>
+      <div class="split-col bad">
+        <p class="split-hd">✕ 检索入口层(这个函数)</p>
+        <p class="split-txt">只把 topics/ 拼进地图。timeline/ 存在,但模型进门看不到。</p>
+      </div>
+    </div>
+    <p class="callout"><b>推测的成因</b> — v8 先做的主题视图,地图函数跟着主题写死。时间线视图是<b>后加</b>的,加的时候在存储层两边都补了,但这个检索入口的地图函数<b>忘了同步更新</b>。于是"库里两个视图都在,模型进门只看得到一个"。</p>
+    <p class="callout" style="border-left-color:var(--good)"><b>修法</b> — 在这个函数里再 <span class="kw">listdir</span> 一下 timeline/,把年-月文件拼进返回字符串(顺手带上每月事件计数)。改动<b>就这一个函数</b>。</p>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2>3 · 于是它这样走错门(真实错例 s2_q128)</h2>
+    <p class="lead-in">金标答案是 <b>hiking</b>(D25:2),两个视图都存着。看模型的实际走位:</p>
+    <div class="story">
+      <div class="step"><div class="n">Q</div><div class="txt">问:Maria 上个月和教友一起做了什么户外活动?<span class="why">金标:hiking(D25:2)</span></div></div>
+      <div class="step"><div class="n">1</div><div class="txt">地图里只有 topics/,看不到 timeline 的七月索引<span class="why">时序线索(“上个月”)用不上</span></div></div>
+      <div class="step bad"><div class="n">2</div><div class="txt">在 <b>Maria-outdoor.md</b> 里 grep,命中一堆相邻事件<span class="why">picnic 和 hiking 挨在一起,语义又都是“教友+户外”</span></div></div>
+      <div class="step bad"><div class="n">3</div><div class="txt">选了 <b>D24:6 picnic</b> 回溯原文,答成 “church picnic”<span class="why">✕ 错召回:选中了语义相近的邻居</span></div></div>
+    </div>
+    <p class="callout"><b>关键</b> — 信息一直在库里。模型不是没存,是在扁平的主题清单里<b>挑错了那一条</b>。给它时间线骨架,它第一步就能靠“上个月”直接定位到七月,不用盲挑。</p>
+  </section>
+
+  <!-- 汇总 -->
+  <section>
+    <h2>4 · 15 道错题的归因</h2>
+    <div class="breakdown">
+      <div class="seg nav">导航/召回 · 12</div>
+      <div class="seg write">写入 · 2</div>
+      <div class="seg ans">答题 · 1</div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--crit)"></i>导航/召回:存了但选错/没走到 —— <b>主根因,也是最好修的</b></span>
+      <span><i style="background:var(--warn)"></i>写入:摘要丢词 / 多模态没进 pipeline</span>
+      <span><i style="background:var(--ink-faint)"></i>答题:召回对了但答错</span>
+    </div>
+    <p class="callout" style="margin-top:1.4rem"><b>下一步</b> — 先做“地图补 timeline 骨架”:改动集中在喂给模型的起点清单一处,直接治 12/15 里的时序类错召回,ROI 最高。</p>
+  </section>
+
+  <footer>NativeMem v8 · open-domain 归因:检索/导航 12 · 写入 2 · 答题 1 · 数据源 results/v8ab3-B</footer>
+</div>

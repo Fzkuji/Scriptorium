@@ -38,7 +38,7 @@ os.environ["ANSWERER_KEY"] = ANS_KEY
 
 from concurrent.futures import ThreadPoolExecutor
 import requests
-from src.evaluation.answerer import generate_answer
+from memory.evaluation.answerer import generate_answer
 
 # merge all sample questions
 records = []

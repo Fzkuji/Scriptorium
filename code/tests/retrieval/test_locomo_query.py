@@ -1,4 +1,4 @@
-from src import conversation
+from memory import conversation
 
 
 def test_scriptorium_query_source_index_accepts_the_same_opaque_ids_as_topics():

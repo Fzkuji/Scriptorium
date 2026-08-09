@@ -1,0 +1,16 @@
+{
+  "name": "scriptorium",
+  "description": "Markdown memory for coding agents: files you can read, diff and keep",
+  "owner": {
+    "name": "Scriptorium"
+  },
+  "plugins": [
+    {
+      "name": "scriptorium",
+      "description": "Persistent Markdown memory. Injects a protocol telling the model when to search memory before answering and when to save what the user just said, plus the mechanics of each memory_* call.",
+      "version": "0.1.0",
+      "source": "./claude-plugin",
+      "keywords": ["memory", "markdown", "mcp"]
+    }
+  ]
+}

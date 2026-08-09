@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from src.agent_runtime import AgentResult
-from src.management import (
+from memory.agent_runtime import AgentResult
+from memory.management import (
     MemoryWorkspace,
     _run_agent,
-    manage_memory,
     organize_topics,
     verify_session,
 )
-from src import build as adapter
-from src import management as memory
-from src.markdown import parse_topic_tree
+from memory import build as adapter
+from memory import management as memory
+from memory.markdown import parse_topic_tree
+from memory.workspace_layout import RUNTIME_DIR_NAMES
 
 
 class ScriptedAgent:
@@ -114,12 +114,14 @@ def test_writer_delegates_tool_protocol_and_errors_to_agent(tmp_path: Path):
         ("shell", {"command": valid}),
     ])
 
-    audit = memory.write_session(
+    audit = memory.write_sessions(
         tmp_path,
         agent=agent,
-        observation_date="2023-05-23",
-        turns=[("user", "I bought a tank")],
-        refs=["D1:1"],
+        sessions=[{
+            "observation_date": "2023-05-23",
+            "turns": [("user", "I bought a tank")],
+            "refs": ["D1:1"],
+        }],
     )
 
     assert len(agent.calls) == 1
@@ -249,21 +251,29 @@ def test_shell_resolves_temporary_cross_topic_block_link(tmp_path: Path):
     workspace.shell(
         "mkdir -p topics/people && "
         "printf '%s\\n' '# Caroline' '' "
-        "'On 2026-01-01 Caroline was friends with "
-        "[Melanie](melanie.md#^new-block-melanie)."
-        "[^new-evidence-caroline] ^new-block-caroline' '' "
-        "'[^new-evidence-caroline]: Time: `2026-01-01`; Sources: D1:1' "
+        "'On 2026-01-01 Caroline was friends with Melanie.[^e1]' '' "
+        "'[^e1]: Time: `2026-01-01`; Sources: D1:1' "
         "> topics/people/caroline.md && "
         "printf '%s\\n' '# Melanie' '' "
-        "'On 2026-01-01 Melanie was friends with Caroline."
-        "[^new-evidence-melanie] ^new-block-melanie' '' "
-        "'[^new-evidence-melanie]: Time: `2026-01-01`; Sources: D1:2' "
+        "'On 2026-01-01 Melanie was friends with Caroline.[^e2]' '' "
+        "'[^e2]: Time: `2026-01-01`; Sources: D1:2' "
         "> topics/people/melanie.md"
     )
 
     units = {unit.topic_path: unit for unit in parse_topic_tree(tmp_path / "topics")}
-    source = units["people/caroline.md"]
     target = units["people/melanie.md"]
+    workspace.shell(
+        "python3 - <<'PY'\n"
+        "from pathlib import Path\n"
+        "p = Path('topics/people/caroline.md'); t = p.read_text()\n"
+        "t = t.replace('friends with Melanie.',"
+        f" 'friends with [Melanie](melanie.md#^{target.memory_id}).')\n"
+        "p.write_text(t)\n"
+        "PY"
+    )
+
+    units = {unit.topic_path: unit for unit in parse_topic_tree(tmp_path / "topics")}
+    source = units["people/caroline.md"]
     assert f"melanie.md#^{target.memory_id}" in source.content
     relations = json.loads((tmp_path / "relations.json").read_text())
     assert relations["outbound"][source.memory_id] == [target.memory_id]
@@ -345,9 +355,11 @@ def test_append_event_reuses_existing_heading_prefix(tmp_path: Path):
 
 
 def test_manager_exposes_only_shell_and_uses_twenty_turn_limit(tmp_path):
+    (tmp_path / "topics").mkdir()
+    (tmp_path / "topics" / "a.md").write_text("# A\n", encoding="utf-8")
     agent = ScriptedAgent()
 
-    audit = manage_memory(tmp_path, agent=agent)
+    audit = organize_topics(tmp_path, agent=agent)
 
     assert [definition.name for definition in agent.calls[0]["tools"]] == [
         "shell"
@@ -366,25 +378,28 @@ def test_local_organizer_receives_only_touched_topic_scope(tmp_path):
     )
 
     task = agent.calls[0]["prompt"]
-    assert "Limit this maintenance pass to these topic files" in task
+    # Scoped to the touched files, and structural: the pass moves things
+    # around rather than reproducing prose and footnotes it did not change.
+    assert "Topic files" in task
+    assert "Never rewrite a whole file" in task
     assert "topics/projects/a.md" in task
     assert "topics/projects/b.md" in task
 
 
 def test_writer_may_read_but_must_not_modify_archived_sources():
-    from src.management.prompts import SYSTEM_PROMPT, WRITER_BATCH_TASK, WRITER_TASK
+    from memory.prompts import SYSTEM_PROMPT, WRITE_MEMORY
 
-    for prompt in (WRITER_TASK, WRITER_BATCH_TASK):
-        assert (
-            "Inspect whichever existing Topic, Core, or Source files are useful."
-            in prompt
-        )
-        assert "Do not modify files under sources/." in prompt
-    assert "[^new-evidence-example] ^new-block-example" in SYSTEM_PROMPT
+    # Reading the evidence is allowed; writing to it is not, and the task
+    # says where the fact goes instead.
+    assert "read-only" in WRITE_MEMORY
+    assert "sources/" in WRITE_MEMORY
+    assert "topics/" in WRITE_MEMORY
+    assert "[^e1]" in SYSTEM_PROMPT
     assert (
-        "Time: `<time>`; Sources: <complete-source-handle-from-input>"
+        "[^e1]: Time: `<time>`; Sources: provider/thread_id/message_id"
         in SYSTEM_PROMPT
     )
+    assert "Never write a block ID yourself." in SYSTEM_PROMPT
 
 
 def test_workspace_structure_lists_all_shell_visible_memory_views(tmp_path):
@@ -554,7 +569,6 @@ def test_shell_normalizes_and_validates_core_source_references(tmp_path: Path):
     assert re.search(r"\^[0-9a-f]{8}$", text, re.MULTILINE)
     assert (
         "[diagnostic/thread-1/msg-1]"
-        "(sources/diagnostic/thread-1.md#source-54a317afec5ee542)"
     ) in text
 
 
@@ -601,7 +615,7 @@ def test_core_memory_restores_previous_content_when_commit_fails(
         return original_replace(source, destination)
 
     monkeypatch.setattr(
-        "src.management.block_views.os.replace",
+        "memory.management.block_views.os.replace",
         fail_core_install,
     )
 
@@ -714,7 +728,8 @@ def test_shell_move_rewrites_cross_topic_block_link_and_installs_relations(
     assert relations["backlinks"][target_id] == [source_id]
 
 
-def test_deleting_last_topic_block_clears_only_derived_views(tmp_path: Path):
+def test_deleting_a_topic_block_is_rejected(tmp_path: Path):
+    """A block ID is how every view reaches a memory, so it cannot vanish."""
     workspace = MemoryWorkspace(tmp_path)
     workspace.archive_sessions([{
         "observation_date": "2026-01-01",
@@ -726,14 +741,11 @@ def test_deleting_last_topic_block_clears_only_derived_views(tmp_path: Path):
         "topic_path": "a.md", "headings": ["A"],
     }])
 
-    workspace.shell("rm topics/a.md")
+    with pytest.raises(ValueError, match="block ID must not be removed"):
+        workspace.shell("rm topics/a.md")
 
-    assert (tmp_path / "recent_events.jsonl").read_text() == ""
-    assert not list((tmp_path / "timeline").rglob("*.md"))
-    assert json.loads((tmp_path / "relations.json").read_text()) == {
-        "backlinks": {}, "outbound": {}
-    }
-    assert "fact" in (tmp_path / "sources/D1.md").read_text()
+    assert (tmp_path / "topics/a.md").is_file()
+    assert json.loads((tmp_path / "relations.json").read_text())["outbound"]
 
 
 def test_recent_fifo_keeps_full_creation_order_outside_the_window(
@@ -795,7 +807,7 @@ def test_block_transaction_restores_every_installed_view_on_install_failure(
         return original_replace(source, destination)
 
     monkeypatch.setattr(
-        "src.management.block_views.os.replace",
+        "memory.management.block_views.os.replace",
         fail_relations_install,
     )
 
@@ -888,7 +900,7 @@ def test_scriptorium_build_verifies_each_session_before_next_write(
     )
     monkeypatch.setattr(
         adapter.memory,
-        "manage_memory",
+        "organize_topics",
         lambda *args, **kwargs: calls.append(("manage", None)) or [],
     )
 
@@ -968,12 +980,10 @@ def test_scriptorium_build_runs_local_reorganization_at_fixed_session_intervals(
     monkeypatch.setattr(
         adapter.memory,
         "organize_topics",
-        lambda *args, **kwargs: local_calls.append(set(kwargs["touched"])) or [],
-    )
-    monkeypatch.setattr(
-        adapter.memory,
-        "manage_memory",
-        lambda *args, **kwargs: [],
+        lambda *args, **kwargs: (
+            local_calls.append(set(kwargs["touched"]))
+            if kwargs.get("touched") is not None else None
+        ) or [],
     )
 
     adapter.build_memory(
@@ -1024,7 +1034,7 @@ def test_scriptorium_final_management_requires_new_memory_and_can_be_disabled(
     )
     monkeypatch.setattr(
         adapter.memory,
-        "manage_memory",
+        "organize_topics",
         lambda *args, **kwargs: calls.append("manage") or [],
     )
 
@@ -1146,7 +1156,12 @@ def test_verify_session_does_not_repair_when_memory_answers_probe(
     assert result["repaired"] is False
     assert result["initial"]["answer"] == "6:30 AM"
     assert result["post_repair"] is None
-    assert list(tmp_path.rglob("*")) == before
+    # Memory is untouched. The runtime directory is not memory: verification
+    # records its own trajectory there whether or not it changed anything.
+    assert [
+        path for path in tmp_path.rglob("*")
+        if not any(part in RUNTIME_DIR_NAMES for part in path.parts)
+    ] == before
     assert agent.calls[0]["output_schema"]["required"] == [
         "question", "expected_answer", "refs"
     ]
@@ -1195,3 +1210,72 @@ def test_verify_session_repairs_then_retries_same_question(tmp_path):
     assert result["post_repair"]["question"] == result["probe"]["question"]
     assert (tmp_path / "topics/routines/daily.md").exists()
     assert (tmp_path / "timeline/2023/05/23.md").exists()
+
+
+def test_every_agent_run_is_recorded_with_what_it_was_sent(tmp_path):
+    """Usage counters say a batch took N turns; the history says what it did."""
+    import json as _json
+    from memory.workspace_layout import runtime_dir
+
+    agent = ScriptedAgent(text="wrote it")
+
+    memory.write_sessions(
+        tmp_path,
+        agent=agent,
+        sessions=[{
+            "observation_date": "2023-05-23",
+            "turns": [("user", "I bought a tank")],
+            "refs": ["D1:1"],
+        }],
+    )
+
+    history = runtime_dir(tmp_path) / "agent-history.jsonl"
+    records = [_json.loads(line) for line in history.read_text().splitlines()]
+
+    assert len(records) == 1
+    assert records[0]["stage"] == "write"
+    # What the model was sent, and what it sent back.
+    assert "I bought a tank" in records[0]["prompt"]
+    assert "memory workspace" in records[0]["system_prompt"]
+    assert records[0]["reply"] == "wrote it"
+    assert "turns" in records[0]
+    # The log describes how memory was made; it is not itself memory.
+    assert not (tmp_path / "agent-history.jsonl").exists()
+
+
+def test_a_failed_shell_command_is_told_which_tool_to_use(tmp_path):
+    """A shell error explains itself in the shell's terms.
+
+    Naming the tool that does the job turns a retry-the-same-thing loop into
+    one corrected call.
+    """
+    import asyncio as _asyncio
+    from memory.management.tools import management_tools
+
+    workspace = MemoryWorkspace(tmp_path)
+    shell = management_tools(workspace, [])[0]
+
+    result = _asyncio.run(shell.handler(
+        {"command": "cat > topics/people/new.md <<'EOF'\nhi\nEOF"}
+    ))
+
+    text = result["content"][0]["text"]
+    assert result["is_error"] is True
+    assert "No such file or directory" in text
+    assert "Use the Write tool" in text
+
+
+def test_a_rejected_edit_is_told_what_to_change(tmp_path):
+    from memory.management.agent import _repair_guidance
+
+    assert "keeps that ID" in _repair_guidance(
+        "ValueError: block ID must not be removed: 7ffb575c"
+    )
+    assert "definition line" in _repair_guidance(
+        "TopicFormatError: memory source links required: e1"
+    )
+    assert "topics/" in _repair_guidance(
+        "ValueError: Source Memory is append-only"
+    )
+    # An error with no known correction adds nothing rather than guessing.
+    assert _repair_guidance("ValueError: something else entirely") == ""

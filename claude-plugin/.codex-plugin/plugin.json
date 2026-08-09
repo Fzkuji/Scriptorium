@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "scriptorium",
+  "version": "0.1.0",
+  "description": "Persistent Markdown memory. Searches memory before answering and writes the conversation back in the background, as files you can read and diff.",
+  "keywords": [
+    "memory",
+    "markdown",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
+}

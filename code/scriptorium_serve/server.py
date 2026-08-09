@@ -29,13 +29,13 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.agent_runtime import (
+from memory.agent_runtime import (
     AgentExecutionError,
     OpenAIAgentConfig,
     OpenAIWriterAgent,
 )
-from src.management import MemoryConfig, write_sessions
-from src.retrieval.bm25 import MemoryBM25Index
+from memory.management import MemoryConfig, write_sessions
+from memory.retrieval.bm25 import MemoryBM25Index
 from scriptorium.cli import ensure_workspace
 
 WORKSPACE_ROOT = Path(os.environ.get("SCRIPTORIUM_WORKSPACES", "./workspaces")).resolve()
@@ -50,7 +50,10 @@ WRITER_API_KEY = os.environ.get("SCRIPTORIUM_WRITER_API_KEY", "")
 # One Add request carries at most 20 messages, so a single writer pass covers it.
 # Cross-session reorganisation is deliberately not run inside a request: it would
 # put the 1200s platform timeout at risk for no gain on a 20-message chunk.
-MEMORY_CONFIG = MemoryConfig(writer_shell_examples=True)
+# few_shot_instructions is the successor to the shell-era worked examples:
+# the writer edits through file tools now, and weaker models still need the
+# shapes spelled out.
+MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True)
 
 app = FastAPI(title="Scriptorium Memory Service")
 _bearer = HTTPBearer(auto_error=False)

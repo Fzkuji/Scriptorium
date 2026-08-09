@@ -7,7 +7,7 @@ audit preferences, refactoring goals, and agent-generated protocols.
 
 - The only permitted LoCoMo evaluator is `scripts/evaluation/eval_full.py`.
 - Its required SHA-256 is
-  `17ef2179cd2781880649eed4a7d62988c069123b5044f007c194cdab8e63f88b`.
+  `17a47459994dfaf00074598dd0a7090b8bacb8a377d69ad482d04dd0b4bdf0b0`.
 - Every LoCoMo comparison, including Qwen and GPT runs, must execute that exact
   file and use its existing prompt, GPT-4o-mini model request, category 1-4
   scope, aggregation, and output schema without modification.

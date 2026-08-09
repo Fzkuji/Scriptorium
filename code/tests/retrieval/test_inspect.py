@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from src.management import MemoryWorkspace
-from src.management.transaction import TransactionError
-from src.retrieval import inspect
+from memory.management import MemoryWorkspace
+from memory.management.transaction import TransactionError
+from memory.retrieval import inspect
 
 TOPIC_LINES = [
     "# Residence",
@@ -221,7 +221,7 @@ def test_embedding_unavailable_never_falls_back(
         raise RuntimeError("sentence_transformers is not installed")
 
     monkeypatch.setattr(
-        "src.retrieval.embedding.MemoryEmbeddingIndex.search", explode
+        "memory.retrieval.embedding.MemoryEmbeddingIndex.search", explode
     )
 
     with pytest.raises(TransactionError) as excinfo:
