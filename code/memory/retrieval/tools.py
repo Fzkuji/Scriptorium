@@ -1,5 +1,6 @@
 """Dispatch Scriptorium retrieval tool calls."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,28 @@ from .embedding import render_search_results as render_embedding_results
 from .fusion import fused_search
 
 from .shell import normalize_workspace_command, validate_read_only_command
+
+# What each of this module's tools returns when it has nothing: a rejected
+# command, a tool error, or an empty search. Only this module knows the
+# exact strings, so a caller deciding whether a tool result is memory or
+# navigation noise checks here rather than pattern-matching it again.
+_MEMORY_TOOLS = {"memory_search", "bm25_search", "embedding_search", "bash"}
+_NOT_MEMORY = re.compile(
+    r"^(?:Command rejected:|Tool error:|No (?:BM25|embedding|memory) matches\.)"
+)
+
+
+def is_memory_output(text: str, tool: str | None = None) -> bool:
+    """Whether one tool result is memory rather than noise from reading it.
+
+    Seeded core and recent memory carry no tool name and are memory too. A
+    named tool must be one of this module's own, so a future tool that
+    returns something other than memory does not silently count as evidence.
+    """
+    text = text.strip()
+    if not text or _NOT_MEMORY.match(text):
+        return False
+    return tool is None or tool in _MEMORY_TOOLS
 
 
 def _search_index(

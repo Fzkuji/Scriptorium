@@ -7,10 +7,10 @@ from pathlib import Path
 CODE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(CODE))
 
-from memory.management.transaction import workspace_revision  # noqa: E402
+from memory.workspace.transaction import workspace_revision  # noqa: E402
 from memory.retrieval import inspect  # noqa: E402
 from memory.runtime.state import RuntimeStateStore  # noqa: E402
-from memory.workspace_layout import (  # noqa: E402
+from memory.workspace.layout import (  # noqa: E402
     LEGACY_RUNTIME_DIRS, RUNTIME_DIR, is_internal_path, is_runtime_name,
     is_state_file, runtime_dir,
 )

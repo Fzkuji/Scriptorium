@@ -262,3 +262,29 @@ def test_order_is_the_models_judgement_not_a_score():
     assert [row["score"] for row in rows] == sorted(
         (row["score"] for row in rows), reverse=True
     )
+
+
+def test_the_service_refuses_to_start_without_its_search_backend(monkeypatch):
+    """A missing backend must not look like an empty memory.
+
+    A backend that cannot be built is caught downstream and read as "nothing
+    found", so a service without one serves every request successfully and
+    returns nothing: a whole evaluation scored zero against a healthy process
+    and a clean log. That happened once, with an image built without the
+    embedding backend while search was still fusing both.
+    """
+    import builtins
+
+    missing = "rank_bm25" if server.SEARCH_TOOLS != "fused" else "sentence_transformers"
+    real = builtins.__import__
+
+    def guard(name, *args, **kwargs):
+        if name.startswith(missing):
+            raise ModuleNotFoundError(f"No module named {missing!r}")
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guard)
+
+    with pytest.raises(ModuleNotFoundError):
+        with TestClient(server.app):
+            pass

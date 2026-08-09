@@ -1,9 +1,14 @@
 # Runtime dependencies of the Add / Search service only.
 #
-# The repository's top-level requirements.txt covers the whole research harness
-# (benchmarks, figures, embedding retrieval, baselines) and pulls in torch and
-# the CUDA stack through sentence-transformers. This service retrieves with
-# BM25 and writes over HTTP, so none of that belongs in the image.
+# Search ranks with BM25 alone, which needs no embedding backend and so no
+# torch — 2.2GB of image for accuracy level with the lexical half on every
+# workspace it was measured against.
+#
+# Setting SCRIPTORIUM_SEARCH_TOOLS=fused asks for embedding ranking as well,
+# and then sentence-transformers has to be installed alongside this file. The
+# service checks its backend at startup and refuses to run without it, rather
+# than answering every query with an empty result, which is what a missing
+# backend looked like the once it happened.
 claude-agent-sdk==0.1.81
 fastapi>=0.115,<1
 openai>=1.50,<3

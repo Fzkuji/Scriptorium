@@ -3,8 +3,10 @@
 from .agent import collect_answer
 from .config import QueryConfig
 from ..prompts import ANSWER_PROMPT
+from .read import ReadResult, read
 from .runtime import Runtime, create_runtime
 from .schemas import CONDITION_VIEWS, TOOL_DEFINITIONS
+from .search import nearest
 from .shell import (
     execute_workspace_bash,
     normalize_workspace_command,
@@ -16,13 +18,16 @@ __all__ = [
     "ANSWER_PROMPT",
     "CONDITION_VIEWS",
     "QueryConfig",
+    "ReadResult",
     "Runtime",
     "TOOL_DEFINITIONS",
     "collect_answer",
     "create_runtime",
     "execute_workspace_bash",
     "memory_files",
+    "nearest",
     "normalize_workspace_command",
+    "read",
     "read_memory_file",
     "tools_for",
     "validate_read_only_command",

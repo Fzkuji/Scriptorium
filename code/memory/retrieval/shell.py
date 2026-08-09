@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 from .views import memory_files
-from ..workspace_layout import TEMPORARY_PREFIX
+from ..workspace.layout import TEMPORARY_PREFIX
 
 
 _READ_ONLY_COMMANDS = {

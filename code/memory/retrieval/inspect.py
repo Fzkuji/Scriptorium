@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..management.transaction import TransactionError, workspace_revision
-from ..workspace_layout import is_internal_path
+from ..workspace.transaction import TransactionError, workspace_revision
+from ..workspace.layout import is_internal_path
 from ..markdown import parse_topic_tree
 
 DERIVED_DIRS = ("timeline",)

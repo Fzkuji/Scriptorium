@@ -10,11 +10,11 @@ from typing import Any
 
 from ..markdown import parse_topic_tree
 from .block_views import BlockViewsMixin
-from .config import MemoryConfig
+from ..config import MemoryConfig
 from .event_writing import EventWritingMixin
 from .patching import apply_patch
 from .source_archive import SourceArchiveMixin
-from .topic_normalization import TopicNormalizationMixin
+from .normalization import TopicNormalizationMixin
 from .transaction import (
     TransactionError,
     TransactionLimits,
@@ -28,7 +28,7 @@ from .transaction import (
     workspace_revision,
     workspace_write_lock,
 )
-from ..workspace_layout import TEMPORARY_PREFIX, is_internal_path, runtime_dir
+from .layout import TEMPORARY_PREFIX, is_internal_path, runtime_dir
 
 
 class MemoryWorkspace(
@@ -132,9 +132,17 @@ class MemoryWorkspace(
             )
         return result
 
-    def baseline(self) -> tuple[list[Any], set[str], dict[str, str], str]:
-        """Snapshot the staged tree so an edit can be committed against it."""
-        units = parse_topic_tree(self.stage_dir / "topics")
+    def baseline(
+        self, *, strict: bool = True
+    ) -> tuple[list[Any], set[str], dict[str, str], str]:
+        """Snapshot the staged tree so an edit can be committed against it.
+
+        ``strict=False`` is for a caller repairing a tree that may not
+        already meet the topic contract, rather than editing one assumed to:
+        the paragraphs it can still parse seed the "existing IDs" a repair
+        must not drop, instead of the snapshot itself refusing to be taken.
+        """
+        units = parse_topic_tree(self.stage_dir / "topics", strict=strict)
         block_ids = {unit.memory_id for unit in units}
         core = self.stage_dir / "core.md"
         if core.is_file():

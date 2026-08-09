@@ -59,7 +59,17 @@ def _tool_schemas(tools: list[Any]) -> list[dict[str, Any]]:
     return schemas
 
 
+# Enough of a call to recognise it, not so much that a trajectory outweighs
+# the memory it wrote.
+_ARGUMENT_PREVIEW = 400
+_RESULT_PREVIEW = 400
+
+
 class OpenAIWriterAgent:
+    # Nothing here but the tools it is handed: the writing prompts assume a
+    # Write and an Edit tool, and this runtime has to be given them.
+    has_file_tools = False
+
     """Run one writing trajectory against an OpenAI-compatible endpoint."""
 
     def __init__(self, config: OpenAIAgentConfig, *, client: Any | None = None):
@@ -104,6 +114,10 @@ class OpenAIWriterAgent:
         texts: list[str] = []
         stop_reason = "complete"
         turns = 0
+        # What each turn called and what came back. Without it a run that
+        # spent every turn retrying one rejected Edit is indistinguishable
+        # from one that did the work, and both report `max_turns`.
+        trajectory: list[dict[str, Any]] = []
 
         for turns in range(1, max_turns + 1):
             call_started = time.time()
@@ -149,10 +163,16 @@ class OpenAIWriterAgent:
             })
 
             for call in calls:
+                output = self._dispatch(handlers, call)
+                trajectory.append({
+                    "tool": call.function.name,
+                    "arguments": str(call.function.arguments)[:_ARGUMENT_PREVIEW],
+                    "result": output[:_RESULT_PREVIEW],
+                })
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call.id,
-                    "content": self._dispatch(handlers, call),
+                    "content": output,
                 })
         else:
             stop_reason = "max_turns"
@@ -161,6 +181,7 @@ class OpenAIWriterAgent:
             text="\n".join(texts),
             structured_output=None,
             num_turns=turns,
+            turns=trajectory,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_creation_input_tokens=0,

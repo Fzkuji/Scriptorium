@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from memory.agent_runtime import AgentResult
-from memory.management.transaction import workspace_revision, workspace_write_lock
+from memory.workspace.transaction import workspace_revision, workspace_write_lock
 from scriptorium.cli import main
 
 

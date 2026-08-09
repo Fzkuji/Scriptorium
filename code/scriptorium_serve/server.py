@@ -14,10 +14,13 @@ Contract notes that shaped this file:
 """
 from __future__ import annotations
 
+import json
+import logging
 import os
 import re
 import sys
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -35,10 +38,7 @@ from memory.agent_runtime import (
     OpenAIWriterAgent,
 )
 from memory.management import MemoryConfig, write_sessions
-from memory.retrieval import QueryConfig
-from memory.retrieval.context import initialize_context
-from memory.retrieval.tool_server import RetrievalToolState, retrieval_tools
-from memory.retrieval.views import memory_files
+from memory.retrieval import QueryConfig, nearest, read
 from scriptorium.cli import ensure_workspace
 
 WORKSPACE_ROOT = Path(os.environ.get("SCRIPTORIUM_WORKSPACES", "./workspaces")).resolve()
@@ -61,7 +61,38 @@ MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True)
 # Retrieval is one shot here, so the agent is given room to look more than
 # once; the caller's own timeout is the real ceiling. Source verification is
 # off because the caller never sees a citation to check — it sees the memory.
-QUERY_CONFIG = QueryConfig(max_turns=8, verify_sources=False)
+# Lexical ranking alone. Measured against `fused` (BM25 plus embeddings) on
+# 20 LoCoMo questions and on 97 BEAM questions across five conversations, the
+# two are level on accuracy — 50.8% against 51.2% median gold-term coverage —
+# while this one answers at a p90 of 3.7s against 12.3s and needs no torch,
+# which is 2.2GB of the image. `fused` stays available for a memory where the
+# wording of a question and the wording of its record diverge more than they
+# do here.
+SEARCH_TOOLS = os.environ.get("SCRIPTORIUM_SEARCH_TOOLS", "bm25")
+QUERY_CONFIG = QueryConfig(
+    max_turns=8, verify_sources=False, search_tools=SEARCH_TOOLS
+)
+
+# One line per request, so what a run costs and where its time goes is
+# readable without re-deriving it from the platform's own timings.
+_usage = logging.getLogger("scriptorium.usage")
+if not _usage.handlers:
+    # The server runs under uvicorn, which configures its own loggers and not
+    # this one; without a handler of its own every line here goes nowhere.
+    _handler = logging.StreamHandler(sys.stderr)
+    _handler.setFormatter(logging.Formatter("usage %(message)s"))
+    _usage.addHandler(_handler)
+    _usage.setLevel(logging.INFO)
+    _usage.propagate = False
+
+
+def _record(operation: str, began: float, **fields: Any) -> None:
+    _usage.info(json.dumps({
+        "op": operation,
+        "seconds": round(time.monotonic() - began, 2),
+        **fields,
+    }, ensure_ascii=False))
+
 
 app = FastAPI(title="Scriptorium Memory Service")
 _bearer = HTTPBearer(auto_error=False)
@@ -77,6 +108,24 @@ async def _raise_thread_limit() -> None:
     import anyio.to_thread
 
     anyio.to_thread.current_default_thread_limiter().total_tokens = THREAD_LIMIT
+
+
+@app.on_event("startup")
+async def _check_search_backend() -> None:
+    """Refuse to start rather than answer every query with silence.
+
+    A search backend that cannot be built is caught downstream and read as an
+    empty result, so a service missing one serves every request successfully
+    and returns nothing — a whole evaluation scored zero against a healthy
+    process and a clean log. This is where that costs one line instead of a
+    run.
+    """
+    if SEARCH_TOOLS == "fused":
+        from sentence_transformers import SentenceTransformer
+
+        SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    else:
+        import rank_bm25  # noqa: F401
 
 # Writes to one workspace are serialised by Scriptorium's own file lock, but the
 # platform fans out 64 workers and may hit the same user_id concurrently. A
@@ -185,7 +234,8 @@ def _ingest(payload: AddRequest) -> None:
             f"leaderboard/{thread}/{chunk}-{position}"
             for position, _ in enumerate(payload.messages)
         ]
-        write_sessions(
+        began = time.monotonic()
+        written = write_sessions(
             workspace,
             agent=_agent(),
             sessions=[{
@@ -194,6 +244,21 @@ def _ingest(payload: AddRequest) -> None:
                 "refs": refs,
             }],
             config=MEMORY_CONFIG,
+        )
+        # write_sessions reports an audit trail; its closing row carries what
+        # the one agent pass cost.
+        closing = next(
+            (row for row in reversed(written or []) if row.get("tool") == "agent"),
+            {},
+        )
+        _record(
+            "add", began,
+            turns=closing.get("rounds"),
+            input_tokens=closing.get("input_tokens"),
+            output_tokens=closing.get("output_tokens"),
+            stop=closing.get("reason"),
+            messages=len(payload.messages),
+            user=payload.user_id,
         )
         # Nothing to invalidate: retrieval rebuilds its index from the
         # workspace on every call, so a committed write is visible to the
@@ -218,42 +283,32 @@ async def add(payload: AddRequest, _: None = Depends(_authorize)) -> dict[str, A
     }
 
 
-class _Runtime:
-    """The little the retrieval agent needs from a benchmark Runtime.
-
-    `collect_answer` was written for the harness and reaches for the
-    model, the agent and a usage log. Here there is no run to account
-    for, so the log goes nowhere.
-    """
-
-    def __init__(self, agent: Any, model: str, query_config: QueryConfig):
-        self.agent = agent
-        self.model = model
-        self.query_config = query_config
-
-    def log_agent_result(self, result: Any, *, phase: str = "") -> None:
-        return None
-
-
-FIND_MEMORY = (
-    "Find everything in this memory workspace that bears on the request "
-    "below, and return it.\n\n"
-    "You are not answering. Something else will do that, and it sees only "
-    "what you return — not this workspace, not your reasoning. So return "
-    "the memory itself: the sentences as they are written, each with the "
-    "date its footnote carries and enough of its heading or subject that "
-    "it still means something on its own.\n\n"
-    "Search more than one way before deciding nothing is there; wording in "
-    "memory rarely matches the wording of a request. Where memory records "
-    "a change, return both what it was and what it became. Return nothing "
-    "at all rather than something you did not find."
-)
-
-
 def _passages(text: str) -> list[str]:
-    """Split the model's report into one passage per remembered thing."""
-    blocks = [block.strip() for block in re.split(r"\n\s*\n", text or "")]
-    return [block for block in blocks if block]
+    """Split the model's report into one passage per remembered thing.
+
+    Blank lines are what the prompt asks for, but a model that answers in a
+    bulleted or numbered list is reporting the same thing in a different
+    shape, and collapsing that into one row would throw away the separation
+    it just made.
+    """
+    passages = []
+    for block in re.split(r"\n\s*\n", text or ""):
+        block = block.strip()
+        if not block:
+            continue
+        lines = [line.strip() for line in block.splitlines()]
+        listed = [
+            re.sub(r"^(?:[-*\u2022]|\d+[.)])\s+", "", line)
+            for line in lines if _LIST_ITEM.match(line)
+        ]
+        if len(listed) > 1 and len(listed) == len([l for l in lines if l]):
+            passages.extend(item for item in listed if item)
+        else:
+            passages.append(block)
+    return passages
+
+
+_LIST_ITEM = re.compile(r"^(?:[-*\u2022]|\d+[.)])\s+\S")
 
 
 def _found_memory(text: str) -> list[dict[str, Any]]:
@@ -287,43 +342,56 @@ def _retrieve(payload: SearchRequest) -> list[dict[str, Any]]:
     meant to be read. A keyword query over the index gets one shot at
     guessing the wording, and the caller never gets to ask again.
     """
+    began = time.monotonic()
     workspace = _workspace(payload.user_id)
     if not workspace.exists():
         return []
-    files = memory_files(workspace, "native", include_recent=True)
-    prompt, trace, evidence, initial_tokens = initialize_context(
-        memory_dir=workspace,
-        files=files,
-        condition="native",
-        item={"question": payload.query, "question_date": ""},
-        verify_sources=False,
-        model=WRITER_MODEL,
+    # The first thing a search does is search, every time, for the words in
+    # the query. That is not a judgement, so run it here and hand the result
+    # to the reading pass as its seed: the model starts from evidence instead
+    # of spending a turn getting some, and a weak one that would have stopped
+    # after one call has already had it made for it.
+    opening = nearest(workspace, payload.query, search_tools=SEARCH_TOOLS)
+    outcome = read(
+        workspace, payload.query,
+        agent=_agent(), model=WRITER_MODEL, config=QUERY_CONFIG, seed=opening,
     )
-    state = RetrievalToolState(
-        trace=trace,
-        evidence=evidence,
-        model=WRITER_MODEL,
-        visible_tokens=initial_tokens,
+    rows = _found_memory(outcome.text)
+    # What the model read, verbatim, under what it chose to say about it. Its
+    # report is a judgement and belongs first; the passages behind that
+    # judgement are the memory itself, and the caller answers from what it is
+    # handed rather than from what it can ask for next.
+    rows += _found_memory("\n\n".join(outcome.passages))
+    if not rows:
+        # An empty hand scores zero however good the reasoning behind it was.
+        rows = _found_memory("\n\n".join(opening))
+    kept = _distinct(rows)[: max(1, payload.top_k)]
+    _record(
+        "search", began,
+        turns=outcome.num_turns,
+        input_tokens=outcome.input_tokens,
+        output_tokens=outcome.output_tokens,
+        stop=outcome.stop_reason,
+        rows=len(kept),
+        tool_calls=outcome.tool_calls,
+        visible_tokens=outcome.visible_tokens,
+        user=payload.user_id,
     )
-    runtime = _Runtime(_agent(), WRITER_MODEL, QUERY_CONFIG)
-    result = runtime.agent.run(
-        prompt=prompt,
-        system_prompt=FIND_MEMORY,
-        cwd=workspace,
-        tools=retrieval_tools(
-            runtime,
-            memory_dir=workspace,
-            files=files,
-            condition="native",
-            include_recent=True,
-            state=state,
-            search_tools=QUERY_CONFIG.search_tools,
-        ),
-        max_turns=QUERY_CONFIG.max_turns,
-        max_budget_usd=QUERY_CONFIG.max_budget_usd,
-    )
-    reported = re.sub(r"</?answer>", "", result.text or "").strip()
-    return _found_memory(reported)[: max(1, payload.top_k)]
+    return kept
+
+
+def _distinct(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop repeats, keeping the first ranking of each passage."""
+    seen, kept = set(), []
+    for row in rows:
+        key = " ".join(row["content"].split())
+        if key in seen:
+            continue
+        seen.add(key)
+        row["id"] = f"m{len(kept)}"
+        row["score"] = round(1.0 - len(kept) * 0.01, 4)
+        kept.append(row)
+    return kept
 
 
 @app.post("/search")

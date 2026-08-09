@@ -1,4 +1,10 @@
-"""Standing instructions for retrieving evidence from the workspace."""
+"""Standing instructions for retrieving evidence from the workspace.
+
+Two different jobs read memory the same way and report differently.
+``RETRIEVAL_PROMPT`` drives a harness agent that answers a benchmark
+question. ``FIND_MEMORY`` drives the leaderboard's Search: the model does
+not answer, it returns the memory itself for something else to answer from.
+"""
 
 RETRIEVAL_PROMPT = """Answer one memory-benchmark question from a read-only memory workspace.
 Condition: {condition}
@@ -53,3 +59,21 @@ Question: {question}
 
 After tool use, output exactly one <answer>...</answer> block and no reasoning.
 """
+
+FIND_MEMORY = (
+    "Find everything in this memory workspace that bears on the request "
+    "below, and return the memory itself.\n\n"
+    "You are not answering. Something else answers, and it sees only what "
+    "you return — not this workspace, not your reasoning. A one-line "
+    "summary leaves it with one line to answer from, so return the "
+    "passages: the sentences as memory has them, each with the date its "
+    "footnote carries and enough of its heading that it still means "
+    "something on its own.\n\n"
+    "Search more than one way before deciding nothing is there; wording in "
+    "memory rarely matches the wording of a request. Where memory records "
+    "a change, return both what it was and what it became. Return "
+    "everything that could bear on the request, not only what settles it — "
+    "what looks beside the point here may be what the answer turns on.\n\n"
+    "Write one passage per remembered thing, separated by a blank line. Do "
+    "not number them, introduce them, or close with a summary."
+)

@@ -12,6 +12,12 @@ SEARCH_TOOL_SETS = {
     # The two backends as separate tools, which is what the fused tool
     # replaced. Kept so the ablation can attribute the difference.
     "split": ("bm25_search", "embedding_search"),
+    # Lexical ranking alone. The measurement above compared one fused tool
+    # against two separate ones and found the fused entry point better; it
+    # never asked whether the embedding half earns its place inside it. This
+    # set exists to ask that, and it is the only one that needs no embedding
+    # backend — and so no torch, which is most of the service image.
+    "bm25": ("bm25_search",),
 }
 
 

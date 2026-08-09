@@ -20,7 +20,7 @@ from typing import Any
 
 from ..markdown import parse_topic_tree
 from ..runtime.state import RuntimeStateStore, SourceRecord
-from ..workspace_layout import is_internal_path, is_state_file, runtime_dir
+from .layout import is_internal_path, is_state_file, runtime_dir
 
 WRITABLE_PREFIX = "topics/"
 WRITABLE_FILES = {"core.md"}

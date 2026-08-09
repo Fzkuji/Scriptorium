@@ -15,8 +15,10 @@ def test_current_core_is_imported_without_a_version_namespace():
     )
 
     assert BuildConfig.__module__ == "memory.build"
-    assert MemoryConfig.__module__.startswith("memory.management")
-    assert MemoryWorkspace.__module__.startswith("memory.management")
+    # Configuration is shared by the three phases; the workspace is the
+    # substrate underneath them. Neither belongs to one phase.
+    assert MemoryConfig.__module__ == "memory.config"
+    assert MemoryWorkspace.__module__.startswith("memory.workspace")
     assert QueryConfig.__module__ == "memory.retrieval.config"
     assert callable(build_memory)
     assert callable(collect_answer)

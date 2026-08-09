@@ -11,8 +11,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from memory.management.transaction import TransactionError, workspace_revision
-from memory.workspace_layout import RUNTIME_DIR, has_runtime_dir
+from memory.workspace.transaction import TransactionError, workspace_revision
+from memory.workspace.layout import RUNTIME_DIR, has_runtime_dir
 from memory.retrieval import inspect
 
 
@@ -173,8 +173,8 @@ def command_ingest(
     from memory.ingestion import read_transcript
     from memory.management import MemoryWorkspace, organize_topics
     from memory.management.agent import _run_agent
-    from memory.management.api import render_writer_task
-    from memory.management.transaction import workspace_write_lock
+    from memory.writing.session import render_writer_task
+    from memory.workspace.transaction import workspace_write_lock
     from memory.runtime.online import OnlineMemoryRuntime
     from memory.runtime.tokenization import TokenCounter
 
@@ -272,7 +272,7 @@ def command_validate(workspace: str) -> int:
         copy = scratch / "memory"
         shutil.copytree(root, copy, symlinks=True)
         from memory.management import MemoryWorkspace
-        from memory.management.transaction import committed_baseline, install_state
+        from memory.workspace.transaction import committed_baseline, install_state
 
         space = MemoryWorkspace(copy)
         before_units, before_block_ids = committed_baseline(space)

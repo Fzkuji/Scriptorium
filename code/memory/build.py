@@ -18,7 +18,7 @@ from .conversation import (
     read_turns,
     session_content,
 )
-from .management.api import render_writer_input, writer_protocol_sha256
+from .writing.session import render_writer_input, writer_protocol_sha256
 from .runtime.capacity import WriterCapacity, pack_complete_messages
 from .runtime.tokenization import TokenCounter
 

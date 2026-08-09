@@ -496,7 +496,7 @@ def test_probe_evaluation_reports_an_unfinished_agent_run_separately(tmp_path: P
 
 def test_build_caps_calibrated_input_at_explicit_limit(tmp_path: Path, monkeypatch):
     from memory import build
-    from memory.management.api import render_writer_input, writer_protocol_sha256
+    from memory.writing.session import render_writer_input, writer_protocol_sha256
     from memory.runtime.tokenization import TokenCounter
 
     conversation = {

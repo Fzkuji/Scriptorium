@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Add / Search 服务 — 弱模型下的记忆写入与检索</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="../assets/document.css" rel="stylesheet">
+<style>
+.ledger{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.9rem;margin:1.3rem 0}
+.ledger .cell{background:var(--doc-surface);border:1px solid var(--doc-line);border-radius:10px;padding:.85rem 1rem}
+.ledger .label{color:var(--doc-muted);font:600 .68rem/1.4 var(--doc-mono);letter-spacing:.06em;text-transform:uppercase}
+.ledger .value{font:700 1.5rem/1.25 var(--doc-sans);color:var(--doc-heading);font-variant-numeric:tabular-nums;margin:.3rem 0 .1rem}
+.ledger .was{color:var(--doc-muted);font:500 .8rem var(--doc-mono);font-variant-numeric:tabular-nums}
+.ledger .was s{color:var(--doc-danger);text-decoration-thickness:1px;opacity:.75}
+.chain{counter-reset:step;list-style:none;padding:0;margin:1.3rem 0}
+.chain li{counter-increment:step;position:relative;padding:.1rem 0 1.05rem 2.4rem;border-left:2px solid var(--doc-line);margin-left:.7rem}
+.chain li:last-child{border-left-color:transparent;padding-bottom:.2rem}
+.chain li::before{content:counter(step);position:absolute;left:-.78rem;top:0;width:1.5rem;height:1.5rem;border-radius:50%;
+  background:var(--doc-accent);color:#fff;font:700 .78rem/1.5rem var(--doc-mono);text-align:center}
+.chain h4{margin:.05rem 0 .35rem;font-size:1rem;color:var(--doc-heading)}
+.chain p{margin:.25rem 0}
+.shed th:first-child,.shed td:first-child{width:44%}
+.shed td:first-child{color:var(--doc-muted);text-decoration:line-through;text-decoration-color:var(--doc-danger)}
+.shed td:last-child{font-weight:600}
+.trace{font:500 .82rem/1.7 var(--doc-mono);background:var(--doc-surface-strong);border:1px solid var(--doc-line);
+  border-radius:8px;padding:.85rem 1rem;overflow-x:auto;white-space:pre;font-variant-numeric:tabular-nums}
+.trace .bad{color:var(--doc-danger)}
+.trace .good{color:var(--doc-success)}
+.open{border-left-color:var(--doc-warning);background:#fff7e8}
+.open h4{margin:.1rem 0 .3rem;font-size:.95rem}
+.open ol{margin:.4rem 0 0;padding-left:1.2rem}
+.open li{margin:.35rem 0}
+</style>
+</head>
+<body>
+<div id="progress-bar"></div>
+<div class="document-shell">
+<aside class="document-sidebar">
+  <p class="document-sidebar-brand">Scriptorium</p>
+  <nav id="toc">
+    <a class="toc-link" href="#contract">§1 服务契约</a>
+    <a class="toc-link" href="#broken">§2 gpt-4o-mini 上原本不工作</a>
+    <a class="toc-link toc-h3" href="#chain">2.1 故障链</a>
+    <a class="toc-link toc-h3" href="#evidence">2.2 现场记录</a>
+    <a class="toc-link" href="#write">§3 写入：把判断留给模型，其余写死</a>
+    <a class="toc-link toc-h3" href="#remember">3.1 remember 工具</a>
+    <a class="toc-link toc-h3" href="#surface">3.2 收窄工具面</a>
+    <a class="toc-link toc-h3" href="#guidance">3.3 拒绝要说清原因</a>
+    <a class="toc-link" href="#search">§4 检索：先查再问</a>
+    <a class="toc-link toc-h3" href="#index">4.1 索引按版本缓存</a>
+    <a class="toc-link toc-h3" href="#evidence-out">4.2 返回读到的原文</a>
+    <a class="toc-link" href="#instrument">§5 用量与轨迹</a>
+    <a class="toc-link" href="#numbers">§6 实测</a>
+    <a class="toc-link" href="#backend">§7 词面排序,不用嵌入</a>
+    <a class="toc-link" href="#open">§8 未完成</a>
+    <a class="toc-link" href="#map">§9 代码位置</a>
+  </nav>
+</aside>
+<main class="document-main">
+<article class="document-content">
+  <nav class="document-breadcrumb" aria-label="当前位置">
+    <span>LLM Agent Memory</span><span class="separator">/</span>
+    <a href="../Model-Aligned-Wiki.html">scriptorium</a><span class="separator">/</span>
+    <span>docs</span><span class="separator">/</span>
+    <span>integrations</span><span class="separator">/</span>
+    <span aria-current="page">leaderboard-service.html</span>
+  </nav>
+  <header class="document-header">
+    <p class="document-eyebrow">Competition Branch · Add / Search Service</p>
+    <h1>在 gpt-4o-mini 上让记忆真正写得进、查得快</h1>
+    <p class="document-lead">学术赛道规定 Add 与 Search 使用 gpt-4o-mini。这条路径原本每次 Add 都返回 200，实际写进记忆的 topic 文件只有 1 字节。本文记录故障链、修法，以及修完之后仍然敞着的问题。</p>
+    <p class="document-meta">competition 分支 · Add / Search 服务 · gpt-4o-mini</p>
+  </header>
+
+  <h2 id="contract">§1 服务契约</h2>
+  <p>平台自己负责 Answer 与 Eval，这个服务只有两个同步接口。</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>接口</th><th>职责</th><th>约束</th></tr></thead>
+    <tbody>
+      <tr><td><code>POST /add</code></td><td>同步写入一个用户的一批消息</td><td>返回 200 即表示已提交<strong>且可检索</strong></td></tr>
+      <tr><td><code>POST /search</code></td><td>返回该用户记忆中的证据</td><td>只返回证据，不合成答案</td></tr>
+      <tr><td><code>GET /health</code></td><td>存活探测</td><td>无鉴权</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><code>user_id</code> 是唯一的检索隔离键，一个 <code>user_id</code> 一个工作区。一次 Add 最多 20 条消息，平台会并发 64 个 Add、256 个 Search，单请求超时 1200 秒。</p>
+
+  <h2 id="broken">§2 gpt-4o-mini 上原本不工作</h2>
+  <p class="callout warn">这不是"效果差"，是<strong>完全没有写入</strong>。Add 每次返回成功，<code>topics/</code> 下的文件却只有 1 字节；检索之所以还能返回东西，全靠 <code>sources/</code> 里逐字归档的原始消息在撑。真正的语义记忆一条都没有建立起来。</p>
+
+  <h3 id="chain">2.1 故障链</h3>
+  <ol class="chain">
+    <li>
+      <h4>提示描述的工具不存在</h4>
+      <p><code>management_tools()</code> 只返回一个 <code>shell</code>。Claude Code 自带 Read / Write / Edit / Grep / Glob，所以论文那条路径没问题；OpenAI 兼容路径没有任何内置工具，模型手里只有 shell，而写入提示通篇要求它"用 Write 和 Edit 工具"。</p>
+    </li>
+    <li>
+      <h4>模型退回 <code>echo &gt; 文件</code>，撞上格式契约</h4>
+      <p>Topic 契约要求每个新段落带块 ID、每条引用有脚注定义、每个脚注指向已归档的来源。手写这套标记，弱模型过不了。</p>
+    </li>
+    <li>
+      <h4>拒绝信息不说缺什么</h4>
+      <p>修复指引其实早就写好了，但只在<strong>整轮 agent 跑完、事务提交被拒之后</strong>才发出。而模型是在运行途中反复撞同一个错，20 轮全部耗尽，根本走不到那一步。</p>
+    </li>
+    <li>
+      <h4>同一条失败命令重复 36 次</h4>
+      <p><code>stop=max_turns</code>，输入 token 烧到 18 万，工作区回滚，什么都没落地。Add 依然返回 200。</p>
+    </li>
+  </ol>
+
+  <h3 id="evidence">2.2 现场记录</h3>
+  <p>给 OpenAI agent 补上轨迹记录之后，第一次看清它在做什么：</p>
+  <div class="trace">19 shell  echo "# Caroline\n\n## Support Group…   <span class="bad">→ TopicFormatError: undefined footnote: e1</span>
+20 shell  echo "# Melanie\n\n## Painting…          <span class="bad">→ TopicFormatError: undefined footnote: e1</span>
+21 shell  echo "# Caroline and Melanie…            <span class="bad">→ TopicFormatError: undefined footnote: e1</span>
+   …同样三条命令原样重复 12 轮，直到轮次耗尽…
+54 shell  echo "# Caroline and Melanie…            <span class="bad">→ TopicFormatError: undefined footnote: e1</span></div>
+  <p class="callout">在补上轨迹记录之前，日志里只有 <code>rounds: 20, stop_reason: max_turns</code>，看不出它是做完了工作还是在原地打转。前两轮优化我就是靠猜做的，两轮都做错了方向。</p>
+
+  <h2 id="write">§3 写入：把判断留给模型，其余写死</h2>
+  <p>结论是不该让弱模型手写契约标记。项目本身的原则就是"标识符由 Runtime 分配"——那就贯彻到底：模型只交内容，标记由运行时生成，契约无从违反。</p>
+
+  <h3 id="remember">3.1 remember 工具</h3>
+  <p>模型给出主体、主体类别、事实原文和来源 <code>[ref]</code>；文件路径、块 ID、脚注定义全部由运行时算出。</p>
+  <pre><code>remember(subject="Dave", kind="person",
+         fact="Dave moved to Pudong.",
+         sources=["D1:1"])</code></pre>
+  <p>落到磁盘上：</p>
+  <pre><code># Dave
+
+Dave moved to Pudong.[^e-4265834607] ^3e926ade
+
+[^e-4265834607]: Time: `2023-05-08`; Sources: [D1:1](../../sources/D1.md#d1-1)</code></pre>
+  <p>路径由 <code>_subject_path()</code> 按类别定：<code>person → topics/people/</code>、<code>project → topics/projects/</code>、<code>relationship → topics/relationships/</code>、<code>theme → topics/themes/</code>。这一条顺带解决了一个隐蔽问题：同一个人以前会被模型写成 <code>people/caroline.md</code> 和 <code>relationship/caroline-and-melanie.md</code> 两份，现在同名必然同文件。</p>
+
+  <h3 id="surface">3.2 收窄工具面</h3>
+  <p>写入阶段只保留 <code>remember</code> 一个工具。shell 和整文件写入是弱模型用来犯错的余地，不是用来干活的能力。</p>
+  <div class="table-scroll">
+  <table class="shed">
+    <thead><tr><th>原来由模型决定</th><th>现在</th></tr></thead>
+    <tbody>
+      <tr><td>拼出 <code>topics/people/xxx.md</code></td><td>交主体名和类别，路径由规则定</td></tr>
+      <tr><td>手写 <code>^new-block-x</code>、脚注定义、来源链接</td><td>运行时生成</td></tr>
+      <tr><td>先 <code>ls</code> / <code>read</code> 摸清有哪些主体</td><td>已有主体清单直接写进任务</td></tr>
+      <tr><td>手握 shell / write_file / edit_file</td><td>写入阶段只有 <code>remember</code></td></tr>
+      <tr><td>检索第一轮自己发起搜索</td><td>先跑确定性检索，结果进初始上下文</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>重组阶段仍然需要改写既有文件，那里保留 <code>write_file</code> / <code>edit_file</code> / <code>read_file</code> / <code>shell</code>——按 <code>stage</code> 区分，写入和重组本来就是两件事。</p>
+
+  <h3 id="guidance">3.3 拒绝要说清原因</h3>
+  <p>修复指引从"整轮结束后的修复轮"移到<strong>工具返回值本身</strong>，模型犯错的当下就看得到。并补齐了三条原本缺失的错误类型：</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>错误</th><th>补上的指引</th></tr></thead>
+    <tbody>
+      <tr><td><code>memory block ID required</code></td><td>新段落以 <code>^new-block-&lt;name&gt;</code> 结尾，接在引用之后</td></tr>
+      <tr><td><code>unused footnote definition</code></td><td>每条定义都要有段落引用它，否则删掉定义</td></tr>
+      <tr><td><code>old_text appears 0 times</code></td><td>先读文件再原样抄，省略号形式的引用匹配不到任何东西</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>另外，重复失败按"同一文件 + 同一类错误"计数而不是参数完全相同——模型重试时通常会把措辞改一点，精确匹配的计数器永远不会触发。第二次起会明确告诉它这是第几次同样的尝试。</p>
+
+  <h2 id="search">§4 检索：先查再问</h2>
+
+  <h3 id="index">4.1 索引按版本缓存</h3>
+  <p>每次 Search 都在重建 BM25 与嵌入索引。18 秒的请求里模型只占 2–3 秒，其余全是建索引。改成按<strong>工作区版本号</strong>缓存后，同样形状的请求（2 轮、2.2k token、1 次工具调用）从 16.2 秒降到 2.5 秒。</p>
+  <p class="callout warn">缓存键包含版本号，所以<strong>每次 Add 都会作废它</strong>。我的基准是先跑完所有 Add 再跑 Search，缓存全命中；如果平台交替调用，命中率会大幅下降。这一条尚未验证，见 §7。</p>
+
+  <h3 id="evidence-out">4.2 返回读到的原文</h3>
+  <p>原来只返回模型最后那段转述，中位 1 条、39 个字符——调用方拿着一句话去回答问题。现在返回三层，去重后按 <code>top_k</code> 截断：</p>
+  <ol class="chain">
+    <li><h4>模型的报告</h4><p>它认为哪些内容相关，这是判断，排在最前。</p></li>
+    <li><h4>它实际读到的原文</h4><p><code>RetrievalToolState.evidence</code> 累积了每次工具调用的非空输出，那就是记忆本身。按来源工具过滤掉目录列表和被拒命令。</p></li>
+    <li><h4>本地索引兜底</h4><p>模型什么都没找到时返回最接近的若干条。索引是本地的，这一层不花任何模型调用。空手返回必然是 0 分。</p></li>
+  </ol>
+  <p>并且把这次确定性检索<strong>提到最前面</strong>执行，结果直接放进模型的初始上下文。"先按查询词搜一次"从来不是判断，是每次都要做的动作——预先做掉之后，多数请求模型一轮就能回答，工具调用降到 0 次。</p>
+
+  <h2 id="instrument">§5 用量与轨迹</h2>
+  <p>两处记录是这一轮所有判断的基础，此前都不存在。</p>
+  <ul>
+    <li><strong>每请求一行用量日志</strong>：轮数、输入输出 token、停止原因、返回条数、工具调用次数。</li>
+    <li><strong>OpenAI agent 的轨迹</strong>：每轮调了什么工具、参数是什么、返回了什么。Claude 那条路径一直有记录，OpenAI 这条没有，于是"跑满 20 轮做完了工作"和"跑满 20 轮原地打转"在日志里长得一模一样。</li>
+  </ul>
+  <p class="callout warn">计时器一开始起在索引构建之后，日志报 1.3 秒而调用方实际等了 17 秒。已改为覆盖整个请求——写监控要先确认它量的是不是调用方感受到的那个数。</p>
+
+  <h2 id="numbers">§6 实测</h2>
+  <p>同一份 LoCoMo 对话，4 个会话、20 道题，Add 与 Search 全程 gpt-4o-mini。</p>
+  <div class="ledger">
+    <div class="cell"><p class="label">Add 中位耗时</p><p class="value">10.8 s</p><p class="was">原 <s>41 s</s></p></div>
+    <div class="cell"><p class="label">Add 输入 token</p><p class="value">7–10 k</p><p class="was">原 <s>9.1 万–35 万</s></p></div>
+    <div class="cell"><p class="label">Add 轮数</p><p class="value">2</p><p class="was">原 <s>20（撞上限）</s></p></div>
+    <div class="cell"><p class="label">写进记忆</p><p class="value">9854 字符</p><p class="was">原 <s>3 字节</s></p></div>
+    <div class="cell"><p class="label">Search 中位耗时</p><p class="value">4.9 s</p><p class="was">原 <s>19.3 s</s></p></div>
+    <div class="cell"><p class="label">Search 返回</p><p class="value">4 条</p><p class="was">原 <s>1 条 / 39 字符</s></p></div>
+  </div>
+  <p>收窄工具面之后的服务端记录，多数请求模型一轮结束、零工具调用：</p>
+  <div class="trace">add     11.2s  turns=2  in=7113   <span class="good">stop</span>
+add     16.3s  turns=2  in=8094   <span class="good">stop</span>
+search   1.3s  turns=1  tools=0  rows=3
+search   1.3s  turns=1  tools=0  rows=3
+search   1.7s  turns=1  tools=0  rows=3
+search   4.1s  turns=2  tools=2  rows=5</div>
+  <p class="callout warn">判分从 0.45 到 0.60，但样本只有 20 道题，标准误约 ±0.11。这个数只够说明"从不工作变成工作了"，<strong>不能当作性能结论</strong>。另外中途有两轮靠加提示词的尝试（0.55 → 0.60 → 0.40，Add 耗时反而从 41 秒涨到 121 秒），那是在同一条死路上加力，记在这里以免重走。</p>
+
+  <h2 id="backend">§7 检索用词面排序,不用嵌入</h2>
+  <p>服务默认 <code>SCRIPTORIUM_SEARCH_TOOLS=bm25</code>。这不是偏好,是量出来的。</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>工作区</th><th>fused(BM25+嵌入)</th><th>bm25(纯词面)</th></tr></thead>
+    <tbody>
+      <tr><td>LoCoMo 4 会话,20 题,端到端判分</td><td>0.55</td><td><strong>0.60</strong></td></tr>
+      <tr><td>BEAM 100K × 5,97 题,金标词覆盖</td><td>51.2%</td><td>50.8%</td></tr>
+      <tr><td>Search p90 延迟</td><td>12.3 s</td><td><strong>3.7 s</strong></td></tr>
+      <tr><td>镜像体积</td><td>2.4 GB</td><td><strong>744 MB</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>准确率上两者是平的——判分那 0.05 是一道题,BEAM 上的 0.4 个百分点更是噪声。差别在别处:延迟差 3.3 倍,镜像差 1.7 GB,而且纯词面不需要把嵌入模型烤进镜像,也就不依赖评测机能连上 Hugging Face。</p>
+  <p class="callout warn">项目里 <code>fused</code> 曾是默认,依据是一次「一个融合工具 vs 分开的两个工具」的对比(40 题里 34 对 30)。那次两边都开着嵌入,赢的是工具的打包方式——模型不必自己发两次搜索再手动合并。<strong>嵌入这一半值不值,在此之前没有测过。</strong>上表是第一份直接证据。</p>
+  <p><code>fused</code> 仍然可用,改一个环境变量即可,届时需要一并安装 <code>sentence-transformers</code>。服务在启动时检查当前配置对应的后端,缺件直接拒绝启动。</p>
+
+  <h2 id="open">§8 未完成</h2>
+  <div class="callout open">
+    <h4>按影响排序，前两条决定 4.9 秒这个数在真实评测里成不成立</h4>
+    <ol>
+      <li><strong>索引缓存在交替调用下是否有效。</strong>缓存键含工作区版本号，每次 Add 都会作废。基准是先 Add 后 Search 的最好情况，平台的实际调用顺序未验证。</li>
+      <li><strong>并发未验证。</strong>平台会开 64 个 Add、256 个 Search；本地最多测过 6 个线程。索引构建那把锁是全局的，高并发下第一波会全部串行等待。</li>
+      <li><strong>规模未验证。</strong>只跑过一个对话的前 4 个会话、20 道题；完整对话是 19 个会话、199 道题。</li>
+      <li><strong>记忆只增不整理。</strong>服务刻意不在请求内跑重组以免超时，长对话下 topic 文件会一直变长，退化成单个巨大文件。</li>
+      <li><strong><code>remember</code> 只能追加。</strong>用户改口或事实更新时两条记录并存，knowledge_update 类问题会受影响。</li>
+      <li><strong>代码未提交</strong>，仍在工作树中。</li>
+    </ol>
+  </div>
+
+  <h2 id="map">§9 代码位置</h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>文件</th><th>改动</th></tr></thead>
+    <tbody>
+      <tr><td><code>memory/management/tools.py</code></td><td><code>remember</code>、<code>write_file</code>、<code>edit_file</code>、<code>read_file</code>；<code>_subject_path()</code>；按 stage 决定工具面；修复指引与重复计数</td></tr>
+      <tr><td><code>memory/management/agent.py</code></td><td><code>WRITE_PROTOCOL</code> 与已有主体清单；观察日期透传；按 agent 声明决定是否补文件工具</td></tr>
+      <tr><td><code>memory/agent_runtime/openai_agent.py</code></td><td><code>has_file_tools = False</code>；轨迹记录</td></tr>
+      <tr><td><code>memory/agent_runtime/claude_code.py</code></td><td><code>has_file_tools = True</code></td></tr>
+      <tr><td><code>memory/retrieval/tool_server.py</code></td><td>证据记录来源工具，供服务区分记忆与目录列表</td></tr>
+      <tr><td><code>scriptorium_serve/server.py</code></td><td>索引按版本缓存；确定性检索前置；返回读到的原文与兜底；每请求用量日志</td></tr>
+      <tr><td><code>tests/management/test_file_tools.py</code></td><td>11 个新测试</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="document-meta">测试：<code>code/tests</code> 与 <code>code/scriptorium_serve</code> 共 439 项通过（<code>test_document_pages</code> 与 <code>test_portable_layout</code> 需要工作树中不存在的数据目录，未计入）。</p>
+</article>
+</main>
+</div>
+<script>
+const progress=document.getElementById("progress-bar");
+const links=[...document.querySelectorAll("#toc .toc-link")];
+const sections=[...document.querySelectorAll("h2[id],h3[id]")];
+function update(){
+  const range=document.documentElement.scrollHeight-window.innerHeight;
+  progress.style.width=(range>0?window.scrollY/range*100:0)+"%";
+  let current=null;
+  for(const section of sections){if(section.getBoundingClientRect().top<=80)current=section}
+  links.forEach(link=>link.classList.toggle("active",current&&link.hash==="#"+current.id));
+}
+window.addEventListener("scroll",update,{passive:true});update();
+</script>
+</body>
+</html>

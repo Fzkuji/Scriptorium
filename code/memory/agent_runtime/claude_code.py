@@ -145,6 +145,10 @@ QueryFunction = Callable[..., AsyncIterator[Any]]
 
 
 class ClaudeCodeAgent:
+    # Claude Code brings Read, Write, Edit, Grep and Glob of its own; adding
+    # ours would put two of each in front of the model.
+    has_file_tools = True
+
     """Run one non-persistent Claude Code process per trajectory."""
 
     def __init__(

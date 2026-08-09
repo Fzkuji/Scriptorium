@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from memory.management import MemoryWorkspace
-from memory.management.transaction import TransactionError
+from memory.workspace.transaction import TransactionError
 from memory.retrieval import inspect
 
 TOPIC_LINES = [

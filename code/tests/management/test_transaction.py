@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from memory.management import MemoryWorkspace
-from memory.management.transaction import TransactionError, workspace_revision
+from memory.workspace.transaction import TransactionError, workspace_revision
 
 
 def make_patch(path: str, lines: list[str], *, create: bool = True) -> str:

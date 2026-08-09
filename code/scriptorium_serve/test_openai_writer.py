@@ -1,6 +1,6 @@
 """End-to-end Add through the OpenAI writer, against a stubbed endpoint.
 
-The stub stands in for gpt-4o-mini: it issues one shell tool call that writes a
+The stub stands in for gpt-4o-mini: it issues one `remember` call that records a
 memory line, then finishes. What this proves is the wiring — tool schemas reach
 the model, tool calls dispatch into the workspace, the write commits, and the
 result is retrievable through Search, which is what Add's contract demands.
@@ -18,6 +18,7 @@ os.environ["SCRIPTORIUM_WORKSPACES"] = WORKSPACES
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import json  # noqa: E402
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -28,10 +29,10 @@ USER = "eval:run_stub:locomo:conv-0"
 
 
 class _StubCompletions:
-    """Replies with one shell tool call, then a plain closing message."""
+    """Replies with one `remember` call, then a plain closing message."""
 
-    def __init__(self, command: str):
-        self.command = command
+    def __init__(self, arguments: str):
+        self.arguments = arguments
         self.calls = 0
         self.seen_tools: list[str] = []
 
@@ -43,8 +44,7 @@ class _StubCompletions:
             call = SimpleNamespace(
                 id="call_1",
                 function=SimpleNamespace(
-                    name="shell",
-                    arguments='{"command": %s}' % _json_string(self.command),
+                    name="remember", arguments=self.arguments,
                 ),
             )
             message = SimpleNamespace(content=None, tool_calls=[call])
@@ -63,13 +63,13 @@ def _json_string(value: str) -> str:
 
 
 class _StubClient:
-    def __init__(self, command: str):
-        self.completions = _StubCompletions(command)
+    def __init__(self, arguments: str):
+        self.completions = _StubCompletions(arguments)
         self.chat = SimpleNamespace(completions=self.completions)
 
 
-def _agent_with(command: str) -> tuple[OpenAIWriterAgent, _StubClient]:
-    client = _StubClient(command)
+def _agent_with(arguments: str) -> tuple[OpenAIWriterAgent, _StubClient]:
+    client = _StubClient(arguments)
     agent = OpenAIWriterAgent(
         OpenAIAgentConfig(
             base_url="https://stub.invalid/v1",
@@ -84,20 +84,16 @@ def _agent_with(command: str) -> tuple[OpenAIWriterAgent, _StubClient]:
 REQUEST_ID = "eval:run_stub:locomo_refined:conv-0:chunk-0"
 SESSION_ID = "eval:run_stub:sample:0"
 
-# The footnote must cite a source the Add actually archived, so it is built from
-# the same ref the server derives. A note may not rest on evidence it lacks.
+# `remember` cites the ref by the label the server derives for the message,
+# because a footnote may not rest on evidence the workspace lacks.
 _THREAD = SESSION_ID.replace(":", "-")
 _MESSAGE = f"{REQUEST_ID.replace(':', '-')}-0"
-
-TOPIC = f"""# Music
-
-## Career
-
-Calvin plays saxophone in a jazz quartet.[^e-aaaa111122] ^abc12345
-
-[^e-aaaa111122]: Time: `2023-05-08`; Sources: \
-[leaderboard/{_THREAD}/{_MESSAGE}](../sources/leaderboard/{_THREAD}.md#{_MESSAGE})
-"""
+REMEMBER = json.dumps({
+    "subject": "Calvin",
+    "kind": "person",
+    "fact": "Calvin plays saxophone in a jazz quartet.",
+    "sources": [f"leaderboard/{_THREAD}/{_MESSAGE}"],
+})
 
 
 class _ReadingModel:
@@ -121,8 +117,7 @@ class _ReadingModel:
 
 
 def test_add_writes_memory_and_search_returns_it(monkeypatch) -> None:
-    command = f"cat > topics/music.md <<'SCRIPTORIUM_EOF'\n{TOPIC}SCRIPTORIUM_EOF"
-    agent, client = _agent_with(command)
+    agent, client = _agent_with(REMEMBER)
 
     monkeypatch.setattr(server, "_agent", lambda: agent)
     monkeypatch.setattr(server, "WRITER_BASE_URL", "https://stub.invalid/v1")
@@ -146,8 +141,10 @@ def test_add_writes_memory_and_search_returns_it(monkeypatch) -> None:
             "session_id": SESSION_ID,
         }
 
-        # The shell tool was actually offered to the model and driven by it.
-        assert client.completions.seen_tools == ["shell"]
+        # Writing offers exactly one tool, and the model drove it. A shell or
+        # a whole-file writer here is latitude a weak model spends on
+        # rejected edits rather than on recording the conversation.
+        assert client.completions.seen_tools == ["remember", "update", "forget"]
 
         # Retrieval runs a model too, and it is a different job: read the
         # workspace and report the memory that bears on the query. Standing

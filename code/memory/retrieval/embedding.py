@@ -18,6 +18,30 @@ from .bm25 import (
 )
 
 
+_ENCODER: Any | None = None
+_ENCODER_LOCK = threading.Lock()
+
+
+def _shared_encoder() -> Any:
+    """One loaded model for the whole process.
+
+    An index is rebuilt whenever the workspace changes, and each rebuild used
+    to load the weights from disk again — seconds of the same work, for a
+    model that is identical no matter which workspace is being indexed. The
+    documents change; the encoder does not.
+    """
+    global _ENCODER
+    if _ENCODER is None:
+        with _ENCODER_LOCK:
+            if _ENCODER is None:
+                from sentence_transformers import SentenceTransformer
+
+                _ENCODER = SentenceTransformer(
+                    "sentence-transformers/all-MiniLM-L6-v2"
+                )
+    return _ENCODER
+
+
 class MemoryEmbeddingIndex:
     """Rebuild an in-memory embedding index from Topic and Source files."""
 
@@ -40,13 +64,7 @@ class MemoryEmbeddingIndex:
     @property
     def encoder(self) -> Any:
         if self._encoder is None:
-            with self._lock:
-                if self._encoder is None:
-                    from sentence_transformers import SentenceTransformer
-
-                    self._encoder = SentenceTransformer(
-                        "sentence-transformers/all-MiniLM-L6-v2"
-                    )
+            self._encoder = _shared_encoder()
         return self._encoder
 
     def _events(self) -> list[MemoryEvent]:

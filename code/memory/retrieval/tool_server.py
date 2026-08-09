@@ -89,7 +89,12 @@ def retrieval_tools(
                 row["accepted"] = accepted
             state.trace.append(row)
             if nonempty:
-                state.evidence.append({"text": output, "date": ""})
+                # Carry which tool produced it: a caller that returns
+                # evidence rather than a summary has to tell a memory
+                # passage from a directory listing.
+                state.evidence.append(
+                    {"text": output, "date": "", "tool": name}
+                )
             return {
                 "content": [{"type": "text", "text": output or "(no output)"}],
                 "is_error": is_error,

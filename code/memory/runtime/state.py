@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from ..workspace_layout import runtime_dir
+from ..workspace.layout import runtime_dir
 
 
 @dataclass(frozen=True)

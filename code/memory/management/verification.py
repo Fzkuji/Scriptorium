@@ -9,15 +9,17 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .agent import _record_trajectory, _run_agent, render_conversation
-from .config import MemoryConfig
+from ..workspace.agent_pass import _record_trajectory
+from .agent import _run_agent
+from ..config import MemoryConfig
+from ..writing.session import render_conversation
 from ..prompts import (
     VERIFICATION_PROBE_TASK,
     VERIFICATION_REPAIR_TASK,
     VERIFICATION_RETRIEVAL_TASK,
 )
-from .retrying import STRUCTURED_OUTPUT_ATTEMPTS
-from ..workspace_layout import TEMPORARY_PREFIX
+from ..workspace.retrying import STRUCTURED_OUTPUT_ATTEMPTS
+from ..workspace.layout import TEMPORARY_PREFIX
 
 _PROBE_SCHEMA = {
     "type": "object",

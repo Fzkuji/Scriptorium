@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from memory.management import MemoryWorkspace
-from memory.management.transaction import TransactionError
+from memory.workspace.transaction import TransactionError
 from memory.retrieval.layers import Layer, LayeredMemory
 
 TOOL_NAMES = (

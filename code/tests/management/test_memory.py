@@ -16,7 +16,7 @@ from memory.management import (
 from memory import build as adapter
 from memory import management as memory
 from memory.markdown import parse_topic_tree
-from memory.workspace_layout import RUNTIME_DIR_NAMES
+from memory.workspace.layout import RUNTIME_DIR_NAMES
 
 
 class ScriptedAgent:
@@ -615,7 +615,7 @@ def test_core_memory_restores_previous_content_when_commit_fails(
         return original_replace(source, destination)
 
     monkeypatch.setattr(
-        "memory.management.block_views.os.replace",
+        "memory.workspace.block_views.os.replace",
         fail_core_install,
     )
 
@@ -807,7 +807,7 @@ def test_block_transaction_restores_every_installed_view_on_install_failure(
         return original_replace(source, destination)
 
     monkeypatch.setattr(
-        "memory.management.block_views.os.replace",
+        "memory.workspace.block_views.os.replace",
         fail_relations_install,
     )
 
@@ -1215,7 +1215,7 @@ def test_verify_session_repairs_then_retries_same_question(tmp_path):
 def test_every_agent_run_is_recorded_with_what_it_was_sent(tmp_path):
     """Usage counters say a batch took N turns; the history says what it did."""
     import json as _json
-    from memory.workspace_layout import runtime_dir
+    from memory.workspace.layout import runtime_dir
 
     agent = ScriptedAgent(text="wrote it")
 
@@ -1250,10 +1250,10 @@ def test_a_failed_shell_command_is_told_which_tool_to_use(tmp_path):
     one corrected call.
     """
     import asyncio as _asyncio
-    from memory.management.tools import management_tools
+    from memory.organizing.tools import organizing_tools
 
     workspace = MemoryWorkspace(tmp_path)
-    shell = management_tools(workspace, [])[0]
+    shell = organizing_tools(workspace, [])[0]
 
     result = _asyncio.run(shell.handler(
         {"command": "cat > topics/people/new.md <<'EOF'\nhi\nEOF"}

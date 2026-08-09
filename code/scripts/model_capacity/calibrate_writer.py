@@ -16,7 +16,7 @@ from typing import Any
 
 from scripts.runners.common import atomic_json
 from memory import management, retrieval
-from memory.management.api import render_writer_input, writer_protocol_sha256
+from memory.writing.session import render_writer_input, writer_protocol_sha256
 from memory.runtime.capacity import (
     SCHEMA,
     MessageTooLargeError,

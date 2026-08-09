@@ -262,3 +262,41 @@ def test_embedding_searches_source_turns_missing_from_topics(tmp_path: Path):
 
     assert results[0]["path"] == "sources/locomo/thread_1.md"
     assert results[0]["refs"] == ["locomo/thread_1/msg_1"]
+
+
+def test_the_encoder_is_loaded_once_for_the_process():
+    """Rebuilding an index must not reload the model from disk.
+
+    An index is rebuilt whenever the workspace changes, and loading the
+    weights again each time cost seconds per search for a model that is the
+    same one every time.
+    """
+    from memory.retrieval import embedding
+
+    loads = []
+
+    class Stub:
+        def __init__(self, name):
+            loads.append(name)
+
+    embedding._ENCODER = None
+    try:
+        import sys
+        from types import ModuleType
+        module = ModuleType("sentence_transformers")
+        module.SentenceTransformer = Stub
+        saved = sys.modules.get("sentence_transformers")
+        sys.modules["sentence_transformers"] = module
+        try:
+            first = embedding._shared_encoder()
+            second = embedding._shared_encoder()
+        finally:
+            if saved is None:
+                del sys.modules["sentence_transformers"]
+            else:
+                sys.modules["sentence_transformers"] = saved
+    finally:
+        embedding._ENCODER = None
+
+    assert first is second
+    assert len(loads) == 1

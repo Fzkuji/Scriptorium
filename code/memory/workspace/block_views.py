@@ -17,7 +17,7 @@ from ..markdown import (
     render_definition,
 )
 from ..markdown.syntax import SINGLE_CITATION, definitions
-from ..workspace_layout import runtime_dir
+from .layout import runtime_dir
 
 
 class BlockViewsMixin:

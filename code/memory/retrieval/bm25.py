@@ -24,7 +24,7 @@ from ..markdown.syntax import (
     definition_match,
     source_reference,
 )
-from ..workspace_layout import runtime_dir
+from ..workspace.layout import runtime_dir
 
 # The cache sits beside the runtime directory and takes its name, so a
 # workspace built before the rename keeps every file it already has.

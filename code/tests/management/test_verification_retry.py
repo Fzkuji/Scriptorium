@@ -4,7 +4,7 @@ import pytest
 
 from memory.agent_runtime import AgentResult
 from memory.management import verification
-from memory.management.config import MemoryConfig
+from memory.config import MemoryConfig
 
 
 def result(structured):
