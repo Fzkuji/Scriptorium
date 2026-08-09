@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{Hypothetical model-specific window selection. A configuration passes when the lower 95\% confidence bound exceeds $-1.5$ points and construction cost falls by at least 20\%.}
+\label{tab:mock_chunk_selection}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+Writer & $W^*$ & $\Delta$Score & CI lower & Calls $\downarrow$ & Tokens $\downarrow$ & Cost $\downarrow$ \\
+\midrule
+Sol & 24 & -0.4 & -1.0 & 61.5\% & 57.3\% & 58.1\% \\
+Terra & 16 & -0.4 & -1.2 & 51.5\% & 47.4\% & 48.1\% \\
+Luna & 12 & -0.5 & -1.4 & 40.5\% & 37.8\% & 38.5\% \\
+\bottomrule
+\end{tabular}
+\end{table}

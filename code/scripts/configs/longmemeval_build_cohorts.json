@@ -1,0 +1,29 @@
+{
+  "schema": "scriptorium-longmemeval-build-cohorts-v1",
+  "updated_at": "2026-08-09",
+  "cohorts": [
+    {
+      "id": "legacy-runtimeids-index75-104",
+      "indices": {"start": 75, "end": 104, "count": 30},
+      "status": "excluded_holdout",
+      "use_in_current_aggregate": false,
+      "preserve_outputs": true,
+      "decision_pending": "audit_for_fusion_or_rebuild_under_current_protocol",
+      "output_globs": [
+        "/home/qi2/scriptorium-runs/longmemeval-ms-item75-token15k-t120-wsl-ext4-r1",
+        "/home/qi2/scriptorium-runs/longmemeval-ms-lane*-token15k-wsl-ext4-r1",
+        "/home/qi2/scriptorium-runs/longmemeval-ms-20-index85-104-worker*-wsl-ext4-r1"
+      ]
+    },
+    {
+      "id": "current-index105-124",
+      "indices": {"start": 105, "end": 124, "count": 20},
+      "status": "active",
+      "use_in_current_aggregate": true,
+      "preserve_outputs": true,
+      "output_globs": [
+        "/home/qi2/scriptorium-runs/longmemeval-ms-20-index105-124-worker*-wsl-ext4-r1"
+      ]
+    }
+  ]
+}

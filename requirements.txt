@@ -1,0 +1,17 @@
+anthropic>=0.40,<1
+claude-agent-sdk==0.1.81
+datasets>=3,<5
+httpx[socks]>=0.27,<1
+nltk>=3.9,<4
+mcp>=1.23,<2
+numpy>=2,<3
+openai>=1.50,<3
+pillow>=11,<13
+pyarrow>=18,<24
+rank-bm25>=0.2.2,<1
+reportlab>=4,<5
+requests>=2.32,<3
+rouge-score>=0.1.2,<1
+sentence-transformers>=3,<6
+tiktoken==0.12.0
+uvicorn>=0.30,<1

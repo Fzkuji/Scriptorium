@@ -1,0 +1,188 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model-Aligned Memory — 前期调研</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;900&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link href="../assets/document.css" rel="stylesheet">
+</head>
+<body>
+<div id="progress-bar"></div>
+<div class="document-shell">
+  <aside class="document-sidebar"><p class="document-sidebar-brand">Scriptorium</p><nav id="toc">
+<a class="toc-link" href="#scope-taxonomy">§1 Scope &amp; Taxonomy</a>
+<a class="toc-link" href="#memory-organization">§2 Memory Organization</a>
+<a class="toc-link toc-h3" href="#representation-unit">Representation Unit</a>
+<a class="toc-link toc-h3" href="#organization-structure">Organization Structure</a>
+<a class="toc-link toc-h3" href="#organization-operations">Organization Operations</a>
+<a class="toc-link" href="#retrieval-methods">§3 Retrieval Methods</a>
+<a class="toc-link toc-h3" href="#retrieval-index-free">Exact Lexical</a>
+<a class="toc-link toc-h3" href="#retrieval-indexed">Sparse Lexical</a>
+<a class="toc-link toc-h3" href="#retrieval-dense">Dense Semantic</a>
+<a class="toc-link" href="#system-comparison">§4 System Comparison</a>
+<a class="toc-link" href="#orthogonal-choices">§5 Orthogonal Choices</a>
+<a class="toc-link toc-h3" href="#training">Training</a>
+<a class="toc-link toc-h3" href="#infrastructure">Infrastructure</a>
+<a class="toc-link" href="#evaluation">§6 Evaluation</a>
+<a class="toc-link" href="#resources">§7 Resources</a>
+</nav></aside>
+  <main class="document-main"><article class="document-content">
+<nav class="document-breadcrumb" aria-label="当前位置">
+  <span>LLM Agent Memory</span><span class="separator">/</span>
+  <a href="../Model-Aligned-Wiki.html">scriptorium</a><span class="separator">/</span>
+  <span>docs</span><span class="separator">/</span>
+  <span>related-work</span><span class="separator">/</span>
+  <span aria-current="page">survey.html</span>
+</nav>
+
+<header class="document-header">
+  <p class="document-eyebrow">Related Work</p>
+  <h1>Agent Memory：Organization and Retrieval Survey</h1>
+  <p class="document-lead">按记忆组织与检索方法两个维度整理现有 Agent Memory 系统。</p>
+  <p class="document-meta">updated 2026-07-31</p>
+</header>
+
+<p>本页面保留完整分类、系统比较、评测口径和资源。可直接用于论文的 Related Work 正文见 <a href="related-work.html">Agent Memory: Related Work</a>；benchmark 与实验设置的核验材料保存在 <a href="evidence/benchmark_survey.md">evidence/</a>。</p>
+
+<h2 id="scope-taxonomy">§1 Scope and Taxonomy</h2>
+<p>Agent memory system 将跨会话历史保存为可持续更新的外部状态，并在后续任务中选择相关信息。本文采用两个主要分析维度：<strong>Memory Organization</strong> 研究保存什么以及记忆条目之间如何组织；<strong>Retrieval Methods</strong> 研究如何根据当前 query 定位相关条目。</p>
+<table tabindex="0">
+<thead><tr><th>维度</th><th>核心问题</th><th>主要分类</th></tr></thead>
+<tbody>
+<tr><td><strong>Memory Organization</strong></td><td>记忆单元保存什么？不同单元如何关联？</td><td>Representation Unit、Organization Structure、Organization Operations</td></tr>
+<tr><td><strong>Retrieval Methods</strong></td><td>系统使用什么匹配机制定位候选证据？</td><td>Exact Lexical（<code>grep</code>）、Sparse Lexical（BM25）、Dense Semantic（Embedding）</td></tr>
+</tbody>
+</table>
+<p>训练方式、存储基础设施和产品形态是与上述两个维度正交的系统属性。LLM 可以理解问题、改写检索词、选择工具、判断候选并决定是否继续检索，但这种控制方式不构成第四种底层检索方法。目录、timeline、links 和 source references 是建立在 Memory Organization 上的结构化访问方式，也不与三种匹配机制并列。</p>
+
+<h2 id="memory-organization">§2 Memory Organization</h2>
+<h3 id="representation-unit">2.1 Representation Unit</h3>
+<p>Representation Unit 描述系统写入一个 memory item 时保存的内容。一个系统可以同时保存多种表示。</p>
+<table tabindex="0">
+<thead><tr><th>类型</th><th>定义</th><th>代表系统</th><th>主要取舍</th></tr></thead>
+<tbody>
+<tr><td><strong>Raw Turn / Episode</strong></td><td>保存原始对话、交互记录或文档片段</td><td>MemGPT / Letta、E-mem</td><td>保留细节，但存储量和检索范围较大</td></tr>
+<tr><td><strong>Summary</strong></td><td>将一段历史压缩为较短文本</td><td>MemoryBank、LangMem、MemoryOS</td><td>降低上下文成本，但可能删除日期、数字和原始措辞</td></tr>
+<tr><td><strong>Atomic Fact / Note</strong></td><td>将信息拆成独立事实或笔记单元</td><td><a href="https://arxiv.org/abs/2502.12110">A-Mem</a>、<a href="https://arxiv.org/abs/2601.02553">SimpleMem</a></td><td>便于更新和匹配，但拆分过程可能丢失上下文关系</td></tr>
+<tr><td><strong>Event</strong></td><td>保存带时间、参与者和上下文的事件描述</td><td><a href="https://arxiv.org/abs/2601.02845">TiMem</a>、<a href="https://arxiv.org/abs/2601.07582">ES-Mem</a></td><td>适合跨会话和时间推理，但依赖事件抽取质量</td></tr>
+<tr><td><strong>Entity / Relation</strong></td><td>将内容表示为实体、属性和关系</td><td><a href="https://github.com/getzep/graphiti">Zep / Graphiti</a>、<a href="https://github.com/mem0ai/mem0">Mem0</a></td><td>支持关系查询，但结构化抽取可能省略原始语境</td></tr>
+<tr><td><strong>Hybrid Representation</strong></td><td>同时维护事实、事件、摘要、实体或原文</td><td><a href="https://arxiv.org/abs/2512.12818">Hindsight</a>、AdaMem</td><td>覆盖多种信息需求，但同步和维护成本更高</td></tr>
+</tbody>
+</table>
+
+<h3 id="organization-structure">2.2 Organization Structure</h3>
+<p>Organization Structure 描述 memory items 之间的排列和关联方式。这些结构不是互斥类别，完整系统可以组合多种结构。</p>
+<table tabindex="0">
+<thead><tr><th>结构</th><th>组织方式</th><th>代表系统</th><th>主要取舍</th></tr></thead>
+<tbody>
+<tr><td><strong>Flat / Sequential</strong></td><td>按时间或写入顺序保存列表、日志或 archival memory</td><td><a href="https://arxiv.org/abs/2310.08560">MemGPT / Letta</a>、MemoryBank</td><td>写入简单；规模扩大后依赖额外检索器</td></tr>
+<tr><td><strong>Hierarchical / Tree</strong></td><td>按抽象层级、时间粒度或生命周期构建多级结构</td><td><a href="https://arxiv.org/abs/2310.05029">MemWalker</a>、TiMem、<a href="https://arxiv.org/abs/2506.06326">MemoryOS</a>、MemOS</td><td>支持由粗到细的访问，但层级构建错误会影响后续定位</td></tr>
+<tr><td><strong>Graph-based</strong></td><td>通过实体、事件、语义或因果边连接记忆节点</td><td>Zep、Hindsight、<a href="https://arxiv.org/abs/2602.15313">Mnemis</a></td><td>支持跨节点关系推理，但需要构图和图更新</td></tr>
+<tr><td><strong>File / Wiki-based</strong></td><td>使用文件、目录、Markdown 页面和链接组织文本</td><td><a href="https://arxiv.org/abs/2606.11680">HORMA</a>、<a href="https://arxiv.org/abs/2604.01599">ByteRover</a>、Karpathy LLM Wiki</td><td>内容可读且可直接检查；效果依赖命名、层级和文件维护</td></tr>
+<tr><td><strong>Multi-view</strong></td><td>为同一记忆集合维护两个或更多组织视图</td><td>AdaMem、FluxMem、Hindsight</td><td>支持不同查询需求，但必须处理跨视图一致性</td></tr>
+</tbody>
+</table>
+
+<h3 id="organization-operations">2.3 Organization Operations</h3>
+<p>Memory Organization 不只决定初始表示，也包括记忆随新信息变化时执行的操作。</p>
+<table tabindex="0">
+<thead><tr><th>操作</th><th>作用</th><th>代表方法</th></tr></thead>
+<tbody>
+<tr><td><strong>Add / Admit</strong></td><td>判断新信息是否进入长期记忆</td><td>A-MAC、MemRouter</td></tr>
+<tr><td><strong>Update / Invalidate</strong></td><td>处理事实纠正、信息冲突和旧记录失效</td><td>Mem0、<a href="https://arxiv.org/abs/2604.01560">DeltaMem</a></td></tr>
+<tr><td><strong>Merge / Consolidate</strong></td><td>合并重复或相近内容，形成较高层表示</td><td>SimpleMem、TiMem、LightMem</td></tr>
+<tr><td><strong>Link / Reorganize</strong></td><td>增加关联、调整归属或重建结构</td><td>A-Mem、Mnemis、Hindsight</td></tr>
+<tr><td><strong>Forget / Prune</strong></td><td>按时间、效用或容量限制删除仍然有效但不再保留的内容</td><td>MemoryBank、H-Mem、SimpleMem</td></tr>
+</tbody>
+</table>
+
+<h2 id="retrieval-methods">§3 Retrieval Methods</h2>
+<p>对于文本形式的外部记忆，底层候选生成分为三类：Exact Lexical Retrieval、Sparse Lexical Retrieval 和 Dense Semantic Retrieval。三者都可以由固定程序调用，也可以由 LLM 生成 query、检查结果并反复调用；LLM 是否参与属于控制与路由方式，不作为独立的 retrieval method。</p>
+
+<h3 id="retrieval-index-free">3.1 Exact Lexical Retrieval</h3>
+<p>Exact Lexical Retrieval 直接扫描原始文本，不需要预先为 memory items 建立另一套检索表示。典型工具是 <code>grep</code>：它执行精确字符串或正则表达式匹配，并返回原文件中的匹配位置。该方法不需要额外模型，也不需要维护文本到索引条目的映射；文本发生变化后可以立即搜索。</p>
+<p>它适合姓名、编号、日期、专有名词和已知原句，但不能自动处理同义改写。搜索成本随文本规模增长，结果本身也不提供完整的相关性排序。</p>
+
+<h3 id="retrieval-indexed">3.2 Sparse Lexical Retrieval</h3>
+<p>Sparse Lexical Retrieval 仍以词项匹配为基础，但预先将 memory corpus 切分为带 ID 的检索单元，并维护 tokenization、倒排索引、词频、文档长度和全局词项统计。BM25 是典型方法：它根据 query term 的出现频率、区分度和文档长度计算相关性分数，再返回排序后的候选。</p>
+<p>BM25 不需要 learned model，但需要在写入、修改或删除文本后同步更新稀疏索引。Mem0、Zep 等系统将 BM25 作为混合检索信号。</p>
+
+<h3 id="retrieval-dense">3.3 Dense Semantic Retrieval</h3>
+<p>Dense Semantic Retrieval 使用额外的 Embedding 模型，将 memory items 和 query 编码为稠密向量，并通过向量相似度返回 top-k 候选。系统需要保存原始文本、memory ID 和对应向量，并在文本变化后重新编码和更新向量索引。</p>
+<p>该方法适合同义表达、概念相关和自然语言改写，但效果依赖 Embedding 模型、memory 切分、索引粒度、相似度函数和 top-k。MemoryBank、A-Mem、LangMem、Mem0 和 Zep 均使用这一方法；Hybrid Retrieval 可以进一步组合 BM25 与 dense retrieval。</p>
+<p>相同的 <code>grep</code>、BM25 或 Embedding 可以由固定流水线调用，也可以由 Agent 自主调用。LLM 负责 query 理解、工具选择、候选判断和停止决策；底层匹配方法本身不因此改变。</p>
+
+<h2 id="system-comparison">§4 System Comparison</h2>
+<p>下表按相同维度描述代表性系统。Retrieval Mechanism 只记录底层候选匹配；固定 top-k、结果融合、工具调用、分级路由和结构遍历单列为 Control / Routing / Structural Access，避免将它们误写成第四种匹配方法。</p>
+<table tabindex="0">
+<thead><tr><th>System</th><th>Representation Unit</th><th>Organization Structure</th><th>Retrieval Mechanism</th><th>Control / Routing / Structural Access</th><th>Memory Operations</th><th>Training</th></tr></thead>
+<tbody>
+<tr><td><a href="https://arxiv.org/abs/2310.08560"><strong>MemGPT / Letta</strong></a></td><td>原文与编辑文本</td><td>Core + archival flat memory</td><td>Backend-dependent / not fixed by the taxonomy</td><td>LLM 生成工具请求</td><td>Add / replace / archive</td><td>Training-free</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2305.10250"><strong>MemoryBank</strong></a></td><td>对话、摘要、用户画像</td><td>Flat vector store</td><td>Embedding</td><td>Fixed similarity top-k</td><td>遗忘曲线淘汰</td><td>Training-free</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2502.12110"><strong>A-Mem</strong></a></td><td>Atomic notes</td><td>Linked note graph</td><td>Embedding</td><td>Graph expansion from retrieved notes</td><td>Add / update links</td><td>Training-free</td></tr>
+<tr><td><a href="https://github.com/mem0ai/mem0"><strong>Mem0</strong></a></td><td>事实与实体关系</td><td>Vector store + knowledge graph</td><td>Embedding + BM25</td><td>Graph search and hybrid fusion</td><td>Add / update / delete</td><td>Training-free</td></tr>
+<tr><td><a href="https://github.com/getzep/graphiti"><strong>Zep / Graphiti</strong></a></td><td>事件、实体、关系</td><td>Temporal knowledge graph</td><td>Embedding + BM25</td><td>Temporal graph search and fusion</td><td>Add / invalidate / link</td><td>Training-free</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2601.02845"><strong>TiMem</strong></a></td><td>Event summaries</td><td>Temporal hierarchy</td><td>Embedding</td><td>Temporal hierarchy traversal</td><td>Temporal consolidation</td><td>Training-free</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2512.12818"><strong>Hindsight</strong></a></td><td>事实、经验、实体摘要、信念</td><td>Multi-network graph</td><td>Embedding</td><td>Graph traversal + LLM reflection</td><td>Retain / recall / reflect</td><td>Training-free</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2602.15313"><strong>Mnemis</strong></a></td><td>Event summaries</td><td>Hierarchical event graph</td><td>Dense semantic similarity</td><td>Hierarchical graph traversal</td><td>Cluster / link / evolve</td><td>Training-free</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2606.11680"><strong>HORMA</strong></a></td><td>LLM-generated notes</td><td>File hierarchy</td><td>Exact lexical</td><td>LLM-controlled file access</td><td>Write / edit / organize</td><td>GRPO</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2604.01599"><strong>ByteRover</strong></a></td><td>Task knowledge with provenance</td><td>Context tree</td><td>Exact lexical + BM25</td><td>Hierarchical access + five-tier routing + LLM fallback</td><td>Add / update / lifecycle management</td><td>Training-free</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2604.01560"><strong>DeltaMem</strong></a></td><td>Learned memory entries</td><td>External memory store</td><td>Backend-dependent / varies with the host system</td><td>Existing retrieval pipeline</td><td>RL-learned add / update / delete</td><td>GRPO</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2601.02553"><strong>SimpleMem</strong></a></td><td>Atomic memory</td><td>Consolidated memory set</td><td>Embedding</td><td>Fixed similarity retrieval</td><td>Merge / prune</td><td>Training-free</td></tr>
+</tbody>
+</table>
+
+<h2 id="orthogonal-choices">§5 Orthogonal Design Choices</h2>
+<h3 id="training">5.1 Training</h3>
+<p>Training-free systems 依赖 prompt、规则和现成模型完成记忆操作。另一类工作通过 supervised fine-tuning、RL、PPO 或 GRPO 学习写入、检索或维护策略，例如 Memory-R1、MemReader、DeltaMem、AtomMem 和 HORMA。训练方式影响部署成本和策略适应性，但不决定系统采用哪种 memory organization 或 retrieval method。</p>
+
+<h3 id="infrastructure">5.2 Infrastructure</h3>
+<table tabindex="0">
+<thead><tr><th>基础设施</th><th>用途</th><th>常见系统</th></tr></thead>
+<tbody>
+<tr><td>Plain text / File system</td><td>保存可直接读取和编辑的文本、目录及链接</td><td>MemGPT、HORMA、ByteRover</td></tr>
+<tr><td>Vector index / Vector DB</td><td>保存 embedding 并执行相似度搜索</td><td>MemoryBank、A-Mem、Mem0、LangMem</td></tr>
+<tr><td>Graph store / Graph DB</td><td>保存实体、事件和关系并执行图查询</td><td>Zep、Hindsight、Mnemis</td></tr>
+<tr><td>Hybrid backend</td><td>组合文本、向量和图结构</td><td>Mem0、Zep、MemOS</td></tr>
+</tbody>
+</table>
+
+<h2 id="evaluation">§6 Evaluation</h2>
+<p>最终回答准确率同时受到 memory construction、retrieval、answerer 和 judge 的影响。不同论文使用不同模型、prompt、数据子集和评分器时，单个百分比不能直接用于方法排序。除 answer accuracy 外，还应分别报告 evidence recall、temporal reasoning、multi-hop reasoning、abstention、检索 token、延迟、工具调用数和 memory construction cost。</p>
+<table tabindex="0">
+<thead><tr><th>Benchmark</th><th>来源</th><th>规模</th><th>主要测试维度</th></tr></thead>
+<tbody>
+<tr><td><strong>LoCoMo</strong> (arXiv 2402.17753)</td><td>ACL 2024</td><td>10 conversations，约 2K QA</td><td>single-hop、temporal、multi-hop、open-domain、adversarial</td></tr>
+<tr><td><strong>LongMemEval</strong> (arXiv 2410.10813)</td><td>ICLR 2025</td><td>500 QA</td><td>knowledge update、multi-session、single-session、temporal reasoning</td></tr>
+<tr><td><strong>BEAM</strong></td><td>Mem0, 2026</td><td>1M–10M tokens</td><td>大规模 memory 能力与效率</td></tr>
+<tr><td><strong>MemBench</strong> (arXiv 2510.17281)</td><td>2025</td><td>—</td><td>事实记忆、反思记忆、效率与容量退化</td></tr>
+<tr><td><strong>EvolMem</strong> (arXiv 2601.03543)</td><td>2026</td><td>多 session</td><td>记忆随交互演化</td></tr>
+<tr><td><strong>PERMA</strong> (arXiv 2603.23231)</td><td>2026</td><td>事件驱动</td><td>个性化偏好变化</td></tr>
+</tbody>
+</table>
+
+<h2 id="resources">§7 Surveys, Products, and Repositories</h2>
+<table tabindex="0">
+<thead><tr><th>类型</th><th>资源</th><th>范围</th></tr></thead>
+<tbody>
+<tr><td>Survey</td><td>Memory in the LLM Era (arXiv 2604.01707)</td><td>模块化记忆架构与策略</td></tr>
+<tr><td>Survey</td><td>Anatomy of Agentic Memory (arXiv 2602.19320)</td><td>Agent memory 分类与评测局限</td></tr>
+<tr><td>Survey</td><td>Memory for Autonomous LLM Agents (arXiv 2603.07670)</td><td>自主 agent 记忆机制与评测</td></tr>
+<tr><td>Survey</td><td><a href="https://arxiv.org/abs/2505.00675">Rethinking Memory in LLM-based Agents</a></td><td>记忆表示、操作与研究问题</td></tr>
+<tr><td>Product</td><td>ChatGPT Memory</td><td>显式保存信息与跨会话历史使用</td></tr>
+<tr><td>Product</td><td>Claude Memory / CLAUDE.md</td><td>用户管理的文件与项目上下文</td></tr>
+<tr><td>Product</td><td>Perplexity Brain</td><td>从 session 和 connectors 建立持久上下文</td></tr>
+<tr><td>Repository</td><td><a href="https://github.com/langchain-ai/langmem">LangMem</a></td><td>记忆写入、检索和更新原语</td></tr>
+<tr><td>Repository</td><td><a href="https://github.com/agiresearch/AIOS-LSFS">LSFS</a></td><td>LLM 驱动的语义文件系统</td></tr>
+</tbody>
+</table>
+
+
+</article></main>
+</div>
+<script>
+window.addEventListener('scroll',()=>{const h=document.documentElement.scrollHeight-window.innerHeight;document.getElementById('progress-bar').style.width=h>0?(window.scrollY/h*100)+'%':'0%'});
+const tocLinks=document.querySelectorAll('.toc-link'),headings=[...document.querySelectorAll('h2[id],h3[id]')];
+function updateToc(){let cur=null;for(const h of headings){if(h.getBoundingClientRect().top<=100)cur=h}tocLinks.forEach(l=>l.classList.remove('active'));if(cur){const l=document.querySelector('.toc-link[href="#'+cur.id+'"]');if(l)l.classList.add('active')}}
+window.addEventListener('scroll',updateToc,{passive:true});updateToc();
+</script></body></html>

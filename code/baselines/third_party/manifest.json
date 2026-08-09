@@ -1,0 +1,125 @@
+{
+  "generated_at": "2026-08-04T12:15:33.978019+00:00",
+  "repositories": [
+    {
+      "name": "amem",
+      "remote": "https://github.com/WujiangXu/A-mem.git",
+      "commit": "0c8039f28fdcc08189a23c07a3437d9d2482f9c2",
+      "dirty": true
+    },
+    {
+      "name": "amem-early-runs",
+      "remote": "https://github.com/WujiangXu/A-mem.git",
+      "commit": "0c8039f28fdcc08189a23c07a3437d9d2482f9c2",
+      "dirty": true
+    },
+    {
+      "name": "emem",
+      "remote": "https://github.com/dog-last/E-mem",
+      "commit": "cf58453daf795149eeb799ec73373c18f9d56ce2",
+      "dirty": false
+    },
+    {
+      "name": "evermemos",
+      "remote": "https://github.com/EverMind-AI/EverMemOS",
+      "commit": "0341f1230fef170d28d83c4295ab9d93570b0f2d",
+      "dirty": false
+    },
+    {
+      "name": "graphiti",
+      "remote": "https://github.com/getzep/graphiti.git",
+      "commit": "f4330dc0bb39a3dd7356cdb67d0cc8ae16e5de53",
+      "dirty": false
+    },
+    {
+      "name": "hindsight",
+      "remote": "https://github.com/vectorize-io/hindsight.git",
+      "commit": "6a479dddb9b044b795415960ad3cc2366c84bd78",
+      "dirty": true
+    },
+    {
+      "name": "lightmem",
+      "remote": "https://github.com/zjunlp/LightMem.git",
+      "commit": "4a9f1d6243fa09a11506f06b83ac1c74b5c87451",
+      "dirty": false
+    },
+    {
+      "name": "mem0",
+      "remote": "https://github.com/mem0ai/mem0.git",
+      "commit": "b2ff3aeda5375c9354ae6b0cf9c9d78f101344d0",
+      "dirty": false
+    },
+    {
+      "name": "mem0-benchmarks",
+      "remote": "https://github.com/mem0ai/memory-benchmarks.git",
+      "commit": "4b61c5d31b9c668a12b4f5e78064248a02c82d2b",
+      "dirty": false
+    },
+    {
+      "name": "memgpt",
+      "remote": "https://github.com/letta-ai/letta.git",
+      "commit": "6d8cb7fd48938b629aad5770faa051a8d42e1e9f",
+      "dirty": false
+    },
+    {
+      "name": "memmachine",
+      "remote": "https://github.com/MemMachine/MemMachine.git",
+      "commit": "a1ab26e07ea47da99cc9bf5004db99dfbe4a7ea6",
+      "dirty": false
+    },
+    {
+      "name": "memobase",
+      "remote": "https://github.com/memodb-io/memobase.git",
+      "commit": "358c16bbc6d687937d79bc2f984a11c3be8da901",
+      "dirty": false
+    },
+    {
+      "name": "memorybank",
+      "remote": "https://github.com/zhongwanjun/MemoryBank-SiliconFriend.git",
+      "commit": "cf61c4196e4cfdb0f2b7a0316249fa40312dc3a9",
+      "dirty": false
+    },
+    {
+      "name": "memoryos",
+      "remote": "https://github.com/BAI-LAB/MemoryOS.git",
+      "commit": "1d717060350931af33d1d0dc3d4e50a72c125a48",
+      "dirty": true
+    },
+    {
+      "name": "memos",
+      "remote": "https://github.com/MemTensor/MemOS.git",
+      "commit": "a4f1b5be94b3ed1b78438375176320b04fa3cc44",
+      "dirty": false
+    },
+    {
+      "name": "mirix",
+      "remote": "https://github.com/Mirix-AI/MIRIX.git",
+      "commit": "51f3342d5366b0e215439581f92e0323227146af",
+      "dirty": false
+    },
+    {
+      "name": "mnemis",
+      "remote": "https://github.com/microsoft/Mnemis.git",
+      "commit": "4552fed19bc0cde7b990a6ceb0365cd75b1b3453",
+      "dirty": true
+    },
+    {
+      "name": "nemori",
+      "remote": "https://github.com/nemori-ai/nemori.git",
+      "commit": "d2a6dff6e5481214a0be6a2d10147feccfc16244",
+      "dirty": false
+    },
+    {
+      "name": "simplemem",
+      "remote": "https://github.com/aiming-lab/SimpleMem",
+      "commit": "60a48e83a7fef10d386e1f438589047d3a4257bc",
+      "dirty": false
+    },
+    {
+      "name": "timem",
+      "remote": "https://github.com/TiMEM-AI/timem",
+      "commit": "6d279a5f5d40ee229e1995df15c182cb2062c71c",
+      "dirty": false
+    }
+  ]
+}

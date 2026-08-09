@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent Memory — Related Work</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;900&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link href="../assets/document.css" rel="stylesheet">
+</head>
+<body>
+<div id="progress-bar"></div>
+<div class="document-shell">
+  <aside class="document-sidebar">
+    <p class="document-sidebar-brand">Scriptorium</p>
+    <nav id="toc" aria-label="页内目录">
+      <a class="toc-link" href="#representation">§2.1 Representation &amp; Organization</a>
+      <a class="toc-link" href="#lifecycle">§2.2 Lifecycle Management</a>
+      <a class="toc-link" href="#retrieval">§2.3 Retrieval</a>
+      <a class="toc-link" href="#scope">§2.4 Scope of Comparison</a>
+    </nav>
+  </aside>
+  <main class="document-main">
+    <article class="document-content">
+      <nav class="document-breadcrumb" aria-label="当前位置">
+        <span>LLM Agent Memory</span><span class="separator">/</span>
+        <a href="../Model-Aligned-Wiki.html">scriptorium</a><span class="separator">/</span>
+        <span>docs</span><span class="separator">/</span>
+        <span>related-work</span><span class="separator">/</span>
+        <span aria-current="page">related-work.html</span>
+      </nav>
+
+      <header class="document-header">
+        <p class="document-eyebrow">Paper Draft</p>
+        <h1>Agent Memory: Related Work</h1>
+        <p class="document-lead">按记忆表示与组织、生命周期管理和检索机制三条研究线索整理的论文正文草稿。</p>
+        <p class="document-meta">updated 2026-07-31</p>
+      </header>
+
+      <p>Agent memory 将超出当前上下文窗口的交互历史保存为可持续访问的外部状态。相关系统不仅需要决定保存哪些内容，还需要确定记忆单元之间的组织方式、随新交互更新记忆的规则，以及查询时定位证据的方法。以下讨论聚焦外部长期记忆，不包含模型参数、激活或 KV cache。</p>
+
+      <h2 id="representation">§2.1 Memory Representation and Organization</h2>
+
+      <p>一类系统将历史转化为可独立检索的文本记录。<a href="https://arxiv.org/abs/2305.10250">MemoryBank</a> 同时保存对话记录、事件摘要和持续更新的用户画像；<a href="https://arxiv.org/abs/2504.19413">Mem0</a> 从交互中抽取并整合显著事实，并进一步提供图表示以表达关系；<a href="https://arxiv.org/abs/2502.12110">A-Mem</a> 则将记忆写成带有上下文描述、关键词和标签的笔记，并依据新旧笔记之间的关联动态建立链接。这类表示降低了查询时需要处理的历史规模，但其信息覆盖取决于抽取、摘要和切分过程。</p>
+
+      <p>另一类工作显式组织记忆之间的时间、层级或关系结构。<a href="https://arxiv.org/abs/2310.08560">MemGPT</a> 通过分层记忆和模型发起的函数调用，在有限上下文与外部存储之间移动信息。<a href="https://arxiv.org/abs/2501.13956">Zep/Graphiti</a> 将对话事件、实体和关系维护为带时间语义的知识图谱，以保留关系的历史变化。<a href="https://arxiv.org/abs/2601.02845">TiMem</a> 使用 Temporal Memory Tree 在多个时间层级之间整合对话信息，并根据问题复杂度选择召回层级。平面记录、时间层级和关系图分别强调统一匹配、时间连续性与显式关系，因此同一系统也可以组合多种表示。</p>
+
+      <p>近期工作开始直接研究文件式记忆。<a href="https://arxiv.org/abs/2604.01599">ByteRover</a> 将知识保存为带来源和生命周期信息的层级 Context Tree，并在本地 Markdown 文件上执行分级检索；<a href="https://arxiv.org/abs/2606.11680">HORMA</a> 构建文件系统式层级，将摘要实体连接到原始轨迹，再训练轻量导航策略选择上下文；<a href="https://arxiv.org/abs/2607.26637">Filesystem-Based Memory for LLM Agents</a> 系统考察模型管理 Markdown 目录时的组织演化、检索成本和规模增长。文件、向量索引与图数据库描述的是不同系统维度：文件可以承载层级和链接，文本可以同时建立稀疏或稠密索引，图式系统也可以在关系结构之外保存事件文本或向量表示。</p>
+
+      <h2 id="lifecycle">§2.2 Memory Lifecycle Management</h2>
+
+      <p>长期记忆需要在持续交互中执行写入、更新、整合和失效处理。MemoryBank 依据时间与重要性更新记忆强度；Mem0 在新事实到达时执行新增、更新、删除或保持不变；A-Mem 在写入新笔记时建立关联，并更新已有笔记的上下文属性；Zep/Graphiti 通过事件时间和关系有效区间保存知识变化。这些设计分别通过记录更新、关联演化或时间有效区间，使查询能够访问当前状态或历史关系。</p>
+
+      <p>周期性整合用于控制长期增长。TiMem 将低层对话逐步整合到更高时间层级；<a href="https://arxiv.org/abs/2604.07798">LightMem</a> 将在线检索与写入同离线长期整合分开，并维护短期、中期和长期三个记忆层级。增量更新与后台整合解决的问题不同：前者控制新信息如何进入现有状态，后者重新组织累积内容并降低后续访问成本。两者都需要处理来源保留、事实变化和派生表示同步，但具体策略不由存储介质单独决定。</p>
+
+      <p><a href="https://arxiv.org/abs/2606.24775">Are We Ready for an Agent-Native Memory System?</a> 将完整记忆系统分解为表示与存储、抽取、检索与路由、维护四个模块，并指出不同工作负载对应不同的结构和成本取舍。该分解说明，允许 LLM 参与写入或工具调用并不等同于整个生命周期均由 Agent 决定；系统预设的数据模型、候选生成器、更新规则和维护触发条件仍分别限定 Agent 的控制范围。</p>
+
+      <h2 id="retrieval">§2.3 Retrieval over External Memory</h2>
+
+      <p>底层候选生成可以区分为三类。Exact lexical retrieval 直接查找字面匹配，例如 <code>grep</code>；sparse lexical retrieval 使用 BM25 等词项统计对候选排序；dense semantic retrieval 使用额外的 embedding 模型编码 query 与记忆单元，并依据向量相似度返回 top-k。前两类依赖文本中的词项，稠密检索更容易覆盖同义表达，但需要维护随文本更新的向量索引。混合检索可以融合稀疏与稠密结果，但不会改变两种匹配信号各自的定义。</p>
+
+      <p>现有记忆系统通常将匹配方法与组织结构组合使用。MemoryBank、Mem0 和 A-Mem 以文本条目为基本候选并使用语义相似度；Zep/Graphiti 在时间图上结合实体、关系和搜索结果；TiMem 按问题复杂度选择时间树层级；LightMem 先执行向量粗检索，再进行语义一致性重排。图遍历、层级导航和来源解析利用的是记忆组织提供的访问关系，应与 lexical 或 dense matching 分开描述。</p>
+
+      <p>LLM 还可以位于检索控制层，负责理解问题、生成或改写检索词、选择访问工具、判断候选相关性并决定是否继续检索。MemGPT 将记忆查询暴露为模型可调用操作，ByteRover 则只在低成本检索层级不足时升级到完整的 Agent 搜索。这类控制能够组合多种底层检索器，但不构成独立的第四种匹配机制。比较不同系统时，需要分别报告候选生成、结构化访问、路由策略和最终回答模型，避免把多个组件的效果归因于单一 retrieval method。</p>
+
+      <h2 id="scope">§2.4 Scope of Comparison</h2>
+
+      <p>外部记忆系统的表示单元、组织结构、存储基础设施、候选匹配和 Agent 控制方式相互正交。按论文逐项罗列方法容易混合这些维度；按研究问题组织相关工作，才能区分性能变化来自信息保留、结构访问、检索匹配还是生命周期管理。更完整的 taxonomy、系统对比表、评测协议和资源列表见 <a href="survey.html">Agent Memory Survey</a>。</p>
+    </article>
+  </main>
+</div>
+<script>
+window.addEventListener('scroll',()=>{const h=document.documentElement.scrollHeight-window.innerHeight;document.getElementById('progress-bar').style.width=h>0?(window.scrollY/h*100)+'%':'0%'});
+const tocLinks=document.querySelectorAll('.toc-link'),headings=[...document.querySelectorAll('h2[id],h3[id]')];
+function updateToc(){let cur=null;for(const h of headings){if(h.getBoundingClientRect().top<=100)cur=h}tocLinks.forEach(l=>l.classList.remove('active'));if(cur){const l=document.querySelector('.toc-link[href="#'+cur.id+'"]');if(l)l.classList.add('active')}}
+window.addEventListener('scroll',updateToc,{passive:true});updateToc();
+</script>
+</body>
+</html>

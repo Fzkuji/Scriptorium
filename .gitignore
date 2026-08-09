@@ -1,0 +1,63 @@
+# 外部仓库克隆（清单入库，源码按清单重新 clone）
+code/baselines/third_party/*
+!code/baselines/third_party/README.md
+!code/baselines/third_party/manifest.json
+!code/baselines/third_party/environments/
+!code/baselines/third_party/environments/*.txt
+
+# Benchmark 数据（体积大，按 README 说明下载）
+code/benchmarks/
+
+# 实验结果体积很大，全部保留在本地，不纳入主仓库；正式摘要另存 docs/。
+code/results/
+
+# 记忆构建产物（可由脚本重新生成，只入库评测 JSON）
+code/results/*/memory*/
+code/results/*/raw*/
+code/results/**/memory*/
+
+# GPT-5.6 Writer-window 运行时文件（正式汇总结果单独生成）
+code/results/formal/gpt56-chunk-curve/proxy/
+code/results/formal/gpt56-chunk-curve/**/*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# LaTeX 编译产物
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+
+# 系统
+.DS_Store
+.obsidian/
+.env
+.venv
+.venv/
+
+# Python 打包产物
+build/
+dist/
+*.egg-info/
+
+# paper/ 是独立 git 仓库（34+ commits 论文修订史），不作为子模块
+paper/
+
+# 适配器运行时工作目录
+.memos/
+.venv-*/
+
+# 工具的工作状态目录（brainstorm 端口/pid、SDD 台账草稿）；
+# 值得留存的任务台账放在 docs/internal/superpowers/progress/
+.superpowers/
+
+# 本地凭证：config 用 api_key_file 指向仓库外的文件，切勿提交
+*api-key*.txt
+*.key
+.memory/

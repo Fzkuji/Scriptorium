@@ -1,0 +1,21 @@
+{
+  "data": "../../benchmarks/longmemeval/data/longmemeval_s_cleaned.json",
+  "output_dir": "/home/qi2/scriptorium-runs/longmemeval-ms-lane84-token15k-wsl-ext4-r1",
+  "start": 84,
+  "limit": 1,
+  "base_url": "https://www.packyapi.ai",
+  "model": "deepseek-v4-flash",
+  "provider_name": "packyapi",
+  "max_turns": 120,
+  "shell_backend": "posix-bash",
+  "session_batch": 8,
+  "writer_input_token_cap": 15000,
+  "local_reorg_every_sessions": 8,
+  "verify_writes": true,
+  "verify_every_sessions": 4,
+  "final_manage": true,
+  "recent_limit": 50,
+  "core_max_tokens": 2000,
+  "verify_sources": true,
+  "build_only": true
+}

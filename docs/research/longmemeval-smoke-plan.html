@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scriptorium — LongMemEval-S Smoke Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;900&amp;family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link href="../assets/document.css" rel="stylesheet">
+</head>
+<body>
+<div id="progress-bar"></div>
+<div class="document-shell">
+  <aside class="document-sidebar">
+    <p class="document-sidebar-brand">Scriptorium</p>
+    <nav id="toc" aria-label="页内目录">
+      <a class="toc-link" href="#objective">1. 目标与边界</a>
+      <a class="toc-link" href="#components">2. 组件与模块边界</a>
+      <a class="toc-link" href="#prerequisites">3. 运行前门禁</a>
+      <a class="toc-link" href="#checkpoint">4. Checkpoint 与恢复</a>
+      <a class="toc-link" href="#configuration">5. 冻结实验配置</a>
+      <a class="toc-link" href="#stages">6. 分阶段执行</a>
+      <a class="toc-link" href="#reuse">7. 构建复用与消融</a>
+      <a class="toc-link" href="#decision">8. S4 / S8 决策</a>
+      <a class="toc-link" href="#artifacts">9. 保存产物与状态</a>
+    </nav>
+  </aside>
+  <main class="document-main">
+    <article class="document-content">
+      <nav class="document-breadcrumb" aria-label="当前位置">
+        <span>LLM Agent Memory</span><span class="separator">/</span>
+        <a href="../Model-Aligned-Wiki.html">scriptorium</a><span class="separator">/</span>
+        <a href="research-plan.html">research</a><span class="separator">/</span>
+        <span aria-current="page">longmemeval-smoke-plan.html</span>
+      </nav>
+
+      <header class="document-header">
+        <p class="document-eyebrow">LongMemEval-S Execution Note</p>
+        <h1>LongMemEval-S Smoke 与 S4/S8 选择计划</h1>
+        <p class="document-lead">用最少的重复构建验证当前架构、比较 multi-session 条件下的 S4 与 S8，并逐步扩展到六类型和 30-sample 预实验。</p>
+        <p class="document-meta">created 2026-08-06 · current architecture · pre-formal</p>
+      </header>
+
+      <h2 id="objective">1. 目标与边界</h2>
+      <ul>
+        <li>第一优先级是确认当前 Scriptorium 架构能完成一个完整 LongMemEval-S sample 的构建和回答，而不是立即生成可发表分数。</li>
+        <li>优先检查历史上表现偏弱的 <code>multi-session</code> 类型，并以同题配对方式选择 S4 或 S8。</li>
+        <li>每个 sample 必须使用完整 haystack history；不得截取部分 session 作为质量 smoke。</li>
+        <li>旧 V10 的 S8 结果只用于提出候选参数，不视为当前架构证据。</li>
+      </ul>
+
+      <h2 id="components">2. 组件与模块边界</h2>
+      <p>一次成功构建不是单个摘要文件，而是一份带身份、来源和派生关系的组件化 Memory bundle。各组件按以下边界保存：</p>
+      <table tabindex="0">
+        <thead><tr><th>组件</th><th>性质</th><th>生成/维护者</th><th>复用与拆分规则</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Source</strong></td><td>权威、append-only 的完整原始交互</td><td>Runtime 自动归档</td><td>所有条件共享的证据底座；禁止 LLM 覆盖；可在查询时屏蔽 Source 回查但不得删除原始产物</td></tr>
+          <tr><td><strong>Topic</strong></td><td>权威、可编辑的主题语义状态</td><td>Writer / Manager</td><td>独立冻结；可通过视图 mask 做 topic-only 或隐藏 Topic</td></tr>
+          <tr><td><strong>Core</strong></td><td>权威、独立维护的持续目标与约束</td><td>Writer / Manager</td><td>独立冻结；主比较保持一致，不与 S4/S8 一起变化</td></tr>
+          <tr><td><strong>Timeline</strong></td><td>带日期的派生文本视图</td><td>Runtime 从已提交状态重建</td><td>可重建、可独立屏蔽；不重新调用 builder</td></tr>
+          <tr><td><strong>Recent</strong></td><td>Topic 最近 50 个 block 的有界派生视图</td><td>Runtime</td><td>可重建、可屏蔽；不是独立构建条件</td></tr>
+          <tr><td><strong>Relations</strong></td><td>Markdown links、backlinks 与 source references</td><td>Runtime 校验和物化</td><td>随冻结 Memory 保存；消融时可限制访问，不能破坏原始引用</td></tr>
+          <tr><td><strong>grep / file access</strong></td><td>直接文本访问接口</td><td>Query Navigator 选择</td><td>无独立索引；属于查询时可访问工具</td></tr>
+          <tr><td><strong>BM25</strong></td><td>稀疏检索索引</td><td>Runtime 从可见文本重建</td><td>可删除和重建；不作为重新构建 Memory 的理由</td></tr>
+          <tr><td><strong>Embedding</strong></td><td>可选稠密检索索引</td><td>Runtime 从可见文本重建</td><td>模型与索引身份单独记录；本 smoke 不要求启用</td></tr>
+          <tr><td><strong>Selected Evidence / Answer</strong></td><td>查询阶段产物</td><td>GPT answerer</td><td>与 Memory 分开保存；可对同一冻结 Memory 重新回答或重新 judge</td></tr>
+        </tbody>
+      </table>
+      <p><strong>构建边界：</strong>DeepSeek 只参与 Source 归档后的 Topic/Core 语义写入和管理；Timeline、Recent、Relations、BM25 与 Embedding 不应产生额外 builder 调用。S4 与 S8 的差异只允许改变 Writer 每次接收的完整 session 数。</p>
+
+      <h2 id="prerequisites">3. 运行前门禁</h2>
+      <ol>
+        <li>构建、查询回答和 judge 分开配置：DeepSeek 负责构建，冻结的 GPT answerer 负责查询回答，GPT-4o-mini 只负责需要评分的阶段。</li>
+        <li>批次级 checkpoint 已实现：每个 Writer batch 成功提交后保存已处理 session/source cursor、Memory revision、调用量和 usage；恢复时从下一个未完成批次继续。</li>
+        <li>冻结数据哈希、代码提交、Writer/Manager prompt hash、模型身份、S 值、verification/local-management 周期和预算。</li>
+        <li>只有数据、代码、prompt、模型和构建配置身份完全一致时，已有 Memory 才允许复用。</li>
+      </ol>
+
+      <div class="callout note">
+        <p><strong>当前实现：</strong>LongMemEval runner 同时具备 item 级和 Writer batch 级 checkpoint。运行中的 <code>build-checkpoint.json</code> 记录当前批次、session 范围、source turn 数和已提交进度；每次工具调用追加到 <code>writer-live-*.jsonl</code>，模型消息轮次写入配套 progress 文件，失败时另存 <code>writer-failure-*.json</code>。因此可以在批次结束前发现重复错误，也能从最后一个已提交批次继续。</p>
+      </div>
+
+      <div class="callout note">
+        <p><strong>跨平台执行约定：</strong>模型可见的命令工具始终使用 POSIX Bash 语法。<code>shell_backend=auto</code> 在 Linux 保留原生旧行为、在 Windows 选择 Git Bash；正式 Windows smoke 显式冻结为 <code>posix-bash</code>，<code>native</code> 只用于历史复现。所有 POSIX shell 输出按 UTF-8 解码并以替换方式容错，避免中文 Windows 的 GBK 解码线程中断。文件读取、BM25 和 Embedding 是 Python 内部工具，不经过系统 shell。</p>
+      </div>
+
+      <h2 id="checkpoint">4. Checkpoint 与恢复语义</h2>
+      <h3 id="checkpoint-levels">4.1 四层状态</h3>
+      <table tabindex="0">
+        <thead><tr><th>层级</th><th>建议文件</th><th>记录内容</th><th>恢复行为</th></tr></thead>
+        <tbody>
+          <tr><td>Run</td><td><code>manifest.json</code></td><td>数据/代码/prompt/模型/config hash、计划样本、开始与结束时间</td><td>身份不一致时停止，不自动覆盖旧 run</td></tr>
+          <tr><td>Item</td><td><code>items/&lt;id&gt;/checkpoint.json</code></td><td>normalize、build、retrieve/answer、judge 的阶段状态和产物路径</td><td>已完成阶段跳过；只继续未完成阶段</td></tr>
+          <tr><td>Build batch</td><td><code>items/&lt;id&gt;/build-checkpoint.json</code></td><td>固定 batch plan、已完成 batch、session/source cursor、Memory revision、usage 与验证状态</td><td>从下一未完成 batch 继续，最多重做一个未提交 batch</td></tr>
+          <tr><td>Query/Judge</td><td><code>answer.json</code> / <code>judge.json</code></td><td>问题、Memory hash、tool trace、selected evidence、答案、judge 原始响应和 usage</td><td>Memory/answer 身份匹配时分别复用，不触发 builder</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="commit-order">4.2 每个 Writer batch 的提交顺序</h3>
+      <ol>
+        <li>从已冻结的 batch plan 读取当前完整 session；先由 Runtime 将其完整归档到 staged Source。</li>
+        <li>Writer 修改 staged Topic/Core；Runtime 校验 block ID、source references、路径和事务约束。</li>
+        <li>Runtime 原子提交 Source/Topic/Core，并重建 Timeline、Recent 与 Relations，得到新的 Memory revision。</li>
+        <li>按冻结周期执行 verification；需要时只修复当前已提交范围，再生成新 revision。</li>
+        <li>最后原子写入 build checkpoint，记录 batch 完成、cursor、revision、调用和 usage。</li>
+      </ol>
+      <p>如果模型调用或 staged 校验失败，丢弃未提交 stage，只重试当前 batch。如果 Memory 已提交但进程在 checkpoint 写入前中断，恢复程序必须通过 transaction receipt、source cursor 和 revision 对账，识别该 batch 已提交，禁止重复写入。</p>
+
+      <h3 id="resume-gates">4.3 恢复前校验</h3>
+      <ul>
+        <li>dataset item、session 顺序、source IDs 和 batch plan hash 必须一致。</li>
+        <li>builder model、Writer/Manager protocol hash、S 值、verification/local-management 周期必须一致。</li>
+        <li>checkpoint 声明的 Memory revision、已归档 source cursor 和磁盘实际状态必须一致。</li>
+        <li>任何不一致都应停止并保留现场，不能自动删除或把旧 Memory 标记为成功。</li>
+      </ul>
+
+      <h2 id="configuration">5. 冻结实验配置</h2>
+      <table tabindex="0">
+        <thead><tr><th>配置项</th><th>机械 smoke</th><th>S4/S8 配对</th></tr></thead>
+        <tbody>
+          <tr><td>数据类型</td><td>完整 multi-session 样本 A</td><td>相同样本 A、B</td></tr>
+          <tr><td>Writer session batch</td><td>S8</td><td>唯一变量：S4 vs S8</td></tr>
+          <tr><td>动态 token 分批</td><td>关闭；运行前预计算长度</td><td>关闭，避免改变配对调用边界</td></tr>
+          <tr><td>硬安全门禁</td><td colspan="2">任一固定批次超过冻结的模型输入安全预算则运行前失败，不静默改成另一种分批</td></tr>
+          <tr><td>Verification</td><td colspan="2">暂定每 4 个完整 session；在首次付费运行前写入 config 并冻结</td></tr>
+          <tr><td>Local reorganization</td><td colspan="2">暂定每 8 个完整 session；只整理本周期 touched Topics</td></tr>
+          <tr><td>Final management</td><td colspan="2">开启；每个完整 sample 结束后执行一次</td></tr>
+          <tr><td>Recent limit</td><td colspan="2">50 Topic blocks</td></tr>
+          <tr><td>Source verification</td><td colspan="2">开启</td></tr>
+          <tr><td>Embedding</td><td colspan="2">默认关闭；grep/file access 与 BM25 可用，工具由 Query Navigator 选择</td></tr>
+          <tr><td>模型</td><td colspan="2">DeepSeek builder；冻结的 GPT retriever/answerer；机械 smoke 不 judge，后续固定 GPT-4o-mini judge</td></tr>
+        </tbody>
+      </table>
+      <p>样本 A/B 的选择规则也必须先冻结：均为 <code>multi-session</code>，session 数接近数据集中位数 48，不根据问题答案或某一配置的运行结果挑选。保存 dataset index、question ID、session/turn 数和 answer-session 位置，但构建阶段不把 gold answer 暴露给模型。</p>
+
+      <h2 id="stages">6. 分阶段执行</h2>
+
+      <h3 id="stage-1">阶段 1：机械 smoke（一个 multi-session sample）</h3>
+      <p>选择一个约 48 个 session 的完整 <code>multi-session</code> sample，记为样本 A；使用 <strong>S8</strong> 完成构建、检索和回答，暂不调用 judge。</p>
+      <ul>
+        <li>检查 Source 是否覆盖全部输入消息，Topic/Timeline 引用是否可回查，Core/Recent/Relations 是否正常。</li>
+        <li>检查每批 checkpoint、故障恢复、调用量、token、耗时、成本和磁盘规模。</li>
+        <li>成功后冻结并保留 A-S8 Memory、回答和完整 manifest，后续不得重复构建。</li>
+      </ul>
+
+      <h3 id="stage-2">阶段 2：两个 multi-session sample 的 S4/S8 配对</h3>
+      <p>再选择一个规模接近的完整 <code>multi-session</code> sample，记为样本 B。复用阶段 1 的 A-S8，只新增三次构建：</p>
+      <table tabindex="0">
+        <thead><tr><th>样本</th><th>S4</th><th>S8</th><th>本阶段动作</th></tr></thead>
+        <tbody>
+          <tr><td>A</td><td>新增构建</td><td>复用阶段 1</td><td>形成第一组配对</td></tr>
+          <tr><td>B</td><td>新增构建</td><td>新增构建</td><td>形成第二组配对</td></tr>
+        </tbody>
+      </table>
+      <p>四个条件使用相同 GPT answerer 生成答案，再统一交给 GPT-4o-mini judge。除 session batch 外，模型、prompt、verification、management、检索接口和预算必须一致。</p>
+
+      <h3 id="stage-3">阶段 3：六类型效果 smoke</h3>
+      <p>冻结 S4 或 S8 后，每类选择一个完整 sample：<code>single-session-user</code>、<code>single-session-assistant</code>、<code>single-session-preference</code>、<code>multi-session</code>、<code>temporal-reasoning</code> 和 <code>knowledge-update</code>。</p>
+      <p>multi-session 条件直接复用阶段 2 中相同样本、相同获胜配置的 Memory 和答案，因此通常只需新增另外五类构建。六个答案统一评分，用于发现类型性失败，不作为正式 benchmark 分数。</p>
+
+      <h3 id="stage-4">阶段 4：30-sample 预实验</h3>
+      <p>每类 5 个 sample，共 30 个。只有阶段 3 没有出现系统性结构、引用或恢复错误时才进入本阶段；完全匹配冻结身份的阶段 2/3 产物可以计入并复用。30 个 sample 通过后再进入 LongMemEval-S 全 500 题。</p>
+
+      <h2 id="reuse">7. 构建复用与查询时消融</h2>
+      <div class="callout idea">
+        <p><strong>决策 AB-01：冻结完整构建，查询时遮罩。</strong>所有主消融先使用同一份完整构建并冻结的 Memory；实验条件只改变查询时可见视图、Source 回查权限或检索工具，不物理删除主 Memory，也不重新调用 builder。S4/S8 因改变构建过程，必须分别构建，不属于遮罩消融。</p>
+      </div>
+      <ul>
+        <li>Memory 是按 dataset item 和构建条件隔离的；A-S4 与 A-S8 是两份不同构建，不允许互相覆盖。</li>
+        <li>回答失败或 judge 尚未执行时，复用已经完成且校验通过的 Memory，不重新调用 builder。</li>
+        <li>BM25 与 Embedding 属于可重建索引，不作为重复调用 builder 的理由。</li>
+        <li>任何构建配置或 Writer/Manager 语义变化都会产生新的构建身份；旧 Memory 保留供审计，但不与新条件混用。</li>
+      </ul>
+      <p>后续组件实验优先对同一份冻结完整 Memory 使用只读访问 mask，不重新调用 DeepSeek：</p>
+      <table tabindex="0">
+        <thead><tr><th>条件</th><th>可访问视图</th><th>Source 回查</th><th>是否重建 Memory</th></tr></thead>
+        <tbody>
+          <tr><td>dual view + source</td><td>Topic + Timeline</td><td>允许</td><td>否，完整冻结条件</td></tr>
+          <tr><td>topic only + source</td><td>Topic</td><td>允许</td><td>否，只改变查询 mask</td></tr>
+          <tr><td>timeline only + source</td><td>Timeline</td><td>允许</td><td>否，只改变查询 mask</td></tr>
+          <tr><td>dual view without source</td><td>Topic + Timeline</td><td>禁止</td><td>否，保留 Source 文件但查询不可见</td></tr>
+        </tbody>
+      </table>
+      <p>这类实验测量的是“查询时能否访问组件”的作用；如果要回答“从构建开始就没有该组件会怎样改变其他 Memory”，必须另做结构性消融并重新构建，不能用 mask 结果替代。</p>
+
+      <h3 id="ablation-procedure">7.1 固定实施流程</h3>
+      <ol>
+        <li>按完整架构构建 Source、Topic、Core，并由 Runtime 生成 Timeline、Recent 和 Relations；保存完整构建 manifest 与 Memory hash。</li>
+        <li>将完整 Memory 标记为冻结。后续遮罩、回答、judge、索引重建和投影清理均不得改变其内容哈希。</li>
+        <li>每个消融条件生成独立的 <code>access-profile.json</code> 和只读查询投影；保持允许文件的相对目录、文件名、block ID 与链接路径不变。</li>
+        <li>文件投影和工具层同时执行 allowlist。被屏蔽的 Source 不能通过 shell、grep、BM25、Embedding、链接解析或直接路径绕过。</li>
+        <li>BM25/Embedding 只针对当前投影中的可见文本建立，并以 <code>Memory hash + profile hash + index/model identity</code> 缓存。</li>
+        <li>答案、tool trace、selected evidence、usage 和 judge 均记录 Memory hash 与 profile hash；同一条件可重试回答，但不得触发 DeepSeek 重建。</li>
+      </ol>
+
+      <h3 id="equivalence-gate">7.2 Full-profile 等价性门禁</h3>
+      <p>在正式使用遮罩消融前，必须证明“全部开启的查询投影”与直接读取原始完整 Memory 等价：</p>
+      <ul>
+        <li>可见文件列表和文件内容哈希一致；相对路径、Markdown links、block IDs 和 source references 解析一致。</li>
+        <li>相同 query 下 grep 与 BM25 候选一致；启用 Embedding 时模型、索引输入和候选一致。</li>
+        <li>工具 schema、权限和返回内容一致；固定模型设置下 tool trace 不出现由投影层造成的新差异。</li>
+        <li>生成和使用投影前后，原始 Memory hash 不变。</li>
+      </ul>
+      <p>若等价性门禁失败，完整版继续直接读取原始 Memory；不得为了统一接口而让完整版经过可能改变行为的投影层。</p>
+
+      <h3 id="ablation-accounting">7.3 效率与结果解释</h3>
+      <ul>
+        <li>投影生成、索引重建/加载时间单独记录为 condition setup，不计入 DeepSeek 构建成本，也不得隐藏在查询模型耗时中。</li>
+        <li>遮罩消融可以支持“查询依赖某组件”的结论，不能支持“构建时不需要/需要某组件”的结论。</li>
+        <li>如果某一遮罩产生稳定、关键的质量差异，再选择少量样本补做从构建阶段移除组件的结构性消融。</li>
+        <li>结构性消融必须产生新的 build identity、Memory 和成本记录，不能覆盖或冒充遮罩条件。</li>
+      </ul>
+
+      <h3 id="ablation-checklist">7.4 后续实施检查单</h3>
+      <ul>
+        <li>本条件是否只改变一个预先声明的访问变量？</li>
+        <li>是否复用了完全相同的冻结 Memory，且没有发生 builder 调用？</li>
+        <li>被遮罩组件是否同时从文件可见性、工具权限和检索索引中消失？</li>
+        <li>回答与 judge 是否绑定正确的 Memory/profile hash？</li>
+        <li>原始 Memory 在实验前后的内容哈希是否相同？</li>
+        <li>论文表述是否明确写成 query-time access ablation，而非 build-time structural ablation？</li>
+      </ul>
+
+      <h2 id="decision">8. S4 / S8 决策规则</h2>
+      <ol>
+        <li>首先比较两题的 judge 正确性和 gold answer-session 可达性。</li>
+        <li>若一方在两题上稳定更好，选择该配置。</li>
+        <li>若结果打平，依次比较 source coverage、引用有效性、构建错误、恢复稳定性、调用量、token 和 wall time；质量门禁满足后优先选择成本更低者。</li>
+        <li>若两题结论冲突或差异无法解释，再增加两个 multi-session sample 做配对，不直接扩大到 30 个。</li>
+      </ol>
+
+      <h2 id="artifacts">9. 每次运行必须保存的产物与当前状态</h2>
+      <ul>
+        <li>不可覆盖的 Source、Topic、Timeline、Core、Recent、Relations 以及可重建检索索引的身份信息。</li>
+        <li>batch plan、批次级 checkpoint、Memory revision、完成/失败状态和恢复记录。</li>
+        <li>构建、verification、management、查询回答和 judge 的独立调用及 usage 统计。</li>
+        <li>数据、代码、prompt、模型、配置与 Memory 内容哈希。</li>
+        <li>检索 tool trace、selected evidence、Source 回查结果、答案和后续 judge 原始响应。</li>
+      </ul>
+
+      <h3 id="artifact-layout">9.1 建议目录</h3>
+      <pre><code>results/development/longmemeval-ms-s4-s8/
+  manifest.json
+  items/&lt;dataset-index&gt;_&lt;question-id&gt;/
+    s4/
+      checkpoint.json
+      build-checkpoint.json
+      memory/
+      answer.json
+      judge.json
+      call-log.jsonl
+      performance.json
+    s8/
+      ...
+</code></pre>
+      <p>API key 不写入 config、manifest、日志或错误信息；只记录 provider、base URL 的非凭据身份和 key 来源标签。</p>
+
+      <h3 id="status">9.2 当前状态</h3>
+      <p><strong>单 session 机械 smoke 已连续成功，完整 S4 尚未启动。</strong>样本 A 已冻结为 LongMemEval-S dataset index 75（question ID <code>3a704032</code>）：<code>multi-session</code>、48 个 session、479 条消息。早期 WSL 尝试因本机代理网络失败；随后 Windows 诊断依次暴露并修复默认 shell 方言、Git Bash UTF-8/GBK 解码、staged 根目录回滚竞态、C:/E: 跨盘原子移动以及 Windows ACL 继承问题，失败目录均保留审计。<code>one-session-win-micro-r3</code> 在 8 轮内提交 5 个 blocks；最终 ACL 验证 <code>r4</code> 使用同一个完整 session（6 个 source turns），Writer 在 10 轮、7 次成功工具调用内提交 4 个 blocks 和 2 个 Topic，墙钟 74.563 秒。r4 的普通权限递归读取成功，Source、Timeline 和 Topic 均可访问；3 个唯一 Source ID 全部可回查，缺失引用为 0，batch checkpoint 为 complete。微测关闭 verification、final management 和 judge，因此只验证真实 Writer/事务/派生视图/checkpoint 链路。下一步新建目录运行完整 S4/T120，不覆盖任何诊断产物。决策 AB-01 已冻结为后续组件消融的默认设计，但 access profile、只读投影和 full-profile 等价性测试尚未实现。</p>
+    </article>
+  </main>
+</div>
+<script>
+window.addEventListener('scroll',()=>{const h=document.documentElement.scrollHeight-window.innerHeight;document.getElementById('progress-bar').style.width=h>0?(window.scrollY/h*100)+'%':'0%'});
+const tocLinks=document.querySelectorAll('.toc-link'),headings=[...document.querySelectorAll('h2[id],h3[id]')];
+function updateToc(){let cur=null;for(const h of headings){if(h.getBoundingClientRect().top<=100)cur=h}tocLinks.forEach(l=>l.classList.remove('active'));if(cur){const l=document.querySelector('.toc-link[href="#'+cur.id+'"]');if(l)l.classList.add('active')}}
+window.addEventListener('scroll',updateToc,{passive:true});updateToc();
+</script>
+</body>
+</html>

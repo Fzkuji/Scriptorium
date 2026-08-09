@@ -1,0 +1,267 @@
+{
+  "schema_version": 2,
+  "study_id": "gpt56-chunk-curve-3bench-6unit",
+  "generated_at": "2026-07-17T20:17:27.440544+00:00",
+  "status": "planned",
+  "model_requests_authorized": false,
+  "plan_only_generator": "scripts/prepare_gpt56_chunk_curve.py",
+  "research_question": "How does the number of new messages per Writer call affect memory quality and construction cost across three GPT-5.6 capability tiers?",
+  "independent_variable": {
+    "name": "NATIVEMEM_V10_WRITE_TURNS",
+    "values": [
+      4,
+      6,
+      8,
+      12,
+      16,
+      20,
+      24,
+      32,
+      "session"
+    ],
+    "unit": "individual user or assistant messages"
+  },
+  "models": [
+    {
+      "tier": "sol",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "none",
+      "api_reference_price_usd_per_million_tokens": {
+        "input": 5.0,
+        "output": 30.0
+      }
+    },
+    {
+      "tier": "terra",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "none",
+      "api_reference_price_usd_per_million_tokens": {
+        "input": 2.5,
+        "output": 15.0
+      }
+    },
+    {
+      "tier": "luna",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "none",
+      "api_reference_price_usd_per_million_tokens": {
+        "input": 1.0,
+        "output": 6.0
+      }
+    }
+  ],
+  "pricing_snapshot": {
+    "date": "2026-07-18",
+    "purpose": "API reference only; subscription quota is reported separately",
+    "source": "https://developers.openai.com/api/docs/models"
+  },
+  "fixed_method_environment": {
+    "NATIVEMEM_PROMPT": "v10",
+    "NATIVEMEM_STORE_MODE": "oneshot",
+    "NATIVEMEM_V10_CONTEXT_MODE": "none",
+    "NATIVEMEM_V10_CONTEXT_ITEMS": "0",
+    "NATIVEMEM_V10_SUMMARY_MAX_WORDS": "180",
+    "NATIVEMEM_V10_TIDY_EVERY_SESSIONS": "1",
+    "NATIVEMEM_V10_SESSION_TIDY_PASSES": "1",
+    "NATIVEMEM_V10_FINAL_TIDY_PASSES": "1",
+    "NATIVEMEM_V8_SINGLE": "1",
+    "NATIVEMEM_V8_SEGMENT": "fixed",
+    "NATIVEMEM_V8_SECTIONS": "on",
+    "NATIVEMEM_V8_ARTICLE": "off",
+    "NATIVEMEM_V8_VERIFY": "on",
+    "NATIVEMEM_V8_MERGE_LINES": "on",
+    "NATIVEMEM_V8_TIDY_COMBINED": "off",
+    "NATIVEMEM_V8_MAX_TOPICS": "30",
+    "NATIVEMEM_TOPK": "20",
+    "NATIVEMEM_V8_MAX_ROUNDS": "12",
+    "NATIVEMEM_V8_MAX_TOKENS": "1200",
+    "NATIVEMEM_V8_READ_CONTEXT": "1",
+    "NATIVEMEM_V8_MAP": "dir",
+    "NATIVEMEM_V8_MAP_INLINE": "8",
+    "NATIVEMEM_V8_MAX_DEPTH": "4",
+    "NATIVEMEM_V8_REWRITE_MIN": "8",
+    "NATIVEMEM_V8_SEGMENT_MAX": "10"
+  },
+  "reasoning_policy": "reasoning_effort=none for all three tiers",
+  "benchmarks": [
+    {
+      "benchmark": "locomo",
+      "dataset": "benchmarks/locomo/data/locomo10.json",
+      "units": [
+        {
+          "unit_id": "conv-44",
+          "selection": {
+            "sample_index": 5,
+            "sample_id": "conv-44"
+          },
+          "statistics": {
+            "sessions": 28,
+            "messages": 675,
+            "max_session_messages": 47,
+            "cat1_4_questions": 123
+          }
+        },
+        {
+          "unit_id": "conv-48",
+          "selection": {
+            "sample_index": 7,
+            "sample_id": "conv-48"
+          },
+          "statistics": {
+            "sessions": 30,
+            "messages": 681,
+            "max_session_messages": 44,
+            "cat1_4_questions": 191
+          }
+        }
+      ],
+      "evaluation": {
+        "script": "scripts/eval_full.py",
+        "sha256": "f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd",
+        "judge": "openai/gpt-4o-mini",
+        "scope": "categories 1-4; exact locked repository evaluator"
+      },
+      "claim_scope": "screening subset; not the full LoCoMo score"
+    },
+    {
+      "benchmark": "longmemeval-s",
+      "dataset": "benchmarks/longmemeval/data/longmemeval_s_cleaned.json",
+      "units": [
+        {
+          "unit_id": "2318644b",
+          "selection": {
+            "dataset_index": 97,
+            "question_id": "2318644b"
+          },
+          "statistics": {
+            "sessions": 41,
+            "messages": 523,
+            "max_session_messages": 82,
+            "questions": 1,
+            "answer_sessions": 2,
+            "question_type": "multi-session",
+            "question": "How much more did I spend on accommodations per night in Hawaii compared to Tokyo?"
+          }
+        },
+        {
+          "unit_id": "gpt4_6dc9b45b",
+          "selection": {
+            "dataset_index": 248,
+            "question_id": "gpt4_6dc9b45b"
+          },
+          "statistics": {
+            "sessions": 48,
+            "messages": 565,
+            "max_session_messages": 132,
+            "questions": 1,
+            "answer_sessions": 1,
+            "question_type": "temporal-reasoning",
+            "question": "How many months ago did I attend the Seattle International Film Festival?"
+          }
+        }
+      ],
+      "evaluation": {
+        "script": "benchmarks/longmemeval/src/evaluation/evaluate_qa.py",
+        "sha256": "ecce9c4c79dc89d99534ac17b383a5cbb5b9f0c69ee98adaf0684742e3d95251",
+        "judge": "gpt-4o-mini",
+        "scope": "official LongMemEval QA evaluator"
+      },
+      "claim_scope": "two histories and two questions; integration and chunk-curve screening only, not a LongMemEval accuracy estimate"
+    },
+    {
+      "benchmark": "beam-100k",
+      "dataset": "benchmarks/beam/hf_cache/Mohammadta___beam/default/0.0.0/3205395e897e7318c7b094ef4e6047b9b82dbb03/beam-100K.arrow",
+      "units": [
+        {
+          "unit_id": "100K-conv-1",
+          "selection": {
+            "split": "100K",
+            "conversation_index": 0,
+            "conversation_id": "1"
+          },
+          "statistics": {
+            "sessions": 3,
+            "messages": 188,
+            "session_messages": [
+              60,
+              56,
+              72
+            ],
+            "max_session_messages": 72,
+            "questions": 20,
+            "source_references": 188
+          }
+        },
+        {
+          "unit_id": "100K-conv-2",
+          "selection": {
+            "split": "100K",
+            "conversation_index": 1,
+            "conversation_id": "2"
+          },
+          "statistics": {
+            "sessions": 3,
+            "messages": 200,
+            "session_messages": [
+              72,
+              62,
+              66
+            ],
+            "max_session_messages": 72,
+            "questions": 20,
+            "source_references": 200
+          }
+        }
+      ],
+      "evaluation": {
+        "script": "scripts/evaluate_v88_gpt55_beam.py",
+        "sha256": "c3d77b4a3d58d9d734f7f229cd7ca6d86b9a35d57c8b3cf6fcd2a3d816151c45",
+        "profile": "primary",
+        "judge": "openai/gpt-4o-mini",
+        "scope": "existing project primary BEAM protocol"
+      },
+      "claim_scope": "two-conversation screening subset; not the full BEAM score"
+    }
+  ],
+  "planned_builds": 162,
+  "metrics": {
+    "quality": [
+      "benchmark QA score using the benchmark-specific frozen evaluator",
+      "first-pass evidence recall",
+      "post-verify evidence recall",
+      "first-pass versus post-verify delta"
+    ],
+    "cost": [
+      "Writer, Verify, and Tidy calls separately",
+      "input, cached-input, output, and reasoning tokens separately",
+      "wall time and provider-reported cost",
+      "cost per 100 messages and per 1000 source tokens"
+    ],
+    "efficiency": [
+      "quality per dollar",
+      "quality per 100 Writer calls",
+      "maximum supported window under the frozen quality threshold"
+    ]
+  },
+  "output_root": "results/formal/gpt56-chunk-curve",
+  "frozen_input_hashes": {
+    "benchmarks/locomo/data/locomo10.json": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+    "benchmarks/longmemeval/data/longmemeval_s_cleaned.json": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+    "benchmarks/beam/hf_cache/Mohammadta___beam/default/0.0.0/3205395e897e7318c7b094ef4e6047b9b82dbb03/beam-100K.arrow": "7b78964d628b866242dcb5df03bb6e3140d60cc8b366c7c87cbf43cc708007d0",
+    "scripts/eval_full.py": "f8265ae58153b532bdb70a786699a4a711389088bdbc6eb103a943070d4509cd"
+  },
+  "source_hashes": {
+    "scripts/prepare_gpt56_chunk_curve.py": "a8a3e9d03d66d11a14b8dd6f14df986addd42be739d8cc445ac03624b7ecd045",
+    "scripts/run_gpt56_chunk_curve.py": "673b8d88824dd295974aaba4eae2b93a95763637debe806eab21a18d3a7b0aeb",
+    "src/v10_memory.py": "603e3132e2a59475ea41ec03f4113e8971dae353dca983de2e0e9e85933e3679",
+    "src/v8_memory.py": "a3ce6101bb788a9b4cc109a2f3a3b28a56a0aabb6e54874100014bd4d2ad8405",
+    "src/nativemem.py": "07f89fb04e6031306618bdab676f6d4d7210cfb3de444dea30e8eb9b23932f6a",
+    "src/adapters/run_nativemem.py": "56a366279fd3b4b5642b30ff58cb84604b9ea6419f94aa6ec60faeab75b88789",
+    "src/chatgpt_proxy.py": "be2566374883b7ea5d2d5ca6d54f2465f633ea6986b103c66426c9e26f2df641",
+    "scripts/run_v88_gpt55_longmemeval.py": "cb0b5dbf6abed738a3a4b60ccc19135a6a86f7134bbfff61a70953495d4476fb",
+    "scripts/run_v88_gpt55_beam.py": "564f6e69b82bddc0edbfa4780ddde406199f4dc8d0b2bb9459f98f0e2d0d2661",
+    "benchmarks/longmemeval/src/evaluation/evaluate_qa.py": "ecce9c4c79dc89d99534ac17b383a5cbb5b9f0c69ee98adaf0684742e3d95251",
+    "scripts/evaluate_v88_gpt55_beam.py": "c3d77b4a3d58d9d734f7f229cd7ca6d86b9a35d57c8b3cf6fcd2a3d816151c45"
+  },
+  "execution_note": "No model executor is invoked by this generator.  Execution requires a separately reviewed runner and explicit model-request authorization."
+}

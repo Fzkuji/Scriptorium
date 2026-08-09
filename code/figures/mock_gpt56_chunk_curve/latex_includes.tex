@@ -1,0 +1,24 @@
+% Synthetic preview only. Replace mock_results.json with measured results.
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/mock_gpt56_chunk_curve/fig1_quality_curves.pdf}
+  \caption{Hypothetical effect of Writer input granularity on downstream memory quality. Open markers identify the selected model-specific window. Shaded regions denote illustrative 95\% confidence intervals.}
+  \label{fig:mock_quality_curves}
+\end{figure*}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/mock_gpt56_chunk_curve/fig2_cost_curves.pdf}
+  \caption{Hypothetical memory-construction cost as the Writer window increases. Costs include Writer, Verify, and Tidy calls. Dollar values use API-reference pricing and are not subscription charges.}
+  \label{fig:mock_cost_curves}
+\end{figure*}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.49\textwidth]{figures/mock_gpt56_chunk_curve/fig3_quality_cost_pareto.pdf}
+  \caption{Hypothetical quality--cost trade-off. Each open marker is the largest model-specific window satisfying the pre-registered non-inferiority criterion.}
+  \label{fig:mock_quality_cost}
+\end{figure}
+
+\input{figures/mock_gpt56_chunk_curve/TABLE_main_results.tex}
+\input{figures/mock_gpt56_chunk_curve/TABLE_selection_summary.tex}

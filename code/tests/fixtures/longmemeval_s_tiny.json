@@ -1,0 +1,41 @@
+[
+  {
+    "question_id": "tiny_temporal_0",
+    "question_type": "temporal-reasoning",
+    "question": "What did I do first?",
+    "answer": "Bought a notebook",
+    "question_date": "2023/05/22 (Mon) 08:00",
+    "haystack_session_ids": ["session-a", "session-b"],
+    "haystack_dates": [
+      "2023/05/20 (Sat) 02:21",
+      "2023/05/21 (Sun) 16:40"
+    ],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I bought a notebook yesterday.", "has_answer": true},
+        {"role": "assistant", "content": "I hope the notebook is useful."}
+      ],
+      [
+        {"role": "user", "content": "Today I bought a pen."},
+        {"role": "assistant", "content": "You now have both items."}
+      ]
+    ],
+    "answer_session_ids": ["session-a"]
+  },
+  {
+    "question_id": "tiny_abs_1_abs",
+    "question_type": "single-session-user",
+    "question": "Which camera do I own?",
+    "answer": "The user never mentioned owning a camera.",
+    "question_date": "2023-05-23",
+    "haystack_session_ids": ["session-c"],
+    "haystack_dates": ["2023-05-22 (Mon) 09:05"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I enjoy landscape photography."},
+        {"role": "assistant", "content": "Landscape photography can be rewarding."}
+      ]
+    ],
+    "answer_session_ids": []
+  }
+]
