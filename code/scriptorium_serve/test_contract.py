@@ -167,3 +167,60 @@ def test_bearer_token_enforced_when_configured() -> None:
         assert accepted.status_code == 200
     finally:
         server.SERVICE_TOKEN = ""
+
+
+# -- retrieval shaping ------------------------------------------------------
+
+def test_a_question_finds_memory_written_in_another_tense():
+    """Search runs once and nobody asks again.
+
+    The lexical index matches whole tokens, so "where did he move" scores
+    nothing at all against "moved" — not a weak match, no match.
+    """
+    from scriptorium_serve.server import expand_query
+
+    expanded = expand_query("where did he move").split()
+
+    assert "moved" in expanded
+    assert "moving" in expanded
+
+
+def test_expansion_leaves_question_words_alone():
+    """Inflecting "where" yields "whereing", which matches nothing and
+    lengthens the string the scorer normalises against."""
+    from scriptorium_serve.server import expand_query
+
+    expanded = expand_query("where did it happen").split()
+
+    assert "whereing" not in expanded
+    assert "dided" not in expanded
+
+
+def test_expansion_derives_from_the_stem_not_the_asked_form():
+    from scriptorium_serve.server import expand_query
+
+    expanded = expand_query("training schedule").split()
+
+    assert "train" in expanded
+    assert "traininged" not in expanded
+
+
+def test_a_snippet_carries_the_subject_it_relies_on():
+    """A topic file is about one subject and its paragraphs lean on that.
+    "He moved to Shanghai" means nothing outside `topics/people/dave.md`,
+    and the caller's answerer never sees the file."""
+    from scriptorium_serve.server import _snippet
+
+    rendered = _snippet({
+        "content": "[2024-03] He moved to Shanghai.",
+        "headings": ["Dave", "Relocation"],
+    })
+
+    assert "Dave" in rendered
+    assert "He moved to Shanghai." in rendered
+
+
+def test_a_snippet_without_headings_is_returned_as_it_is():
+    from scriptorium_serve.server import _snippet
+
+    assert _snippet({"content": "plain line", "headings": []}) == "plain line"

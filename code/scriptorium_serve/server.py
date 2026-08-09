@@ -225,18 +225,96 @@ async def add(payload: AddRequest, _: None = Depends(_authorize)) -> dict[str, A
     }
 
 
+# Suffixes worth trying both ways. The lexical index matches whole tokens,
+# so a question asking "where did he move" scores nothing against a memory
+# that says "moved" — not a low score, no match at all.
+_SUFFIXES = ("ing", "ed", "es", "s")
+_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
+# Question words and function words carry no lexical signal, and inflecting
+# them produces strings like "whereing" that match nothing and lengthen the
+# query the scorer normalises against.
+_FUNCTION_WORDS = frozenset("""
+what where when which who whom whose why how did do does is are was were
+the a an to of in on at for and or but my his her its their our your i he
+she they we you it that this these those with from by as be been being have
+has had will would can could should about
+""".split())
+
+
+def _inflections(word: str) -> set[str]:
+    """A word and the forms of it that mean the same thing.
+
+    Derived from the stem, not from whatever form the asker happened to
+    use: inflecting "training" again gives "traininged", which matches
+    nothing and pads the query.
+    """
+    lowered = word.lower()
+    if len(lowered) <= 3 or lowered in _FUNCTION_WORDS:
+        return {lowered}
+
+    stem = lowered
+    for suffix in _SUFFIXES:
+        if lowered.endswith(suffix) and len(lowered) - len(suffix) >= 3:
+            stem = lowered[: -len(suffix)]
+            break
+
+    forms = {lowered, stem}
+    if stem.endswith("e"):
+        # "move" takes "moved" and "moving", never "moveed".
+        forms |= {stem + "s", stem + "d", stem[:-1] + "ing"}
+    else:
+        forms |= {stem + "s", stem + "es", stem + "ed", stem + "ing"}
+    return forms
+
+
+def expand_query(query: str) -> str:
+    """The query plus the inflected forms of each word in it.
+
+    Retrieval here is one shot: whatever Search returns is all the caller's
+    answerer will ever see, with no agent to notice the miss and ask again.
+    Widening the query costs a longer string and buys the matches that
+    exact-token scoring drops.
+    """
+    expanded: list[str] = []
+    for token in _WORD.findall(query):
+        for form in sorted(_inflections(token)):
+            if form not in expanded:
+                expanded.append(form)
+    if not expanded:
+        return query
+    # The original goes first so exact wording still ranks highest.
+    return f"{query} {' '.join(expanded)}"
+
+
+def _snippet(hit: dict[str, Any]) -> str:
+    """The memory, with enough context to stand on its own.
+
+    A topic file is about one subject and its paragraphs rely on that:
+    "He moved to Shanghai" is unambiguous inside `topics/people/dave.md`
+    and meaningless out of it. The headings carry the subject, and the
+    caller's answerer never sees the file.
+    """
+    content = hit.get("content", "")
+    headings = [h for h in (hit.get("headings") or []) if h]
+    if not headings:
+        return content
+    return f"{' > '.join(headings)} — {content}"
+
+
 def _retrieve(payload: SearchRequest) -> list[dict[str, Any]]:
     workspace = _workspace(payload.user_id)
     if not workspace.exists():
         return []
-    hits = _index(workspace).search(payload.query, top_k=payload.top_k)
+    hits = _index(workspace).search(
+        expand_query(payload.query), top_k=payload.top_k
+    )
     results = []
     for hit in hits:
         # `date` is the event's own date when the writer recorded one.
         created_at = hit.get("date") or ""
         results.append({
             "id": hit["event_id"],
-            "content": hit["content"],
+            "content": _snippet(hit),
             "score": hit["final_score"],
             "created_at": created_at,
         })
