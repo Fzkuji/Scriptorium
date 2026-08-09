@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.ingestion import read_transcript
+from memory.ingestion import read_transcript
 
 
 def write(path: Path, rows: list[dict]) -> Path:

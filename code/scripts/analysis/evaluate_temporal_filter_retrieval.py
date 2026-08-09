@@ -17,12 +17,12 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from src.retrieval.bm25 import (  # noqa: E402
+from memory.retrieval.bm25 import (  # noqa: E402
     MemoryBM25Index,
     event_matches_time_window,
     temporal_bounds,
 )
-from src.retrieval.embedding import MemoryEmbeddingIndex  # noqa: E402
+from memory.retrieval.embedding import MemoryEmbeddingIndex  # noqa: E402
 
 DEFAULT_DATASET = ROOT / "benchmarks/longmemeval/data/longmemeval_s_cleaned.json"
 KS = (1, 3, 5, 10)

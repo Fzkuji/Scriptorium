@@ -1,6 +1,6 @@
 """Provider spend readings, which do not depend on prices or token counts."""
 
-from src.runtime import billing
+from memory.runtime import billing
 
 
 def test_reads_the_dashboard_counter(monkeypatch):

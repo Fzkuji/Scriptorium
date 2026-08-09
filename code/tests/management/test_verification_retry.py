@@ -2,9 +2,9 @@
 
 import pytest
 
-from src.agent_runtime import AgentResult
-from src.management import verification
-from src.management.config import MemoryConfig
+from memory.agent_runtime import AgentResult
+from memory.management import verification
+from memory.management.config import MemoryConfig
 
 
 def result(structured):

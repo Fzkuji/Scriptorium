@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.runners import reanswer_longmemeval as MOD
-from src import retrieval
-from src.agent_runtime import AgentResult
-from src.retrieval import tools as retrieval_tools
-from src.retrieval.embedding import MemoryEmbeddingIndex
+from memory import retrieval
+from memory.agent_runtime import AgentResult
+from memory.retrieval import tools as retrieval_tools
+from memory.retrieval.embedding import MemoryEmbeddingIndex
 
 
 class ScriptedQueryAgent:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src import build as adapter
+from memory import build as adapter
 
 
 def test_scriptorium_adapter_owns_session_conversion(tmp_path: Path, monkeypatch):
@@ -211,7 +211,7 @@ def test_scriptorium_locomo_cli_uses_explicit_credentials(tmp_path: Path):
 
 
 def test_scriptorium_runtime_exports_the_current_retrieval_api():
-    from src import retrieval
+    from memory import retrieval
 
     assert callable(retrieval.create_runtime)
     assert callable(retrieval.collect_answer)
@@ -237,7 +237,7 @@ def test_longmemeval_cli_uses_one_framework_limit(tmp_path: Path):
 
 
 def test_scriptorium_management_exports_the_current_writing_api():
-    from src import management as memory
+    from memory import management as memory
 
     assert hasattr(memory, "__path__")
     assert callable(memory.write_sessions)

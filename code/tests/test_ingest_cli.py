@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from src.agent_runtime import AgentResult
-from src.management.transaction import workspace_revision, workspace_write_lock
+from memory.agent_runtime import AgentResult
+from memory.management.transaction import workspace_revision, workspace_write_lock
 from scriptorium.cli import main
 
 
@@ -39,7 +39,7 @@ def agent(monkeypatch):
         made.configs.append(config)
         return made
 
-    monkeypatch.setattr("src.agent_runtime.ClaudeCodeAgent", build)
+    monkeypatch.setattr("memory.agent_runtime.ClaudeCodeAgent", build)
     return made
 
 
@@ -154,7 +154,7 @@ def test_a_failed_write_writes_no_topics_and_is_retried(
             raise RuntimeError("model unavailable")
 
     monkeypatch.setattr(
-        "src.agent_runtime.ClaudeCodeAgent", lambda *a, **k: Failing()
+        "memory.agent_runtime.ClaudeCodeAgent", lambda *a, **k: Failing()
     )
     workspace = tmp_path / "memory"
     source = transcript(tmp_path / "s.jsonl", turns=4, words=50)
@@ -214,7 +214,7 @@ def test_enough_accumulated_writing_triggers_reorganisation(
     """
     fired = []
     monkeypatch.setattr(
-        "src.management.organize_topics",
+        "memory.management.organize_topics",
         lambda memory_dir, **kwargs: fired.append(memory_dir) or [],
     )
     source = transcript(tmp_path / "s.jsonl", turns=200, words=300)

@@ -8,7 +8,7 @@ import pytest
 
 from scriptorium import cli
 from scriptorium.mcp_server import TOOL_NAMES, build_server
-from src.management import MemoryWorkspace
+from memory.management import MemoryWorkspace
 
 TOPIC_LINES = [
     "# Residence",

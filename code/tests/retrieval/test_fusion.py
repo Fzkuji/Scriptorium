@@ -1,6 +1,6 @@
 """RRF fusion merges two ranked lists exactly as 1/(k + rank) predicts."""
 
-from src.retrieval.fusion import resolve_alpha, rrf_fuse
+from memory.retrieval.fusion import resolve_alpha, rrf_fuse
 
 K = 60
 

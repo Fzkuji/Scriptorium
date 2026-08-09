@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from src.retrieval.bm25 import MemoryBM25Index, parse_topic_file, tokenize
-from src.management import MemoryWorkspace
+from memory.retrieval.bm25 import MemoryBM25Index, parse_topic_file, tokenize
+from memory.management import MemoryWorkspace
 
 
 def _write_events(memory_dir: Path, events: list[dict]) -> None:

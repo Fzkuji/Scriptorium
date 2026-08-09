@@ -8,7 +8,7 @@ ROOT = next(
 )
 
 CODE_DIRECTORIES = (
-    "src", "scripts", "tests", "benchmarks", "figures",
+    "memory", "scripts", "tests", "benchmarks", "figures",
     "gold_memory", "results", "baselines", "scriptorium",
 )
 

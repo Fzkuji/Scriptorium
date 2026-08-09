@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from scripts.runners.common import atomic_json, read_json
-from src import retrieval
+from memory import retrieval
 
 from . import support as lme
 

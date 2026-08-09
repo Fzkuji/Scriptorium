@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from src import retrieval
+from memory import retrieval
 
 # Fields a benchmark may attach to a question that the judge needs later.
 # An allowlist, not a copy of everything: the question's own `answer` is the

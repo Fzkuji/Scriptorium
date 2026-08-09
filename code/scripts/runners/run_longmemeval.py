@@ -25,9 +25,9 @@ from scripts.runners.longmemeval.selection import (  # noqa: E402
     question_type_indices,
     round_robin_indices,
 )
-from src import build as adapter  # noqa: E402
-from src import management as memory  # noqa: E402
-from src import retrieval  # noqa: E402
+from memory import build as adapter  # noqa: E402
+from memory import management as memory  # noqa: E402
+from memory import retrieval  # noqa: E402
 
 
 # Config values naming a file resolve against the config file's directory.

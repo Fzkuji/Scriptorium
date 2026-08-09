@@ -5,8 +5,8 @@ import pytest
 
 
 def test_pack_complete_messages_splits_a_session_only_between_messages():
-    from src.runtime.capacity import pack_complete_messages
-    from src.runtime.tokenization import TokenCounter
+    from memory.runtime.capacity import pack_complete_messages
+    from memory.runtime.tokenization import TokenCounter
 
     session = {
         "observation_date": "2026-01-01",
@@ -29,8 +29,8 @@ def test_pack_complete_messages_splits_a_session_only_between_messages():
 
 
 def test_pack_complete_messages_rejects_one_oversized_message():
-    from src.runtime.capacity import MessageTooLargeError, pack_complete_messages
-    from src.runtime.tokenization import TokenCounter
+    from memory.runtime.capacity import MessageTooLargeError, pack_complete_messages
+    from memory.runtime.tokenization import TokenCounter
 
     with pytest.raises(MessageTooLargeError, match="complete message"):
         pack_complete_messages(
@@ -48,8 +48,8 @@ def test_pack_complete_messages_rejects_one_oversized_message():
 def test_explicit_writer_cap_batches_without_a_calibration_file(
     tmp_path: Path, monkeypatch
 ):
-    from src import build
-    from src.runtime.tokenization import TokenCounter
+    from memory import build
+    from memory.runtime.tokenization import TokenCounter
 
     captured = []
     monkeypatch.setattr(
@@ -98,7 +98,7 @@ def test_explicit_writer_cap_batches_without_a_calibration_file(
 def test_build_checkpoint_resumes_after_last_committed_batch(
     tmp_path: Path, monkeypatch
 ):
-    from src import build
+    from memory import build
 
     checkpoint = tmp_path / "build-checkpoint.json"
     conversation = {
@@ -157,7 +157,7 @@ def test_build_checkpoint_resumes_after_last_committed_batch(
 
 
 def test_capacity_selection_uses_full_workload_cost_not_largest_batch():
-    from src.runtime.capacity import select_writer_capacities
+    from memory.runtime.capacity import select_writer_capacities
 
     levels = [
         {
@@ -215,7 +215,7 @@ def test_capacity_selection_uses_full_workload_cost_not_largest_batch():
 
 
 def test_writer_capacity_rejects_another_model_or_prompt(tmp_path: Path):
-    from src.runtime.capacity import WriterCapacity
+    from memory.runtime.capacity import WriterCapacity
 
     path = tmp_path / "calibration.json"
     path.write_text(json.dumps({
@@ -245,7 +245,7 @@ def test_writer_capacity_rejects_another_model_or_prompt(tmp_path: Path):
     "schema", ["nativemem-writer-capacity-v1", "nativemem-writer-capacity-v2"]
 )
 def test_writer_capacity_rejects_old_calibration(tmp_path: Path, schema: str):
-    from src.runtime.capacity import WriterCapacity
+    from memory.runtime.capacity import WriterCapacity
 
     path = tmp_path / "calibration.json"
     path.write_text(json.dumps({
@@ -495,9 +495,9 @@ def test_probe_evaluation_reports_an_unfinished_agent_run_separately(tmp_path: P
 
 
 def test_build_caps_calibrated_input_at_explicit_limit(tmp_path: Path, monkeypatch):
-    from src import build
-    from src.management.api import render_writer_input, writer_protocol_sha256
-    from src.runtime.tokenization import TokenCounter
+    from memory import build
+    from memory.management.api import render_writer_input, writer_protocol_sha256
+    from memory.runtime.tokenization import TokenCounter
 
     conversation = {
         "session_1": [

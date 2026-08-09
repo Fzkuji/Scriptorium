@@ -11,9 +11,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from src.management.transaction import TransactionError, workspace_revision
-from src.workspace_layout import RUNTIME_DIR, has_runtime_dir
-from src.retrieval import inspect
+from memory.management.transaction import TransactionError, workspace_revision
+from memory.workspace_layout import RUNTIME_DIR, has_runtime_dir
+from memory.retrieval import inspect
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -169,14 +169,14 @@ def command_ingest(
     """
     # Imported here rather than at module scope: the SDK is a heavy import
     # and the other subcommands never need it.
-    from src.agent_runtime import ClaudeCodeAgent, ClaudeCodeConfig
-    from src.ingestion import read_transcript
-    from src.management import MemoryWorkspace, organize_topics
-    from src.management.agent import _run_agent
-    from src.management.api import render_writer_task
-    from src.management.transaction import workspace_write_lock
-    from src.runtime.online import OnlineMemoryRuntime
-    from src.runtime.tokenization import TokenCounter
+    from memory.agent_runtime import ClaudeCodeAgent, ClaudeCodeConfig
+    from memory.ingestion import read_transcript
+    from memory.management import MemoryWorkspace, organize_topics
+    from memory.management.agent import _run_agent
+    from memory.management.api import render_writer_task
+    from memory.management.transaction import workspace_write_lock
+    from memory.runtime.online import OnlineMemoryRuntime
+    from memory.runtime.tokenization import TokenCounter
 
     root = Path(workspace).expanduser().resolve()
     ensure_workspace(root, self_ignore=True)
@@ -271,8 +271,8 @@ def command_validate(workspace: str) -> int:
         # Rebuild into a scratch copy so a successful check never writes.
         copy = scratch / "memory"
         shutil.copytree(root, copy, symlinks=True)
-        from src.management import MemoryWorkspace
-        from src.management.transaction import committed_baseline, install_state
+        from memory.management import MemoryWorkspace
+        from memory.management.transaction import committed_baseline, install_state
 
         space = MemoryWorkspace(copy)
         before_units, before_block_ids = committed_baseline(space)

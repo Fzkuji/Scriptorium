@@ -15,16 +15,16 @@ from pathlib import Path
 from typing import Any
 
 from scripts.runners.common import atomic_json
-from src import management, retrieval
-from src.management.api import render_writer_input, writer_protocol_sha256
-from src.runtime.capacity import (
+from memory import management, retrieval
+from memory.management.api import render_writer_input, writer_protocol_sha256
+from memory.runtime.capacity import (
     SCHEMA,
     MessageTooLargeError,
     find_capacity_inversions,
     pack_complete_messages,
     select_writer_capacities,
 )
-from src.runtime.tokenization import TokenCounter
+from memory.runtime.tokenization import TokenCounter
 
 # High enough that no level is decided by the turn budget. The measurement is
 # how much input the Writer handles, so turns must not be the binding limit.

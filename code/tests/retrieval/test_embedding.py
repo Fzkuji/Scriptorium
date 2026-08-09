@@ -6,9 +6,9 @@ from types import ModuleType
 
 import pytest
 
-import src.retrieval.embedding as embedding
-from src.retrieval.embedding import MemoryEmbeddingIndex
-from src.management import MemoryWorkspace
+import memory.retrieval.embedding as embedding
+from memory.retrieval.embedding import MemoryEmbeddingIndex
+from memory.management import MemoryWorkspace
 
 
 def _write_events(memory_dir: Path, events: list[dict]) -> None:

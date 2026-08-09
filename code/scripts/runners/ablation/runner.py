@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.runners.common import atomic_json, stop_on_signal, tree_sha256
-from src import retrieval
+from memory import retrieval
 
 from .outputs import (
     build_dir,

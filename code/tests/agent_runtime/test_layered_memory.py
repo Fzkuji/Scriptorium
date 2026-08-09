@@ -8,8 +8,8 @@ import pytest
 
 from scriptorium import cli
 from scriptorium.mcp_server import build_server
-from src.retrieval import inspect
-from src.retrieval.layers import Layer, LayeredMemory
+from memory.retrieval import inspect
+from memory.retrieval.layers import Layer, LayeredMemory
 
 TOPIC_LINES = [
     "# Residence",
@@ -323,7 +323,7 @@ def test_a_bad_argument_reaches_the_caller_across_layers(server):
 def test_a_workspace_under_git_hides_its_repository(tmp_path: Path):
     import subprocess
 
-    from src.management.transaction import workspace_revision
+    from memory.management.transaction import workspace_revision
 
     cli.main(["init", str(tmp_path)])
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)

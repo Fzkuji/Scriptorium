@@ -95,7 +95,7 @@ when the builder, answerer, judge, prompt and question set all match — see
   Code subprocess with explicit models, endpoints and budgets, for LoCoMo,
   BEAM and LongMemEval.
 
-Both go through the same `code/src` — the same write transaction, the same
+Both go through the same `code/memory` — the same write transaction, the same
 Markdown rules, the same retrieval. There is no separate interactive format,
 and nothing in the interactive path is a simplified version of the measured
 one.
@@ -145,7 +145,7 @@ or `.venv-*`; run `./setup.sh` there instead.
 ```text
 code/
   scriptorium/                installable facade, CLI and MCP server
-  src/                        the implementation both paths share
+  memory/                     the implementation both paths share
   scripts/                    run_experiment.sh plus our own method's runners
     runners/                  one package per benchmark family
       conversation/           one conversation end to end: LoCoMo and BEAM
@@ -180,9 +180,9 @@ docs/
 Everything runnable lives under `code/`, and only there — run the commands
 below from that directory. Generated analysis is stored under
 `code/results/analysis/`; there is no code-level `experiments/` directory.
-`code/src/evaluation` is a compatibility link to `code/scripts/evaluation`,
+`code/memory/evaluation` is a compatibility link to `code/scripts/evaluation`,
 required because the hash-locked `code/scripts/evaluation/eval_full.py` imports
-its answerer as `src.evaluation.answerer`; the implementation is maintained
+its answerer as `memory.evaluation.answerer`; the implementation is maintained
 only under `code/scripts/evaluation`.
 
 ## Running an experiment
