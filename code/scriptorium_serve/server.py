@@ -21,6 +21,7 @@ import re
 import sys
 import threading
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -56,7 +57,28 @@ WRITER_API_KEY = os.environ.get("SCRIPTORIUM_WRITER_API_KEY", "")
 # few_shot_instructions is the successor to the shell-era worked examples:
 # the writer edits through file tools now, and weaker models still need the
 # shapes spelled out.
-MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True)
+# A write that has not finished in six turns is not going to. Measured over
+# 1273 production writes, the ones that ran to the twenty-turn ceiling were
+# 77 of them, each burning one to three minutes and 150k input tokens to
+# commit nothing: the model retrying an edit the contract keeps refusing.
+# Capping the ceiling costs those nothing they were going to produce, and
+# takes the tail off a stage the platform times out on.
+#
+# The turn ceiling alone does not bound the clock, and the clock is what the
+# platform enforces. Measured over 620 production Adds: the platform hangs up
+# at about a hundred seconds, and the 46 writes that reached six turns had a
+# median of 80s — which is where all 53 hang-ups came from, and a hang-up is
+# reported back as ADD_API_CONTRACT_MISMATCH, which ends the whole run.
+#
+# So the pass carries a wall-clock budget instead. ADD_SECONDS covers the
+# whole request, the wait for the workspace lock included, and bounds the
+# endpoint call as well as the turn count: a turn that cannot finish inside
+# what is left ends the pass, and everything earlier turns wrote stays
+# committed. Seventy-five leaves a quarter of the platform's patience for the
+# proxy hop and staging, and is above the 39s a four-turn write measured, so
+# it takes the tail off without shortening an ordinary write.
+MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True, max_turns=6)
+ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "75"))
 
 # Retrieval is one shot here, so the agent is given room to look more than
 # once; the caller's own timeout is the real ceiling. Source verification is
@@ -221,6 +243,11 @@ def _observation_date(messages: list[Message]) -> str:
 
 def _ingest(payload: AddRequest) -> None:
     workspace = _workspace(payload.user_id)
+    arrived = time.monotonic()
+    # Chunks of one conversation arrive concurrently and commit through one
+    # transaction, so they queue here. That wait is the caller's deadline being
+    # spent before any work starts, which is why the budget is measured from
+    # arrival rather than from the top of the write.
     with _user_lock(payload.user_id):
         ensure_workspace(workspace)
         turns = [(m.role, m.content) for m in payload.messages]
@@ -235,6 +262,7 @@ def _ingest(payload: AddRequest) -> None:
             for position, _ in enumerate(payload.messages)
         ]
         began = time.monotonic()
+        waited = began - arrived
         written = write_sessions(
             workspace,
             agent=_agent(),
@@ -243,7 +271,9 @@ def _ingest(payload: AddRequest) -> None:
                 "turns": turns,
                 "refs": refs,
             }],
-            config=MEMORY_CONFIG,
+            config=replace(
+                MEMORY_CONFIG, max_seconds=max(1.0, ADD_SECONDS - waited)
+            ),
         )
         # write_sessions reports an audit trail; its closing row carries what
         # the one agent pass cost.
@@ -252,7 +282,8 @@ def _ingest(payload: AddRequest) -> None:
             {},
         )
         _record(
-            "add", began,
+            "add", arrived,
+            waited=round(waited, 2),
             turns=closing.get("rounds"),
             input_tokens=closing.get("input_tokens"),
             output_tokens=closing.get("output_tokens"),

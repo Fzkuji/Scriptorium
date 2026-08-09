@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
@@ -151,6 +152,16 @@ def run_pass(
         stage = stage or ("write" if source_sessions else "organize")
         if protocol is not None and not getattr(agent, "has_file_tools", True):
             task = f"{task}\n{protocol(memory_dir)}"
+        # One budget covers the pass, repair included: a rejected turn is the
+        # slowest way to spend it, and the caller's deadline does not move
+        # because the model needed a second attempt.
+        began = time.monotonic()
+
+        def remaining() -> float | None:
+            if config.max_seconds is None:
+                return None
+            return max(1.0, config.max_seconds - (time.monotonic() - began))
+
         try:
             result = agent.run(
                 prompt=task,
@@ -158,6 +169,7 @@ def run_pass(
                 cwd=workspace.stage_dir,
                 tools=tools(workspace, audit),
                 max_turns=config.max_turns,
+                max_seconds=remaining(),
                 max_budget_usd=config.max_budget_usd,
             )
         except BaseException as exc:
@@ -189,6 +201,7 @@ def run_pass(
                     cwd=workspace.stage_dir,
                     tools=tools(workspace, audit),
                     max_turns=config.max_turns,
+                    max_seconds=remaining(),
                     max_budget_usd=config.max_budget_usd,
                 )
             except BaseException as exc:

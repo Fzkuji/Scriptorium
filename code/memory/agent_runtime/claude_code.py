@@ -179,6 +179,10 @@ class ClaudeCodeAgent:
         cwd: str | Path,
         tools: list[Any] | None = None,
         max_turns: int = 20,
+        # Accepted for one signature across runtimes and not enforced here:
+        # the SDK owns its own loop, and only the served OpenAI path answers
+        # to a client deadline.
+        max_seconds: float | None = None,
         max_budget_usd: float | None = None,
         output_schema: dict[str, Any] | None = None,
     ) -> AgentResult:

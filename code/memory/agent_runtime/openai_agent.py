@@ -17,9 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+from openai import APITimeoutError, OpenAI
 
 from .claude_code import AgentExecutionError, AgentResult
+
+# A call given less than this has no chance of returning, and cutting the first
+# turn off leaves the pass with nothing to commit at all.
+_MINIMUM_CALL_SECONDS = 20.0
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,7 @@ class OpenAIWriterAgent:
         cwd: str | Path,
         tools: list[Any] | None = None,
         max_turns: int = 20,
+        max_seconds: float | None = None,
         max_budget_usd: float | None = None,
         output_schema: dict[str, Any] | None = None,
     ) -> AgentResult:
@@ -120,14 +125,48 @@ class OpenAIWriterAgent:
         trajectory: list[dict[str, Any]] = []
 
         for turns in range(1, max_turns + 1):
+            # Whoever is waiting on this pass has a deadline of their own, and
+            # one endpoint call is what overruns it: the client's own timeout
+            # is three minutes and it retries, so a single turn can outlast the
+            # whole budget several times over. Each call is given only the time
+            # that is left, which makes the budget a ceiling on the pass rather
+            # than on the number of turns it opens.
+            left = None
+            if max_seconds is not None:
+                left = max_seconds - (time.time() - started)
+                # Too little left to be worth a round trip: stop here rather
+                # than spend the remainder on a call that cannot land. The
+                # headroom is capped at a third of the budget, so a short
+                # budget still buys more than its first turn, and the floor
+                # never exceeds the budget the caller allowed.
+                floor = min(_MINIMUM_CALL_SECONDS, max_seconds / 3)
+                if turns > 1 and left < floor:
+                    turns -= 1
+                    stop_reason = "max_seconds"
+                    break
+                left = max(floor, left)
+
+            client = self._client
+            if left is not None:
+                # No retries under a deadline: a second attempt would double
+                # the ceiling, and a turn that ends early still leaves what
+                # earlier turns wrote committed.
+                client = client.with_options(timeout=left, max_retries=0)
             call_started = time.time()
             try:
-                response = self._client.chat.completions.create(
+                response = client.chat.completions.create(
                     model=self.config.model,
                     messages=messages,
                     tools=schemas or None,
                     temperature=self.config.temperature,
                 )
+            except APITimeoutError:
+                # Out of time. Earlier turns already wrote through the tools,
+                # so the pass reports what it got instead of failing whole.
+                api_ms += int((time.time() - call_started) * 1000)
+                turns -= 1
+                stop_reason = "max_seconds"
+                break
             except Exception as exc:
                 raise AgentExecutionError(
                     _redact(f"{type(exc).__name__}: {exc}", self.config.api_key)

@@ -67,6 +67,10 @@ class _StubClient:
         self.completions = _StubCompletions(arguments)
         self.chat = SimpleNamespace(completions=self.completions)
 
+    def with_options(self, **_: object) -> "_StubClient":
+        """The writer narrows the client's timeout per call under a deadline."""
+        return self
+
 
 def _agent_with(arguments: str) -> tuple[OpenAIWriterAgent, _StubClient]:
     client = _StubClient(arguments)
