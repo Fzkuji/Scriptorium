@@ -28,18 +28,18 @@ none of it is required reading to start.
 
 ### Codex
 
-Codex has no plugin marketplace: hooks live in one global `hooks.json` and
-MCP servers in `config.toml`. Clone the repository and run the installer,
-which adds both entries and leaves the rest of your configuration alone:
+The same plugin directory carries a `.codex-plugin/plugin.json`, so Codex
+picks up the skill, the hooks and the MCP server from it unchanged. Nothing
+to install by hand.
 
-```bash
-pip install git+https://github.com/Fzkuji/Scriptorium.git
-./claude-plugin/install-codex.sh
-```
+### What runs in the background
 
-`SCRIPTORIUM_WORKSPACE=~/somewhere ./claude-plugin/install-codex.sh` puts
-memory elsewhere. `--uninstall` removes both entries and leaves the
-workspace on disk.
+A Stop hook passes each finished turn to `scriptorium ingest`, which holds
+new turns until about 16k tokens have accumulated and then writes them into
+memory. Below that it exits immediately and costs nothing. The write runs
+as you — your existing login, your default model — so there is no second
+API key to provision. Point it somewhere cheaper with `--model`, and read
+what it did in `<workspace>/.scriptorium/ingest.log`.
 
 ## Create a workspace (optional)
 

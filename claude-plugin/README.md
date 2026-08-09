@@ -1,12 +1,14 @@
 # Scriptorium plugin
 
 Usage guidance for the `scriptorium` MCP server. All capability comes from the
-server; the plugin makes the model use it. Two pieces:
+server; the plugin makes the model use it. Three pieces:
 
-- A **SessionStart hook** injecting the memory protocol — when to search before
-  answering, when to save, and the excuses that lose facts. Tools the model
-  merely *has* go unused; a workspace nobody reads or writes is an empty
-  directory with a schema.
+- A **SessionStart hook** injecting the memory protocol — when to search
+  before answering, and the excuses that lead to answering from nothing.
+  Tools the model merely *has* go unused.
+- A **Stop hook** handing each finished turn to `scriptorium ingest`, which
+  writes the conversation into memory once about 16k tokens of it have
+  accumulated. Saving is not the model's job and does not interrupt it.
 - A **skill** with the mechanics of each call: which tool finds what, how one
   `memory_update` is shaped, what each rejection code means.
 
@@ -33,9 +35,12 @@ claude mcp add --scope user scriptorium -- \
   scriptorium mcp --workspace ~/memory
 ```
 
-For Codex, which has no marketplace, run `./install-codex.sh` from a
-checkout. It writes the hook and the MCP entry into `~/.codex/`, leaves the
-rest of that configuration alone, and reverses with `--uninstall`.
+Codex reads the same directory through `.codex-plugin/plugin.json`, so the
+skill, the hooks and the MCP server come across unchanged.
+
+Background writing runs as you: it uses the login and default model your own
+CLI already has, and needs no second API key. To spend less on it, point the
+writer at a cheaper model with `scriptorium ingest --model claude-haiku-4-5`.
 
 Full setup, tool reference and error codes:
 [`docs/integrations/claude-code.md`](../docs/integrations/claude-code.md).

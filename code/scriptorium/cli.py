@@ -1,4 +1,4 @@
-"""scriptorium command line: init, validate, mcp."""
+"""scriptorium command line: init, validate, ingest, mcp."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from src.management.transaction import TransactionError, workspace_revision
 from src.workspace_layout import RUNTIME_DIR, has_runtime_dir
@@ -31,6 +32,28 @@ def build_parser() -> argparse.ArgumentParser:
         "validate", help="parse topics and rebuild derived views in a scratch copy"
     )
     validate.add_argument("--workspace", required=True)
+
+    ingest = commands.add_parser(
+        "ingest",
+        help="write a session transcript into memory once it is long enough",
+    )
+    ingest.add_argument("--transcript", required=True)
+    ingest.add_argument("--workspace", default="~/.scriptorium/memory")
+    ingest.add_argument(
+        "--token-threshold",
+        type=int,
+        default=16_000,
+        help="hold new turns until this many tokens have accumulated",
+    )
+    ingest.add_argument(
+        "--model", help="defaults to whatever model your own CLI uses"
+    )
+    ingest.add_argument("--claude-cli")
+    ingest.add_argument(
+        "--force",
+        action="store_true",
+        help="write what has accumulated without waiting for the threshold",
+    )
 
     mcp = commands.add_parser("mcp", help="run the stdio MCP server")
     mcp.add_argument(
@@ -108,6 +131,132 @@ def command_init(workspace: str) -> int:
         print(json.dumps(inspect.status(root), ensure_ascii=False, indent=2))
         return 0
     print(f"initialized workspace: {root}")
+    print(f"revision: {workspace_revision(root)}")
+    return 0
+
+
+def _first_batch(
+    records: list[Any], token_counter: Any, threshold: int
+) -> list[Any]:
+    """The leading records that together reach the threshold.
+
+    Includes the record that crosses it, so the batch is always at or above
+    the threshold and the runtime's own check agrees it is time to write. A
+    backlog shorter than the threshold comes back whole and is held.
+    """
+    total = 0
+    for index, record in enumerate(records):
+        total += token_counter(record.content)
+        if total >= threshold:
+            return records[:index + 1]
+    return records
+
+
+def command_ingest(
+    transcript: str,
+    workspace: str,
+    *,
+    token_threshold: int,
+    model: str | None = None,
+    cli_path: str | None = None,
+    force: bool = False,
+) -> int:
+    """Write a session's new turns into memory, once there are enough.
+
+    Called after every assistant turn, so the common outcome is to do
+    nothing: the cursor says what has already been written and the
+    threshold holds the rest back until a batch is worth an agent call.
+    """
+    # Imported here rather than at module scope: the SDK is a heavy import
+    # and the other subcommands never need it.
+    from src.agent_runtime import ClaudeCodeAgent, ClaudeCodeConfig
+    from src.ingestion import read_transcript
+    from src.management import MemoryWorkspace, organize_topics
+    from src.management.agent import _run_agent
+    from src.management.api import render_writer_task
+    from src.management.transaction import workspace_write_lock
+    from src.runtime.online import OnlineMemoryRuntime
+    from src.runtime.tokenization import TokenCounter
+
+    root = Path(workspace).expanduser().resolve()
+    ensure_workspace(root, self_ignore=True)
+    try:
+        records = read_transcript(transcript)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if not records:
+        print("nothing to ingest")
+        return 0
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig.inherited(model=model, cli_path=cli_path)
+    )
+
+    def writer(space: Any, batch: tuple[Any, ...]) -> None:
+        observed = next(
+            (
+                record.timestamp[:10]
+                for record in reversed(batch) if record.timestamp
+            ),
+            "undated",
+        )
+        _run_agent(
+            space.memory_dir,
+            agent=agent,
+            task=render_writer_task([{
+                "observation_date": observed,
+                "turns": [
+                    (record.role, record.content) for record in batch
+                ],
+                "refs": [record.source_id for record in batch],
+            }]),
+            stage="write",
+        )
+
+    def organizer(space: Any) -> None:
+        organize_topics(space.memory_dir, agent=agent)
+
+    runtime = OnlineMemoryRuntime(
+        root,
+        token_counter=TokenCounter.resolve(
+            requested_model=model or "claude"
+        ).count,
+        token_threshold=token_threshold,
+    )
+    pending = runtime.pending(records)
+    if not pending:
+        print("nothing new in this transcript")
+        return 0
+    # The threshold is how much is worth writing, not how much to write at
+    # once. A session that has been running all day arrives with hundreds of
+    # thousands of tokens of backlog, and handing that to one agent call
+    # would exceed its context. Send one batch and let the next turn's hook
+    # take the rest.
+    pending = _first_batch(pending, runtime.token_counter, token_threshold)
+
+    try:
+        # Short wait on purpose. Another session writing right now is the
+        # normal case, not a failure, and this runs again after every turn.
+        with workspace_write_lock(root, timeout_s=1.0):
+            wrote = runtime.process(
+                pending,
+                writer,
+                local_manager=organizer,
+                global_manager=organizer,
+                force=force,
+            )
+    except TransactionError as exc:
+        if exc.code == "CONCURRENT_UPDATE":
+            print("skipped: workspace busy")
+            return 0
+        print(f"{exc.code}: {exc.message}", file=sys.stderr)
+        return 1
+
+    if not wrote:
+        print(f"holding {len(pending)} turn(s) below the threshold")
+        return 0
+    print(f"wrote {len(pending)} turn(s)")
     print(f"revision: {workspace_revision(root)}")
     return 0
 
@@ -222,6 +371,15 @@ def main(argv: list[str] | None = None) -> int:
         return command_init(args.workspace)
     if args.command == "validate":
         return command_validate(args.workspace)
+    if args.command == "ingest":
+        return command_ingest(
+            args.transcript,
+            args.workspace,
+            token_threshold=args.token_threshold,
+            model=args.model,
+            cli_path=args.claude_cli,
+            force=args.force,
+        )
     return command_mcp(list(args.workspace), args.git_commit)
 
 
