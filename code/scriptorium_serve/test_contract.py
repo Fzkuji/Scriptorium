@@ -1,8 +1,9 @@
 """Contract checks for the Add / Search service.
 
-Retrieval is exercised against a hand-built workspace, so these run with no
-writer endpoint and no API key. What they protect is the platform-facing
-contract: response shape, user isolation, top_k, and auth.
+Retrieval reads the workspace with a model, so these stub the model and
+report what a real one would: the memory it found. What they protect is
+the platform-facing contract — response shape, user isolation, top_k and
+auth — not the model's judgement.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ os.environ["SCRIPTORIUM_WORKSPACES"] = WORKSPACES
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from scriptorium_serve import server  # noqa: E402
@@ -38,7 +40,41 @@ def _seed(user_id: str, topic: str, body: str) -> None:
     ensure_workspace(workspace)
     (workspace / "topics").mkdir(parents=True, exist_ok=True)
     (workspace / "topics" / f"{topic}.md").write_text(body, encoding="utf-8")
-    server._indexes.pop(str(workspace), None)
+
+
+class _ReportingModel:
+    """Reports back whatever the workspace holds, one passage per file.
+
+    A real model searches and reads before deciding what is relevant.
+    Standing in for that here keeps these checks about the contract.
+    """
+
+    def __init__(self, workspace_of):
+        self._workspace_of = workspace_of
+
+    def run(self, *, prompt, system_prompt, cwd, tools=None, **kwargs):
+        from memory.agent_runtime import AgentResult
+
+        passages = [
+            path.read_text(encoding="utf-8").strip()
+            for path in sorted(Path(cwd).glob("topics/*.md"))
+        ]
+        return AgentResult(
+            text="\n\n".join(passages),
+            structured_output=None, num_turns=1,
+            input_tokens=1, output_tokens=1,
+            cache_creation_input_tokens=0, cache_read_input_tokens=0,
+            anthropic_equivalent_cost_usd=0.0,
+            duration_ms=1, duration_api_ms=1,
+            stop_reason="end_turn", session_id="s",
+        )
+
+
+@pytest.fixture(autouse=True)
+def _stub_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        server, "_agent", lambda: _ReportingModel(server._workspace)
+    )
 
 
 def test_health_needs_no_auth() -> None:
@@ -99,18 +135,24 @@ def test_search_respects_top_k() -> None:
     assert len(response.json()["data"]) <= 5
 
 
-def test_top_k_100_is_not_truncated_at_50() -> None:
-    """The platform fixes top_k=100; the BM25 cap must not clip it to 50."""
-    body = [
-        _line("2023-08-01", f"Calvin discussed proposal {index}.", f"D4:{index}")
-        for index in range(120)
-    ]
-    _seed(USER_B, "bulk", "".join(body))
+def test_a_large_top_k_is_not_clipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The platform fixes top_k=100, and nothing may cut the report short
+    of what the model actually found."""
+    class _Verbose(_ReportingModel):
+        def run(self, **kwargs):
+            result = super().run(**kwargs)
+            return type(result)(
+                **{**result.__dict__,
+                   "text": "\n\n".join(f"passage {i}" for i in range(120))}
+            )
+
+    monkeypatch.setattr(server, "_agent", lambda: _Verbose(server._workspace))
+    _seed(USER_B, "bulk", _line("2023-08-01", "Calvin discussed a proposal.", "D4:1"))
 
     response = client.post(
         "/search", json={"query": "Calvin proposal", "user_id": USER_B, "top_k": 100}
     )
-    assert len(response.json()["data"]) > 50
+    assert len(response.json()["data"]) == 100
 
 
 def test_empty_query_is_rejected() -> None:
@@ -131,8 +173,11 @@ def test_add_rejects_empty_messages() -> None:
     assert response.status_code == 400
 
 
-def test_add_without_writer_config_reports_unavailable() -> None:
+def test_add_without_writer_config_reports_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Guards the failure mode where the writer endpoint is unset."""
+    monkeypatch.undo()  # drop the stubbed model; this is about not having one
     response = client.post(
         "/add",
         json={
@@ -171,56 +216,49 @@ def test_bearer_token_enforced_when_configured() -> None:
 
 # -- retrieval shaping ------------------------------------------------------
 
-def test_a_question_finds_memory_written_in_another_tense():
-    """Search runs once and nobody asks again.
+def test_the_report_is_split_into_one_row_per_remembered_thing():
+    from scriptorium_serve.server import _found_memory
 
-    The lexical index matches whole tokens, so "where did he move" scores
-    nothing at all against "moved" — not a weak match, no match.
-    """
-    from scriptorium_serve.server import expand_query
+    rows = _found_memory(
+        "Dave > Relocation\n[2024-03] He moved to Shanghai.\n\n"
+        "[2024-06] His wife stayed in Beijing."
+    )
 
-    expanded = expand_query("where did he move").split()
-
-    assert "moved" in expanded
-    assert "moving" in expanded
-
-
-def test_expansion_leaves_question_words_alone():
-    """Inflecting "where" yields "whereing", which matches nothing and
-    lengthens the string the scorer normalises against."""
-    from scriptorium_serve.server import expand_query
-
-    expanded = expand_query("where did it happen").split()
-
-    assert "whereing" not in expanded
-    assert "dided" not in expanded
+    assert len(rows) == 2
+    assert "Shanghai" in rows[0]["content"]
+    assert "Beijing" in rows[1]["content"]
 
 
-def test_expansion_derives_from_the_stem_not_the_asked_form():
-    from scriptorium_serve.server import expand_query
+def test_rows_carry_the_date_the_passage_states():
+    """The caller sorts and filters on created_at, and the only date that
+    means anything is the one the memory's own footnote recorded."""
+    from scriptorium_serve.server import _found_memory
 
-    expanded = expand_query("training schedule").split()
+    rows = _found_memory("[2024-03] He moved to Shanghai.")
 
-    assert "train" in expanded
-    assert "traininged" not in expanded
-
-
-def test_a_snippet_carries_the_subject_it_relies_on():
-    """A topic file is about one subject and its paragraphs lean on that.
-    "He moved to Shanghai" means nothing outside `topics/people/dave.md`,
-    and the caller's answerer never sees the file."""
-    from scriptorium_serve.server import _snippet
-
-    rendered = _snippet({
-        "content": "[2024-03] He moved to Shanghai.",
-        "headings": ["Dave", "Relocation"],
-    })
-
-    assert "Dave" in rendered
-    assert "He moved to Shanghai." in rendered
+    assert rows[0]["created_at"] == "2024-03"
 
 
-def test_a_snippet_without_headings_is_returned_as_it_is():
-    from scriptorium_serve.server import _snippet
+def test_a_passage_without_a_date_reports_none():
+    from scriptorium_serve.server import _found_memory
 
-    assert _snippet({"content": "plain line", "headings": []}) == "plain line"
+    assert _found_memory("He moved to Shanghai.")[0]["created_at"] == ""
+
+
+def test_finding_nothing_returns_nothing():
+    """The prompt tells the model to return nothing rather than something
+    it did not find, so an empty report must not become a row."""
+    from scriptorium_serve.server import _found_memory
+
+    assert _found_memory("") == []
+    assert _found_memory("   \n\n  ") == []
+
+
+def test_order_is_the_models_judgement_not_a_score():
+    from scriptorium_serve.server import _found_memory
+
+    rows = _found_memory("first\n\nsecond\n\nthird")
+
+    assert [row["score"] for row in rows] == sorted(
+        (row["score"] for row in rows), reverse=True
+    )

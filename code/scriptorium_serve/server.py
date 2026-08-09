@@ -35,7 +35,10 @@ from memory.agent_runtime import (
     OpenAIWriterAgent,
 )
 from memory.management import MemoryConfig, write_sessions
-from memory.retrieval.bm25 import MemoryBM25Index
+from memory.retrieval import QueryConfig
+from memory.retrieval.context import initialize_context
+from memory.retrieval.tool_server import RetrievalToolState, retrieval_tools
+from memory.retrieval.views import memory_files
 from scriptorium.cli import ensure_workspace
 
 WORKSPACE_ROOT = Path(os.environ.get("SCRIPTORIUM_WORKSPACES", "./workspaces")).resolve()
@@ -54,6 +57,11 @@ WRITER_API_KEY = os.environ.get("SCRIPTORIUM_WRITER_API_KEY", "")
 # the writer edits through file tools now, and weaker models still need the
 # shapes spelled out.
 MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True)
+
+# Retrieval is one shot here, so the agent is given room to look more than
+# once; the caller's own timeout is the real ceiling. Source verification is
+# off because the caller never sees a citation to check — it sees the memory.
+QUERY_CONFIG = QueryConfig(max_turns=8, verify_sources=False)
 
 app = FastAPI(title="Scriptorium Memory Service")
 _bearer = HTTPBearer(auto_error=False)
@@ -78,10 +86,6 @@ async def _raise_thread_limit() -> None:
 _user_locks: dict[str, threading.Lock] = {}
 _user_locks_guard = threading.Lock()
 
-# BM25 indexes are expensive to rebuild (O(corpus) per refresh), so hold one per
-# workspace. MemoryBM25Index is internally RLock-guarded.
-_indexes: dict[str, MemoryBM25Index] = {}
-_indexes_guard = threading.Lock()
 
 _SAFE_ID = re.compile(r"[^A-Za-z0-9._:-]")
 
@@ -142,16 +146,6 @@ def _user_lock(user_id: str) -> threading.Lock:
         return _user_locks.setdefault(user_id, threading.Lock())
 
 
-def _index(workspace: Path) -> MemoryBM25Index:
-    key = str(workspace)
-    with _indexes_guard:
-        index = _indexes.get(key)
-        if index is None:
-            index = MemoryBM25Index(workspace, persist=True)
-            _indexes[key] = index
-        return index
-
-
 def _agent() -> OpenAIWriterAgent:
     if not WRITER_BASE_URL or not WRITER_API_KEY:
         raise HTTPException(
@@ -201,10 +195,9 @@ def _ingest(payload: AddRequest) -> None:
             }],
             config=MEMORY_CONFIG,
         )
-        # The write is committed; drop the cached index so the very next Search
-        # observes it. The contract requires Add to be retrievable on return.
-        with _indexes_guard:
-            _indexes.pop(str(workspace), None)
+        # Nothing to invalidate: retrieval rebuilds its index from the
+        # workspace on every call, so a committed write is visible to the
+        # very next Search, which the contract requires.
 
 
 @app.post("/add")
@@ -225,100 +218,112 @@ async def add(payload: AddRequest, _: None = Depends(_authorize)) -> dict[str, A
     }
 
 
-# Suffixes worth trying both ways. The lexical index matches whole tokens,
-# so a question asking "where did he move" scores nothing against a memory
-# that says "moved" — not a low score, no match at all.
-_SUFFIXES = ("ing", "ed", "es", "s")
-_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
-# Question words and function words carry no lexical signal, and inflecting
-# them produces strings like "whereing" that match nothing and lengthen the
-# query the scorer normalises against.
-_FUNCTION_WORDS = frozenset("""
-what where when which who whom whose why how did do does is are was were
-the a an to of in on at for and or but my his her its their our your i he
-she they we you it that this these those with from by as be been being have
-has had will would can could should about
-""".split())
+class _Runtime:
+    """The little the retrieval agent needs from a benchmark Runtime.
 
-
-def _inflections(word: str) -> set[str]:
-    """A word and the forms of it that mean the same thing.
-
-    Derived from the stem, not from whatever form the asker happened to
-    use: inflecting "training" again gives "traininged", which matches
-    nothing and pads the query.
+    `collect_answer` was written for the harness and reaches for the
+    model, the agent and a usage log. Here there is no run to account
+    for, so the log goes nowhere.
     """
-    lowered = word.lower()
-    if len(lowered) <= 3 or lowered in _FUNCTION_WORDS:
-        return {lowered}
 
-    stem = lowered
-    for suffix in _SUFFIXES:
-        if lowered.endswith(suffix) and len(lowered) - len(suffix) >= 3:
-            stem = lowered[: -len(suffix)]
-            break
+    def __init__(self, agent: Any, model: str, query_config: QueryConfig):
+        self.agent = agent
+        self.model = model
+        self.query_config = query_config
 
-    forms = {lowered, stem}
-    if stem.endswith("e"):
-        # "move" takes "moved" and "moving", never "moveed".
-        forms |= {stem + "s", stem + "d", stem[:-1] + "ing"}
-    else:
-        forms |= {stem + "s", stem + "es", stem + "ed", stem + "ing"}
-    return forms
+    def log_agent_result(self, result: Any, *, phase: str = "") -> None:
+        return None
 
 
-def expand_query(query: str) -> str:
-    """The query plus the inflected forms of each word in it.
-
-    Retrieval here is one shot: whatever Search returns is all the caller's
-    answerer will ever see, with no agent to notice the miss and ask again.
-    Widening the query costs a longer string and buys the matches that
-    exact-token scoring drops.
-    """
-    expanded: list[str] = []
-    for token in _WORD.findall(query):
-        for form in sorted(_inflections(token)):
-            if form not in expanded:
-                expanded.append(form)
-    if not expanded:
-        return query
-    # The original goes first so exact wording still ranks highest.
-    return f"{query} {' '.join(expanded)}"
+FIND_MEMORY = (
+    "Find everything in this memory workspace that bears on the request "
+    "below, and return it.\n\n"
+    "You are not answering. Something else will do that, and it sees only "
+    "what you return — not this workspace, not your reasoning. So return "
+    "the memory itself: the sentences as they are written, each with the "
+    "date its footnote carries and enough of its heading or subject that "
+    "it still means something on its own.\n\n"
+    "Search more than one way before deciding nothing is there; wording in "
+    "memory rarely matches the wording of a request. Where memory records "
+    "a change, return both what it was and what it became. Return nothing "
+    "at all rather than something you did not find."
+)
 
 
-def _snippet(hit: dict[str, Any]) -> str:
-    """The memory, with enough context to stand on its own.
+def _passages(text: str) -> list[str]:
+    """Split the model's report into one passage per remembered thing."""
+    blocks = [block.strip() for block in re.split(r"\n\s*\n", text or "")]
+    return [block for block in blocks if block]
 
-    A topic file is about one subject and its paragraphs rely on that:
-    "He moved to Shanghai" is unambiguous inside `topics/people/dave.md`
-    and meaningless out of it. The headings carry the subject, and the
-    caller's answerer never sees the file.
-    """
-    content = hit.get("content", "")
-    headings = [h for h in (hit.get("headings") or []) if h]
-    if not headings:
-        return content
-    return f"{' > '.join(headings)} — {content}"
+
+def _found_memory(text: str) -> list[dict[str, Any]]:
+    """What the model reports finding, as the contract's result rows."""
+    results = []
+    for position, passage in enumerate(_passages(text)):
+        results.append({
+            "id": f"m{position}",
+            "content": passage,
+            # The caller ranks nothing; order is the model's judgement.
+            "score": round(1.0 - position * 0.01, 4),
+            "created_at": _stated_date(passage),
+        })
+    return results
+
+
+_DATE_IN_TEXT = re.compile(r"\b(\d{4}(?:-\d{2}){0,2})\b")
+
+
+def _stated_date(passage: str) -> str:
+    """The date the passage carries, if it carries one."""
+    found = _DATE_IN_TEXT.search(passage)
+    return found.group(1) if found else ""
 
 
 def _retrieve(payload: SearchRequest) -> list[dict[str, Any]]:
+    """Let the model read the memory and report what bears on the query.
+
+    Reading a file, following a footnote to the message behind it,
+    searching again with different words — that is how this memory is
+    meant to be read. A keyword query over the index gets one shot at
+    guessing the wording, and the caller never gets to ask again.
+    """
     workspace = _workspace(payload.user_id)
     if not workspace.exists():
         return []
-    hits = _index(workspace).search(
-        expand_query(payload.query), top_k=payload.top_k
+    files = memory_files(workspace, "native", include_recent=True)
+    prompt, trace, evidence, initial_tokens = initialize_context(
+        memory_dir=workspace,
+        files=files,
+        condition="native",
+        item={"question": payload.query, "question_date": ""},
+        verify_sources=False,
+        model=WRITER_MODEL,
     )
-    results = []
-    for hit in hits:
-        # `date` is the event's own date when the writer recorded one.
-        created_at = hit.get("date") or ""
-        results.append({
-            "id": hit["event_id"],
-            "content": _snippet(hit),
-            "score": hit["final_score"],
-            "created_at": created_at,
-        })
-    return results
+    state = RetrievalToolState(
+        trace=trace,
+        evidence=evidence,
+        model=WRITER_MODEL,
+        visible_tokens=initial_tokens,
+    )
+    runtime = _Runtime(_agent(), WRITER_MODEL, QUERY_CONFIG)
+    result = runtime.agent.run(
+        prompt=prompt,
+        system_prompt=FIND_MEMORY,
+        cwd=workspace,
+        tools=retrieval_tools(
+            runtime,
+            memory_dir=workspace,
+            files=files,
+            condition="native",
+            include_recent=True,
+            state=state,
+            search_tools=QUERY_CONFIG.search_tools,
+        ),
+        max_turns=QUERY_CONFIG.max_turns,
+        max_budget_usd=QUERY_CONFIG.max_budget_usd,
+    )
+    reported = re.sub(r"</?answer>", "", result.text or "").strip()
+    return _found_memory(reported)[: max(1, payload.top_k)]
 
 
 @app.post("/search")

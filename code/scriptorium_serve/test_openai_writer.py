@@ -100,6 +100,26 @@ Calvin plays saxophone in a jazz quartet.[^e-aaaa111122] ^abc12345
 """
 
 
+class _ReadingModel:
+    """Reports the topic files it finds, as a real retrieval pass would."""
+
+    def run(self, *, prompt, system_prompt, cwd, tools=None, **kwargs):
+        from memory.agent_runtime import AgentResult
+        from pathlib import Path as _Path
+
+        passages = [
+            path.read_text(encoding="utf-8").strip()
+            for path in sorted(_Path(cwd).glob("topics/*.md"))
+        ]
+        return AgentResult(
+            text="\n\n".join(passages), structured_output=None, num_turns=1,
+            input_tokens=1, output_tokens=1, cache_creation_input_tokens=0,
+            cache_read_input_tokens=0, anthropic_equivalent_cost_usd=0.0,
+            duration_ms=1, duration_api_ms=1, stop_reason="end_turn",
+            session_id="s",
+        )
+
+
 def test_add_writes_memory_and_search_returns_it(monkeypatch) -> None:
     command = f"cat > topics/music.md <<'SCRIPTORIUM_EOF'\n{TOPIC}SCRIPTORIUM_EOF"
     agent, client = _agent_with(command)
@@ -128,6 +148,12 @@ def test_add_writes_memory_and_search_returns_it(monkeypatch) -> None:
 
         # The shell tool was actually offered to the model and driven by it.
         assert client.completions.seen_tools == ["shell"]
+
+        # Retrieval runs a model too, and it is a different job: read the
+        # workspace and report the memory that bears on the query. Standing
+        # in for that keeps this a round trip — the file the writer really
+        # wrote is the file retrieval really reads.
+        monkeypatch.setattr(server, "_agent", lambda: _ReadingModel())
 
         found = client_http.post("/search", json={
             "query": "saxophone quartet", "user_id": USER, "top_k": 100,
