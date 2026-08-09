@@ -1,0 +1,11 @@
+{
+  "name": "scriptorium",
+  "displayName": "Scriptorium",
+  "version": "0.1.0",
+  "description": "Guidance for reading and updating a Markdown memory workspace over the scriptorium MCP server.",
+  "author": {
+    "name": "Scriptorium"
+  },
+  "license": "MIT",
+  "keywords": ["memory", "markdown", "mcp"]
+}

@@ -1,0 +1,872 @@
+import asyncio
+import json
+import os
+import re
+from pathlib import Path
+
+import pytest
+
+from src.agent_runtime import AgentResult
+from src.management import (
+    MemoryWorkspace,
+    _run_agent,
+    organize_topics,
+    verify_session,
+)
+from src import management as memory
+from src.markdown import parse_topic_tree
+from src.workspace_layout import RUNTIME_DIR_NAMES
+
+
+class ScriptedAgent:
+    def __init__(self, tool_calls=(), *, text="done", structured_output=None):
+        self.tool_calls = list(tool_calls)
+        self.text = text
+        self.structured_output = structured_output
+        self.calls = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        tools = {definition.name: definition for definition in kwargs["tools"]}
+        for name, arguments in self.tool_calls:
+            asyncio.run(tools[name].handler(arguments))
+        return AgentResult(
+            text=self.text,
+            structured_output=self.structured_output,
+            num_turns=max(1, len(self.tool_calls) + 1),
+            input_tokens=10,
+            output_tokens=5,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+            anthropic_equivalent_cost_usd=0.001,
+            duration_ms=20,
+            duration_api_ms=15,
+            stop_reason="end_turn",
+            session_id="test-session",
+        )
+
+
+class QueuedAgent:
+    def __init__(self, responses):
+        self.responses = iter(responses)
+        self.calls = []
+
+    def run(self, **kwargs):
+        self.calls.append(kwargs)
+        response = next(self.responses)
+        tools = {definition.name: definition for definition in kwargs["tools"]}
+        tool_calls = response.get("tool_calls", [])
+        for name, arguments in tool_calls:
+            asyncio.run(tools[name].handler(arguments))
+        return AgentResult(
+            text=response.get("text", ""),
+            structured_output=response.get("structured_output"),
+            num_turns=max(1, len(tool_calls) + 1),
+            input_tokens=10,
+            output_tokens=5,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+            anthropic_equivalent_cost_usd=0.001,
+            duration_ms=20,
+            duration_api_ms=15,
+            stop_reason="end_turn",
+            session_id="test-session",
+        )
+
+
+def test_memory_workspace_runs_normal_shell_commands_from_memory_dir(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "three tanks")],
+        "refs": ["D1:1"],
+    }])
+
+    result = workspace.shell(
+        "mkdir -p topics/aquarium && "
+        "printf '%s\\n' '# Tanks' '###### Acquisition history' '' "
+        "'On 2026-01-01, there were three tanks."
+        "[^new-evidence-tanks] ^new-block-tanks' '' "
+        "'[^new-evidence-tanks]: Time: `2026-01-01`; Sources: D1:1' "
+        "> topics/aquarium/tanks.md && "
+        "find topics -type f -print"
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "topics/aquarium/tanks.md"
+    assert "###### Acquisition history" in (
+        workspace.stage_dir / "topics/aquarium/tanks.md"
+    ).read_text()
+    assert (tmp_path / "topics/aquarium/tanks.md").exists()
+
+
+def test_writer_delegates_tool_protocol_and_errors_to_agent(tmp_path: Path):
+    invalid = (
+        "mkdir -p topics && printf '%s\\n' '# Pets' '' "
+        "'The user bought a tank.[^new-evidence-tank] ^new-block-tank' '' "
+        "'[^new-evidence-tank]: Time: `2023-05-23`; Sources: Session 1' "
+        "> topics/pets.md"
+    )
+    valid = invalid.replace("Session 1", "D1:1")
+    agent = ScriptedAgent([
+        ("shell", {"command": invalid}),
+        ("shell", {"command": valid}),
+    ])
+
+    audit = memory.write_sessions(
+        tmp_path,
+        agent=agent,
+        sessions=[{
+            "observation_date": "2023-05-23",
+            "turns": [("user", "I bought a tank")],
+            "refs": ["D1:1"],
+        }],
+    )
+
+    assert len(agent.calls) == 1
+    assert [definition.name for definition in agent.calls[0]["tools"]] == [
+        "shell"
+    ]
+    assert [record["status"] for record in audit[:-1]] == ["error", "ok"]
+    assert audit[-1]["tool"] == "agent"
+    assert audit[-1]["status"] == "ok"
+    assert audit[-1]["rounds"] == 3
+    assert (tmp_path / "topics/pets.md").is_file()
+
+
+def test_shell_keeps_time_metadata_out_of_natural_topic_prose(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-08",
+        "turns": [("user", "I painted that lake sunrise last year.")],
+        "refs": ["D1:1"],
+    }])
+
+    result = workspace.shell(
+        "mkdir -p topics/people && "
+        "printf '%s\\n' '# Melanie' '' "
+        "'Melanie painted a lake sunrise last year.  "
+        "[^new-evidence-painting]^new-block-painting' '' "
+        "'[^new-evidence-painting]: Time: `2022`; Sources: D1:1' "
+        "> topics/people/melanie.md"
+    )
+
+    assert result.returncode == 0
+    topic = (tmp_path / "topics/people/melanie.md").read_text()
+    assert re.search(
+        r"Melanie painted a lake sunrise last year\.\[\^e-[0-9a-f]{10}\] "
+        r"\^[0-9a-f]{8}$",
+        topic,
+        re.MULTILINE,
+    )
+    unit = parse_topic_tree(tmp_path / "topics")[0]
+    assert unit.content == "Melanie painted a lake sunrise last year."
+    assert unit.evidence[0].when == "2022"
+
+
+def test_shell_normalizes_an_unquoted_evidence_time(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "Remember this fact.")],
+        "refs": ["D1:1"],
+    }])
+
+    workspace.shell(
+        "mkdir -p topics/calibration && "
+        "printf '%s\\n' '# Calibration' '' "
+        "'Remember this fact.[^new-evidence-fact] ^new-block-fact' '' "
+        "'[^new-evidence-fact]: Time: 2026-01-01; Sources: D1:1' "
+        "> topics/calibration/facts.md"
+    )
+
+    topic = (tmp_path / "topics/calibration/facts.md").read_text()
+    assert "Time: `2026-01-01`; Sources:" in topic
+    assert parse_topic_tree(tmp_path / "topics")[0].evidence[0].when == "2026-01-01"
+
+
+def test_shell_replaces_model_invented_block_id(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-03",
+        "turns": [("user", "I work at a local garage.")],
+        "refs": ["D1:1"],
+    }])
+
+    workspace.shell(
+        "mkdir -p topics/people && "
+        "printf '%s\\n' '# Dave' '' "
+        "'Dave works at a local garage.[^new-evidence-work] "
+        "^1478d194b29awork' '' "
+        "'[^new-evidence-work]: Time: `2023-05-03`; Sources: D1:1' "
+        "> topics/people/dave.md"
+    )
+
+    topic = (tmp_path / "topics/people/dave.md").read_text()
+    assert "1478d194b29awork" not in topic
+    assert re.search(r"\^[0-9a-f]{8}$", topic, re.MULTILINE)
+
+
+def test_shell_rejects_topic_file_link_without_block_target(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "Caroline and Melanie are friends.")],
+        "refs": ["D1:1"],
+    }])
+
+    with pytest.raises(
+        ValueError,
+        match=r"Topic-to-Topic link must target #\^block-id",
+    ):
+        workspace.shell(
+            "mkdir -p topics/people && "
+            "printf '%s\\n' '# Caroline' '' "
+            "'On 2026-01-01 Caroline was friends with [Melanie](melanie.md)."
+            "[^new-evidence-friend] ^new-block-caroline' '' "
+            "'[^new-evidence-friend]: Time: `2026-01-01`; Sources: D1:1' "
+            "> topics/people/caroline.md && "
+            "printf '%s\\n' '# Melanie' '' "
+            "'On 2026-01-01 Melanie was friends with Caroline."
+            "[^new-evidence-friend] ^new-block-melanie' '' "
+            "'[^new-evidence-friend]: Time: `2026-01-01`; Sources: D1:1' "
+            "> topics/people/melanie.md"
+        )
+
+    assert not (tmp_path / "topics/people/caroline.md").exists()
+
+
+def test_shell_resolves_temporary_cross_topic_block_link(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [
+            ("user", "Caroline and Melanie are friends."),
+            ("user", "Melanie and Caroline are friends."),
+        ],
+        "refs": ["D1:1", "D1:2"],
+    }])
+
+    workspace.shell(
+        "mkdir -p topics/people && "
+        "printf '%s\\n' '# Caroline' '' "
+        "'On 2026-01-01 Caroline was friends with Melanie.[^e1]' '' "
+        "'[^e1]: Time: `2026-01-01`; Sources: D1:1' "
+        "> topics/people/caroline.md && "
+        "printf '%s\\n' '# Melanie' '' "
+        "'On 2026-01-01 Melanie was friends with Caroline.[^e2]' '' "
+        "'[^e2]: Time: `2026-01-01`; Sources: D1:2' "
+        "> topics/people/melanie.md"
+    )
+
+    units = {unit.topic_path: unit for unit in parse_topic_tree(tmp_path / "topics")}
+    target = units["people/melanie.md"]
+    workspace.shell(
+        "python3 - <<'PY'\n"
+        "from pathlib import Path\n"
+        "p = Path('topics/people/caroline.md'); t = p.read_text()\n"
+        "t = t.replace('friends with Melanie.',"
+        f" 'friends with [Melanie](melanie.md#^{target.memory_id}).')\n"
+        "p.write_text(t)\n"
+        "PY"
+    )
+
+    units = {unit.topic_path: unit for unit in parse_topic_tree(tmp_path / "topics")}
+    source = units["people/caroline.md"]
+    assert f"melanie.md#^{target.memory_id}" in source.content
+    relations = json.loads((tmp_path / "relations.json").read_text())
+    assert relations["outbound"][source.memory_id] == [target.memory_id]
+    assert relations["backlinks"][target.memory_id] == [source.memory_id]
+
+
+def test_save_memory_normalizes_topic_root_prefix(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-20",
+        "turns": [("user", "I started yoga.")],
+        "refs": ["D1:1"],
+    }])
+    workspace.save_memory([{
+        "when": "2023-05-20",
+        "content": "The user started yoga.",
+        "refs": ["D1:1"],
+        "topic_path": "topics/health/yoga.md",
+        "headings": ["Health", "Yoga"],
+    }])
+
+    assert (workspace.stage_dir / "topics/health/yoga.md").exists()
+    assert not (workspace.stage_dir / "topics/topics").exists()
+
+
+def test_save_memory_retries_colliding_eight_digit_block_ids(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "collision source")],
+        "refs": ["D1:1"],
+    }])
+    events = [
+        {
+            "when": "2026-01-01",
+            "content": f"Collision fact {index}.",
+            "refs": ["D1:1"],
+            "topic_path": "facts.md",
+            "headings": ["Facts"],
+        }
+        for index in (99938, 168633)
+    ]
+
+    workspace.save_memory(events)
+    units = parse_topic_tree(tmp_path / "topics")
+
+    assert len(units) == 2
+    assert all(re.fullmatch(r"[0-9a-f]{8}", unit.memory_id) for unit in units)
+    assert len({unit.memory_id for unit in units}) == 2
+
+    workspace.save_memory(events)
+    assert len(parse_topic_tree(tmp_path / "topics")) == 2
+
+
+def test_append_event_reuses_existing_heading_prefix(tmp_path: Path):
+    path = tmp_path / "topics/projects/budget-tracker.md"
+    base = {
+        "when": "2024-03-15",
+        "refs": ["D1:1"],
+        "topic_path": "projects/budget-tracker.md",
+    }
+    MemoryWorkspace._append_event(path, {
+        **base,
+        "event_id": "ev_1111111111111111",
+        "content": "Initial architecture.",
+        "headings": ["Architecture", "Initial architecture"],
+    })
+    MemoryWorkspace._append_event(path, {
+        **base,
+        "event_id": "ev_2222222222222222",
+        "content": "Application modules.",
+        "headings": ["architecture", "Application modules"],
+    })
+
+    text = path.read_text()
+    assert len(re.findall(r"(?mi)^#\s+architecture\s*$", text)) == 1
+    assert text.count("## Initial architecture\n") == 1
+    assert text.count("## Application modules\n") == 1
+
+
+def test_manager_exposes_only_shell_and_uses_twenty_turn_limit(tmp_path):
+    (tmp_path / "topics").mkdir()
+    (tmp_path / "topics" / "a.md").write_text("# A\n", encoding="utf-8")
+    agent = ScriptedAgent()
+
+    audit = organize_topics(tmp_path, agent=agent)
+
+    assert [definition.name for definition in agent.calls[0]["tools"]] == [
+        "shell"
+    ]
+    assert agent.calls[0]["max_turns"] == 20
+    assert audit[-1]["status"] == "ok"
+
+
+def test_local_organizer_receives_only_touched_topic_scope(tmp_path):
+    agent = ScriptedAgent()
+
+    organize_topics(
+        tmp_path,
+        agent=agent,
+        touched={"topics/projects/a.md", "topics/projects/b.md"},
+    )
+
+    task = agent.calls[0]["prompt"]
+    # Scoped to the touched files, and structural: the pass moves things
+    # around rather than reproducing prose and footnotes it did not change.
+    assert "Topic files" in task
+    assert "Never rewrite a whole file" in task
+    assert "topics/projects/a.md" in task
+    assert "topics/projects/b.md" in task
+
+
+def test_writer_may_read_but_must_not_modify_archived_sources():
+    from src.prompts import SYSTEM_PROMPT, WRITE_MEMORY
+
+    # Reading the evidence is allowed; writing to it is not, and the task
+    # says where the fact goes instead.
+    assert "read-only" in WRITE_MEMORY
+    assert "sources/" in WRITE_MEMORY
+    assert "topics/" in WRITE_MEMORY
+    assert "[^e1]" in SYSTEM_PROMPT
+    assert (
+        "[^e1]: Time: `<time>`; Sources: provider/thread_id/message_id"
+        in SYSTEM_PROMPT
+    )
+    assert "Never write a block ID yourself." in SYSTEM_PROMPT
+
+
+def test_workspace_structure_lists_all_shell_visible_memory_views(tmp_path):
+    for relative in ("topics/home.md", "timeline/2026.md", "sources/D1.md"):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x", encoding="utf-8")
+    (tmp_path / "recent_events.jsonl").write_text("{}\n", encoding="utf-8")
+
+    structure = MemoryWorkspace(tmp_path).structure()
+
+    assert structure.splitlines() == [
+        "recent_events.jsonl",
+        "sources/D1.md",
+        "timeline/2026.md",
+        "topics/home.md",
+    ]
+
+
+def test_shell_can_read_all_memory_views(tmp_path):
+    for relative in ("topics/home.md", "timeline/2026.md", "sources/D1.md"):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "# Home\n" if relative == "topics/home.md" else relative,
+            encoding="utf-8",
+        )
+    (tmp_path / "recent_events.jsonl").write_text("recent", encoding="utf-8")
+    workspace = MemoryWorkspace(tmp_path)
+
+    result = workspace.shell(
+        "cat topics/home.md timeline/2026.md sources/D1.md recent_events.jsonl"
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "# Home\ntimeline/2026.mdsources/D1.mdrecent"
+
+
+def test_agent_needs_no_final_persistence_action_when_model_finishes(tmp_path):
+    audit = _run_agent(
+        tmp_path,
+        agent=ScriptedAgent(),
+        task="organize",
+    )
+
+    assert len(audit) == 1
+    assert audit[0]["tool"] == "agent"
+    assert audit[0]["status"] == "ok"
+
+
+def test_save_memory_commits_linked_views(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-23",
+        "turns": [("user", "I bought a quarantine tank.")],
+        "refs": ["D18:11"],
+    }])
+
+    saved = workspace.save_memory([
+        {
+            "when": "2023-05-23",
+            "content": "User bought a quarantine tank.",
+            "refs": ["D18:11"],
+            "topic_path": "pets/aquarium.md",
+            "headings": ["Pets", "Aquarium"],
+        }
+    ])
+    workspace._synchronize()
+
+    topic = (tmp_path / "topics" / "pets" / "aquarium.md").read_text()
+    timeline = (tmp_path / "timeline" / "2023" / "05" / "23.md").read_text()
+    recent = json.loads((tmp_path / "recent_events.jsonl").read_text())
+    source = (tmp_path / "sources" / "D18.md").read_text()
+
+    assert saved == "saved 1 event"
+    assert "<!-- memory-event:" not in topic
+    memory_id = recent["memory_id"]
+    assert f"^{memory_id}" in topic
+    assert f"#^{memory_id}" in timeline
+    assert "topics/pets/aquarium.md" in timeline
+    assert "sources/D18.md#d18-11" in topic
+    assert '<a id="d18-11"></a>' in source
+    assert recent["topic_path"] == "topics/pets/aquarium.md"
+    assert recent["headings"] == ["Pets", "Aquarium"]
+
+
+def test_save_memory_synchronizes_all_views_immediately(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-23",
+        "turns": [("user", "I bought a quarantine tank.")],
+        "refs": ["D18:11"],
+    }])
+
+    workspace.save_memory([{
+        "when": "2023-05-23",
+        "content": "User bought a quarantine tank.",
+        "refs": ["D18:11"],
+        "topic_path": "pets/aquarium.md",
+        "headings": ["Pets", "Aquarium"],
+    }])
+
+    assert (tmp_path / "topics/pets/aquarium.md").exists()
+    assert (tmp_path / "timeline/2023/05/23.md").exists()
+    assert (tmp_path / "recent_events.jsonl").exists()
+
+
+def test_recent_memory_keeps_only_the_latest_fifty_events_by_default(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    turns = [("user", f"event {index}") for index in range(1, 52)]
+    refs = [f"D1:{index}" for index in range(1, 52)]
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-23",
+        "turns": turns,
+        "refs": refs,
+    }])
+
+    workspace.save_memory([{
+        "when": "2023-05-23",
+        "content": f"Event {index}.",
+        "refs": [f"D1:{index}"],
+        "topic_path": "events.md",
+        "headings": ["Events"],
+    } for index in range(1, 52)])
+
+    recent = [
+        json.loads(line)
+        for line in (tmp_path / "recent_events.jsonl").read_text().splitlines()
+    ]
+    assert len(recent) == 50
+    assert recent[0]["content"] == "Event 2."
+    assert recent[-1]["content"] == "Event 51."
+
+
+def test_shell_core_memory_changes_persist(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+
+    result = workspace.shell("printf '%s\\n' '# Core Memory' 'Stable preference' > core.md")
+
+    assert result.returncode == 0
+    assert (tmp_path / "core.md").read_text() == (
+        "# Core Memory\nStable preference\n"
+    )
+
+
+def test_shell_normalizes_and_validates_core_source_references(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-08-03",
+        "turns": [("user", "My stable preference is jasmine tea.")],
+        "refs": ["diagnostic/thread-1/msg-1"],
+    }])
+
+    workspace.shell(
+        "cat > core.md <<'EOF'\n"
+        "# Core Memory\n\n"
+        "My stable preference is jasmine tea.[^new-evidence-tea] "
+        "^new-block-tea\n\n"
+        "[^new-evidence-tea]: Time: `2026-08-03`; Sources: "
+        "diagnostic/thread-1/msg-1\n"
+        "EOF"
+    )
+
+    text = (tmp_path / "core.md").read_text(encoding="utf-8")
+    assert "new-evidence" not in text
+    assert "new-block" not in text
+    assert re.search(r"\^[0-9a-f]{8}$", text, re.MULTILINE)
+    assert (
+        "[diagnostic/thread-1/msg-1]"
+    ) in text
+
+
+def test_shell_rejects_missing_core_source_reference(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+
+    with pytest.raises(ValueError, match="missing source reference"):
+        workspace.shell(
+            "cat > core.md <<'EOF'\n"
+            "# Core Memory\n\n"
+            "Unsupported claim.[^new-evidence-claim] ^new-block-claim\n\n"
+            "[^new-evidence-claim]: Time: `undated`; Sources: "
+            "diagnostic/missing/msg-1\n"
+            "EOF"
+        )
+
+    assert not (tmp_path / "core.md").exists()
+
+
+def test_core_memory_rejects_content_over_token_limit(tmp_path: Path):
+    workspace = MemoryWorkspace(
+        tmp_path, config=memory.MemoryConfig(core_max_tokens=1)
+    )
+
+    with pytest.raises(ValueError, match="Core Memory exceeds"):
+        workspace.shell("printf '%s\\n' 'alpha beta' > core.md")
+
+    assert not (tmp_path / "core.md").exists()
+
+
+def test_core_memory_restores_previous_content_when_commit_fails(
+    tmp_path: Path, monkeypatch
+):
+    (tmp_path / "core.md").write_text("old core\n", encoding="utf-8")
+    workspace = MemoryWorkspace(tmp_path)
+    original_replace = os.replace
+
+    def fail_core_install(source, destination):
+        if (
+            Path(source) == workspace.stage_dir / "core.md"
+            and Path(destination) == tmp_path / "core.md"
+        ):
+            raise OSError("injected core install failure")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(
+        "src.management.block_views.os.replace",
+        fail_core_install,
+    )
+
+    with pytest.raises(OSError, match="injected core install failure"):
+        workspace.shell("printf '%s\\n' 'new core' > core.md")
+
+    assert (tmp_path / "core.md").read_text() == "old core\n"
+
+
+def test_recent_memory_rejects_negative_capacity():
+    with pytest.raises(ValueError, match="recent_limit must be non-negative"):
+        memory.MemoryConfig(recent_limit=-1)
+
+
+def test_save_memory_rejects_non_source_refs(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+
+    with pytest.raises(ValueError, match="complete source references"):
+        workspace.save_memory([{
+            "when": "2023-05-23",
+            "content": "User bought a tank.",
+            "refs": ["Session 1", "D18:1-D18:2"],
+            "topic_path": "pets.md",
+            "headings": ["Pets"],
+        }])
+
+
+def test_save_memory_expands_compact_source_ranges(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-23",
+        "turns": [("user", "one"), ("assistant", "two")],
+        "refs": ["D18:1", "D18:2"],
+    }])
+
+    workspace.save_memory([{
+        "when": "2023-05-23",
+        "content": "A two-turn event.",
+        "refs": ["D18:1-D18:2"],
+        "topic_path": "event.md",
+        "headings": ["Event"],
+    }])
+    workspace._synchronize()
+
+    recent = json.loads((tmp_path / "recent_events.jsonl").read_text())
+    assert recent["refs"] == ["D18:1", "D18:2"]
+
+
+def test_commit_repairs_links_after_shell_reorganizes_topics(tmp_path: Path):
+    first = MemoryWorkspace(tmp_path)
+    first.archive_sessions([{
+        "observation_date": "2023-05-23",
+        "turns": [("user", "I bought a quarantine tank.")],
+        "refs": ["D18:11"],
+    }])
+    first.save_memory([{
+        "when": "2023-05-23",
+        "content": "User bought a quarantine tank.",
+        "refs": ["D18:11"],
+        "topic_path": "pets/aquarium.md",
+        "headings": ["Pets", "Aquarium"],
+    }])
+    first._synchronize()
+
+    organizer = MemoryWorkspace(tmp_path)
+    result = organizer.shell(
+        "mkdir -p topics/life && mv topics/pets/aquarium.md topics/life/pets.md"
+    )
+    assert result.returncode == 0
+    organizer._synchronize()
+
+    timeline = (tmp_path / "timeline/2023/05/23.md").read_text()
+    recent = json.loads((tmp_path / "recent_events.jsonl").read_text())
+    topic = (tmp_path / "topics/life/pets.md").read_text()
+    assert "topics/life/pets.md" in timeline
+    assert "topics/pets/aquarium.md" not in timeline
+    assert recent["topic_path"] == "topics/life/pets.md"
+    assert "sources/D18.md#d18-11" in topic
+
+
+def test_shell_move_rewrites_cross_topic_block_link_and_installs_relations(
+    tmp_path: Path,
+):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "source"), ("user", "target")],
+        "refs": ["D1:1", "D1:2"],
+    }])
+    workspace.save_memory([
+        {"when": "2026-01-01", "content": "On 2026-01-01, Source fact.", "refs": ["D1:1"],
+         "topic_path": "a.md", "headings": ["A"]},
+        {"when": "2026-01-02", "content": "On 2026-01-02, Target fact.", "refs": ["D1:2"],
+         "topic_path": "b.md", "headings": ["B"]},
+    ])
+    units = parse_topic_tree(tmp_path / "topics")
+    source_id, target_id = [unit.memory_id for unit in units]
+    workspace.shell(
+        "sed -i '' 's/Source fact\\./Source fact linked to "
+        f"[target](b.md#^{target_id})./' topics/a.md"
+    )
+
+    workspace.shell("mkdir -p topics/moved && mv topics/b.md topics/moved/b.md")
+
+    assert f"[target](moved/b.md#^{target_id})" in (
+        tmp_path / "topics/a.md"
+    ).read_text()
+    relations = json.loads((tmp_path / "relations.json").read_text())
+    assert relations["outbound"][source_id] == [target_id]
+    assert relations["backlinks"][target_id] == [source_id]
+
+
+def test_deleting_a_topic_block_is_rejected(tmp_path: Path):
+    """A block ID is how every view reaches a memory, so it cannot vanish."""
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "fact")],
+        "refs": ["D1:1"],
+    }])
+    workspace.save_memory([{
+        "when": "2026-01-01", "content": "Fact.", "refs": ["D1:1"],
+        "topic_path": "a.md", "headings": ["A"],
+    }])
+
+    with pytest.raises(ValueError, match="block ID must not be removed"):
+        workspace.shell("rm topics/a.md")
+
+    assert (tmp_path / "topics/a.md").is_file()
+    assert json.loads((tmp_path / "relations.json").read_text())["outbound"]
+
+
+def test_recent_fifo_keeps_full_creation_order_outside_the_window(
+    tmp_path: Path,
+):
+    workspace = MemoryWorkspace(
+        tmp_path, config=memory.MemoryConfig(recent_limit=2)
+    )
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "one"), ("user", "two"), ("user", "three")],
+        "refs": ["D1:1", "D1:2", "D1:3"],
+    }])
+    workspace.save_memory([
+        {"when": f"2026-01-0{index}",
+         "content": f"On 2026-01-0{index}, Fact {index}.",
+         "refs": [f"D1:{index}"], "topic_path": "facts.md", "headings": ["Facts"]}
+        for index in range(1, 4)
+    ])
+    ids = [unit.memory_id for unit in parse_topic_tree(tmp_path / "topics")]
+
+    workspace.shell("sed -i '' 's/Fact 1/Updated fact 1/' topics/facts.md")
+
+    recent = [
+        json.loads(line)
+        for line in (tmp_path / "recent_events.jsonl").read_text().splitlines()
+    ]
+    assert [row["memory_id"] for row in recent] == ids[1:]
+
+
+def test_block_transaction_restores_every_installed_view_on_install_failure(
+    tmp_path: Path, monkeypatch
+):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2026-01-01",
+        "turns": [("user", "old fact")],
+        "refs": ["D1:1"],
+    }])
+    workspace.save_memory([{
+        "when": "2026-01-01", "content": "On 2026-01-01, Old fact.",
+        "refs": ["D1:1"],
+        "topic_path": "a.md", "headings": ["A"],
+    }])
+    tracked = [
+        "topics/a.md", "timeline/2026/01/01.md", "recent_events.jsonl",
+        "relations.json", ".scriptorium/runtime.json",
+    ]
+    before = {name: (tmp_path / name).read_bytes() for name in tracked}
+    original_replace = os.replace
+
+    def fail_relations_install(source, destination):
+        if (
+            Path(source).name == "relations.json"
+            and workspace.stage_dir in Path(source).parents
+            and Path(destination) == tmp_path / "relations.json"
+        ):
+            raise OSError("injected relations install failure")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(
+        "src.management.block_views.os.replace",
+        fail_relations_install,
+    )
+
+    with pytest.raises(OSError, match="injected relations install failure"):
+        workspace.shell("sed -i '' 's/Old fact/Updated fact/' topics/a.md")
+
+    assert {name: (tmp_path / name).read_bytes() for name in tracked} == before
+
+
+def test_shell_move_synchronizes_paths_and_links_immediately(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-23",
+        "turns": [("user", "I bought a quarantine tank.")],
+        "refs": ["D18:11"],
+    }])
+    workspace.save_memory([{
+        "when": "2023-05-23",
+        "content": "User bought a quarantine tank.",
+        "refs": ["D18:11"],
+        "topic_path": "pets/aquarium.md",
+        "headings": ["Pets", "Aquarium"],
+    }])
+
+    result = workspace.shell(
+        "mkdir -p topics/life && mv topics/pets/aquarium.md topics/life/pets.md"
+    )
+
+    assert result.returncode == 0
+    assert (tmp_path / "topics/life/pets.md").exists()
+    recent = json.loads((tmp_path / "recent_events.jsonl").read_text())
+    assert recent["topic_path"] == "topics/life/pets.md"
+
+
+def test_shell_revision_synchronizes_event_content_to_all_views(tmp_path: Path):
+    workspace = MemoryWorkspace(tmp_path)
+    workspace.archive_sessions([{
+        "observation_date": "2023-05-23",
+        "turns": [("user", "I wake up at 6:30 AM.")],
+        "refs": ["D1:1"],
+    }])
+    workspace.save_memory([{
+        "when": "2023-05-23",
+        "content": "On 2023-05-23, the user wakes up at 7:00 AM.",
+        "refs": ["D1:1"],
+        "topic_path": "routines/daily.md",
+        "headings": ["Daily routine", "Morning"],
+    }])
+
+    result = workspace.shell(
+        "sed -i '' 's/wakes up at 7:00 AM/wakes up at 6:30 AM/' "
+        "topics/routines/daily.md"
+    )
+
+    assert result.returncode == 0
+    topic = (tmp_path / "topics/routines/daily.md").read_text()
+    timeline = (tmp_path / "timeline/2023/05/23.md").read_text()
+    recent = json.loads((tmp_path / "recent_events.jsonl").read_text())
+    assert "wakes up at 6:30 AM" in topic
+    assert "wakes up at 6:30 AM" in timeline
+    assert recent["content"] == (
+        "On 2023-05-23, the user wakes up at 6:30 AM."
+    )

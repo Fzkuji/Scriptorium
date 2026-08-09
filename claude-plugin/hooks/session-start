@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# SessionStart hook: inject the memory protocol into the session.
+#
+# The protocol is what makes memory happen at all. Without it the model
+# treats the memory_* tools as available rather than expected, and a
+# workspace nobody reads or writes is an empty directory with a schema.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+protocol_file="${SCRIPT_DIR}/memory-protocol.md"
+
+# A missing protocol must not break the user's session. Exit quietly and
+# leave them with a working Claude that simply has no memory guidance.
+[ -r "$protocol_file" ] || exit 0
+protocol=$(cat "$protocol_file")
+
+# Escape for JSON with parameter substitution: one C-level pass each,
+# rather than a per-character loop over a multi-kilobyte document.
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+context="<EXTREMELY_IMPORTANT>\nYou have a persistent memory workspace.\n\n$(escape_for_json "$protocol")\n</EXTREMELY_IMPORTANT>"
+
+# Each host reads a different field, and Claude Code reads both
+# additional_context and hookSpecificOutput without deduplicating, so emit
+# exactly the one the current host consumes.
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+    printf '{\n  "additional_context": "%s"\n}\n' "$context"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
+    printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$context"
+else
+    printf '{\n  "additionalContext": "%s"\n}\n' "$context"
+fi
+
+exit 0
