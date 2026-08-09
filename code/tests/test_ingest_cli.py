@@ -1,6 +1,7 @@
 """`scriptorium ingest` writes a transcript into memory, once it is worth it."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -44,11 +45,15 @@ def agent(monkeypatch):
 
 
 def transcript(path: Path, turns: int = 1, words: int = 3) -> Path:
+    # Stamped now, not at a fixed date: writing also fires when the last
+    # turn is over an hour old, so a hardcoded timestamp makes every
+    # "below the threshold" assertion pass only on the day it was written.
+    stamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     rows = [{
         "type": "user",
         "uuid": f"u{index}",
         "sessionId": "s1",
-        "timestamp": "2026-08-09T10:00:00Z",
+        "timestamp": stamp,
         "origin": {"kind": "human"},
         "message": {"content": " ".join(["shanghai"] * words)},
     } for index in range(turns)]
