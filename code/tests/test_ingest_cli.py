@@ -202,3 +202,28 @@ def test_a_long_backlog_is_written_in_bounded_batches(tmp_path: Path, agent):
     # Each call carried a slice, and the slices differ: the cursor moved.
     assert first != second
     assert first.count("shanghai") < 40 * 40
+
+
+def test_enough_accumulated_writing_triggers_reorganisation(
+    tmp_path: Path, agent, monkeypatch
+):
+    """Reorganising is the reason this runs in the background at all.
+
+    Left alone, topic files only grow: one 34 KB file with the timeline cut
+    up by subject is what a memory looks like when nobody tidies it.
+    """
+    fired = []
+    monkeypatch.setattr(
+        "src.management.organize_topics",
+        lambda memory_dir, **kwargs: fired.append(memory_dir) or [],
+    )
+    source = transcript(tmp_path / "s.jsonl", turns=200, words=300)
+    argv = [
+        "ingest", "--transcript", str(source),
+        "--workspace", str(tmp_path / "memory"),
+    ]
+
+    for _ in range(12):
+        main(argv)
+
+    assert fired, "accumulated writes never triggered a reorganisation"
