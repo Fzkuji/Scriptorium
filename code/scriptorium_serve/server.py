@@ -64,21 +64,26 @@ WRITER_API_KEY = os.environ.get("SCRIPTORIUM_WRITER_API_KEY", "")
 # Capping the ceiling costs those nothing they were going to produce, and
 # takes the tail off a stage the platform times out on.
 #
-# The turn ceiling alone does not bound the clock, and the clock is what the
-# platform enforces. Measured over 620 production Adds: the platform hangs up
-# at about a hundred seconds, and the 46 writes that reached six turns had a
-# median of 80s — which is where all 53 hang-ups came from, and a hang-up is
-# reported back as ADD_API_CONTRACT_MISMATCH, which ends the whole run.
+# The turn ceiling bounds round trips and not the clock, and a write with no
+# clock on it holds a request open for as long as the endpoint will talk: the
+# client's own timeout was three minutes with four retries behind it, and one
+# measured turn ran 200s.
 #
-# So the pass carries a wall-clock budget instead. ADD_SECONDS covers the
-# whole request, the wait for the workspace lock included, and bounds the
-# endpoint call as well as the turn count: a turn that cannot finish inside
-# what is left ends the pass, and everything earlier turns wrote stays
-# committed. Seventy-five leaves a quarter of the platform's patience for the
-# proxy hop and staging, and is above the 39s a four-turn write measured, so
-# it takes the tail off without shortening an ordinary write.
+# So the pass carries a wall-clock budget. ADD_SECONDS covers the whole
+# request, the wait for the workspace lock included, and bounds the endpoint
+# call as well as the turn count: a turn that cannot finish inside what is
+# left ends the pass, and everything earlier turns wrote stays committed.
+#
+# Three minutes, where this first carried seventy-five seconds. That number
+# was chosen to clear a hundred-second ceiling read as the platform's, and
+# measurement put it elsewhere: one 130s request answers 524 after 125s
+# through a Cloudflare quick tunnel and 200 after 130s through plain SSH
+# forwarding, and this service reached straight through the VPS had served
+# Adds of 545s without one being dropped. The tunnel is out of the path now,
+# so the budget only has to stop a write from hanging, and an ordinary write —
+# 39s for a four-turn pass — never reaches it.
 MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True, max_turns=6)
-ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "75"))
+ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "180"))
 
 # Retrieval is one shot here, so the agent is given room to look more than
 # once; the caller's own timeout is the real ceiling. Source verification is
