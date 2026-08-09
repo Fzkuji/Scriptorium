@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1000" viewBox="0 0 2400 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Scriptorium file-native multi-view memory architecture</title>
+  <desc id="desc">Runtime archives append-only Source memory; LLM agents write and manage Topic and Core memory. Runtime derives Timeline, Recent, relations, and rebuildable indexes. At query time, the agent selects file access, grep, BM25, or optional embedding retrieval before producing an evidence-grounded answer.</desc>
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .region { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; }
+      .region-dash { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 9 8; }
+      .card { fill: #ffffff; stroke-width: 2.5; }
+      .control { stroke: #4263eb; }
+      .memory { stroke: #2f9e44; }
+      .source { stroke: #e8590c; }
+      .decision { stroke: #7048e8; }
+      .tool { stroke: #64748b; }
+      .blue-fill { fill: #eef2ff; }
+      .green-fill { fill: #ebfbee; }
+      .orange-fill { fill: #fff4e6; }
+      .purple-fill { fill: #f3f0ff; }
+      .gray-fill { fill: #f1f5f9; }
+      .heading { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 31px; font-weight: 700; fill: #1e293b; letter-spacing: .2px; }
+      .label { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 26px; font-weight: 700; fill: #1e293b; }
+      .body { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 22px; font-weight: 400; fill: #475569; }
+      .small { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 19px; font-weight: 400; fill: #475569; }
+      .tiny { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 17px; font-weight: 400; fill: #64748b; }
+      .accent-blue { fill: #364fc7; }
+      .accent-green { fill: #237a36; }
+      .accent-orange { fill: #c2410c; }
+      .accent-purple { fill: #5f3dc4; }
+      .center { text-anchor: middle; }
+      .line-blue { fill: none; stroke: #4263eb; stroke-width: 3.5; }
+      .line-orange { fill: none; stroke: #e8590c; stroke-width: 3.5; }
+      .line-purple { fill: none; stroke: #7048e8; stroke-width: 3.5; }
+      .line-gray { fill: none; stroke: #64748b; stroke-width: 3; }
+      .pill { stroke-width: 1.8; }
+    </style>
+    <marker id="arrow-blue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9" orient="auto"><path d="M 1 1 L 11 6 L 1 11 z" fill="#4263eb"/></marker>
+    <marker id="arrow-orange" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9" orient="auto"><path d="M 1 1 L 11 6 L 1 11 z" fill="#e8590c"/></marker>
+    <marker id="arrow-purple" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9" orient="auto"><path d="M 1 1 L 11 6 L 1 11 z" fill="#7048e8"/></marker>
+    <marker id="arrow-gray" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9" orient="auto"><path d="M 1 1 L 11 6 L 1 11 z" fill="#64748b"/></marker>
+  </defs>
+
+  <rect class="bg" width="2400" height="1000"/>
+
+  <!-- Agent-side decisions and maintenance -->
+  <rect class="region-dash" x="50" y="65" width="490" height="865" rx="24"/>
+  <text class="heading center" x="295" y="120">Agent Operations</text>
+  <text class="small center" x="295" y="153">LLM decisions and maintenance actions</text>
+
+  <rect class="card decision purple-fill" x="85" y="205" width="420" height="138" rx="16"/>
+  <text class="label accent-purple center" x="295" y="253">Memory Writer</text>
+  <text class="body center" x="295" y="287">choose content, paths, dates, and links</text>
+  <text class="small center" x="295" y="316">edit Topic Markdown · cite Source</text>
+
+  <rect class="card decision purple-fill" x="85" y="392" width="420" height="244" rx="16"/>
+  <text class="label accent-purple center" x="295" y="440">Memory Manager</text>
+  <text class="body center" x="295" y="480">Periodic local reorganization</text>
+  <text class="body center" x="295" y="518">Final / scheduled global management</text>
+  <text class="body center" x="295" y="556">edit Topic and Core only</text>
+  <text class="small center" x="295" y="600">organize Topic/Core; preserve evidence</text>
+
+  <rect class="card decision purple-fill" x="85" y="730" width="420" height="138" rx="16"/>
+  <text class="label accent-purple center" x="295" y="778">Query Navigator</text>
+  <text class="body center" x="295" y="812">choose tools, queries, and stopping</text>
+  <text class="small center" x="295" y="841">interpret and combine retrieved evidence</text>
+
+  <!-- Authoritative central state and its views -->
+  <rect class="region" x="590" y="65" width="910" height="865" rx="24"/>
+  <text class="heading center" x="1045" y="120">File-Native Multi-View Memory</text>
+  <text class="small center" x="1045" y="153">Source, Topic, and Core are authoritative; other views are derived</text>
+
+  <rect class="card memory green-fill" x="645" y="205" width="315" height="132" rx="16"/>
+  <text class="label accent-green center" x="802" y="253">Topical View</text>
+  <text class="body center" x="802" y="286">topics, files, and sections</text>
+  <text class="small center" x="802" y="315">authoritative editable text</text>
+
+  <rect class="card memory green-fill" x="1130" y="205" width="315" height="132" rx="16"/>
+  <text class="label accent-green center" x="1287" y="253">Timeline View</text>
+  <text class="body center" x="1287" y="286">dated evidence entries</text>
+  <text class="small center" x="1287" y="315">derived text state</text>
+
+  <rect class="card source orange-fill" x="822" y="397" width="445" height="222" rx="18"/>
+  <text class="label accent-orange center" x="1045" y="450">Source Memory</text>
+  <text class="body center" x="1045" y="487">append-only complete interactions</text>
+  <text class="body center" x="1045" y="522">stable source IDs · no overwrite</text>
+  <line x1="862" y1="548" x2="1227" y2="548" stroke="#fed7aa" stroke-width="2"/>
+  <text class="small center" x="1045" y="581">authoritative text files</text>
+
+  <rect class="card memory green-fill" x="645" y="680" width="315" height="132" rx="16"/>
+  <text class="label accent-green center" x="802" y="728">Recent Memory</text>
+  <text class="body center" x="802" y="761">latest 50 Topic blocks</text>
+  <text class="small center" x="802" y="790">FIFO bounded derived state</text>
+
+  <rect class="card memory green-fill" x="1130" y="680" width="315" height="132" rx="16"/>
+  <text class="label accent-green center" x="1287" y="728">Core Memory</text>
+  <text class="body center" x="1287" y="761">persistent goals and constraints</text>
+  <text class="small center" x="1287" y="790">independently maintained state</text>
+
+  <path class="line-orange" d="M 900 397 C 855 365, 815 353, 805 342" marker-end="url(#arrow-orange)"/>
+  <path class="line-orange" d="M 1190 397 C 1225 365, 1270 353, 1285 342" marker-end="url(#arrow-orange)"/>
+  <path class="line-orange" d="M 900 619 C 855 648, 820 660, 805 678" marker-end="url(#arrow-orange)"/>
+  <path class="line-orange" d="M 1190 619 C 1225 648, 1270 660, 1285 678" marker-end="url(#arrow-orange)"/>
+  <text class="tiny center accent-orange" x="1045" y="372">Source References</text>
+  <path class="line-gray" d="M 960 271 H 1130" marker-end="url(#arrow-gray)"/>
+  <path class="line-gray" d="M 802 337 V 679" marker-end="url(#arrow-gray)"/>
+  <text class="tiny center" x="1045" y="662">Hyperlink Relations · Markdown links and backlinks</text>
+
+  <rect class="card tool gray-fill" x="675" y="848" width="740" height="55" rx="12"/>
+  <text class="small center" x="1045" y="883"><tspan font-weight="700" fill="#334155">Runtime Guarantees</tspan><tspan>  IDs · sources · derived views · links · transactions</tspan></text>
+
+  <!-- Query-time access and answer formation -->
+  <rect class="region-dash" x="1550" y="65" width="800" height="865" rx="24"/>
+  <text class="heading center" x="1950" y="120">Query-Time Retrieval</text>
+  <text class="small center" x="1950" y="153">Agent-selected access to committed text memory</text>
+
+  <rect class="card tool gray-fill" x="1585" y="205" width="340" height="420" rx="16"/>
+  <text class="label center" x="1755" y="251">Retrieval</text>
+  <text class="small center" x="1755" y="282">agent-selected · no fixed pipeline</text>
+  <rect class="card pill blue-fill control" x="1622" y="310" width="266" height="55" rx="27"/>
+  <text class="body center accent-blue" x="1755" y="346">grep</text>
+  <rect class="card pill blue-fill control" x="1622" y="382" width="266" height="55" rx="27"/>
+  <text class="body center accent-blue" x="1755" y="418">BM25</text>
+  <rect class="card pill blue-fill control" x="1622" y="454" width="266" height="55" rx="27"/>
+  <text class="body center accent-blue" x="1755" y="490">Embedding (optional)</text>
+  <text class="tiny center" x="1755" y="544">indexes rebuild from text files</text>
+  <text class="small center" x="1755" y="578">files · timeline · links · Source</text>
+
+  <rect class="card control blue-fill" x="1995" y="330" width="310" height="160" rx="16"/>
+  <text class="label accent-blue center" x="2150" y="378">Selected Evidence</text>
+  <text class="body center" x="2150" y="415">candidate records + context</text>
+  <text class="small center" x="2150" y="447">verify Source when needed</text>
+
+  <rect class="card control blue-fill" x="1995" y="590" width="310" height="152" rx="16"/>
+  <text class="label accent-blue center" x="2150" y="650" textLength="260" lengthAdjust="spacingAndGlyphs">Evidence-Grounded Answer</text>
+  <text class="small center" x="2150" y="698">answer only from selected evidence</text>
+
+  <path class="line-purple" d="M 505 274 H 643" marker-end="url(#arrow-purple)"/>
+  <text class="tiny accent-purple" x="530" y="257">write Topic</text>
+  <path class="line-purple" d="M 505 513 H 565 C 610 513, 600 285, 643 285" marker-end="url(#arrow-purple)"/>
+  <text class="tiny accent-purple" x="552" y="496">organize Topic/Core</text>
+  <path class="line-orange" d="M 590 580 H 820" marker-end="url(#arrow-orange)"/>
+  <text class="tiny accent-orange" x="610" y="563">Runtime archives input</text>
+  <path class="line-blue" d="M 505 799 H 565 V 830 H 1525 V 610 H 1583" marker-end="url(#arrow-blue)"/>
+  <text class="tiny accent-blue center" x="1045" y="827">agent controls retrieval and stopping</text>
+  <path class="line-gray" d="M 1500 415 H 1583" marker-end="url(#arrow-gray)"/>
+  <path class="line-blue" d="M 1925 410 H 1995" marker-end="url(#arrow-blue)"/>
+  <path class="line-blue" d="M 2150 490 V 588" marker-end="url(#arrow-blue)"/>
+
+  <text class="tiny" x="74" y="966">Color roles: blue = query/control · orange = source archive/validation · green = file-based state · purple = LLM management · gray = tools and structure</text>
+</svg>
