@@ -236,3 +236,53 @@ def test_a_failed_trajectory_still_carries_its_turns(tmp_path: Path) -> None:
         agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
 
     assert failure.value.turns[0]["tool"] == "Edit"
+
+
+def test_an_inherited_config_needs_no_endpoint_key_or_model():
+    config = ClaudeCodeConfig.inherited()
+
+    assert config.inherit_auth is True
+    assert (config.base_url, config.api_key, config.model) == ("", "", "")
+
+
+def test_an_ordinary_config_still_demands_a_key():
+    with pytest.raises(ValueError, match="api_key is required"):
+        ClaudeCodeConfig(base_url="https://x", api_key="", model="m")
+
+
+def test_an_inherited_run_leaves_the_user_s_own_login_alone(tmp_path):
+    captured = {}
+
+    async def fake_query(*, prompt, options):
+        captured["options"] = options
+        yield ResultMessage(
+            subtype="success", duration_ms=1, duration_api_ms=1,
+            is_error=False, num_turns=1, session_id="s",
+            total_cost_usd=0.0, usage={}, result="ok",
+        )
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig.inherited(), query_fn=fake_query
+    )
+    agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
+
+    # Setting any of these would point the CLI away from the user's own
+    # configuration directory and keychain.
+    assert captured["options"].env is None
+    assert captured["options"].model is None
+
+
+def test_an_empty_key_does_not_shred_the_error_message(tmp_path):
+    async def fake_query(*, prompt, options):
+        raise RuntimeError("connection refused")
+        yield  # pragma: no cover - generator shape only
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig.inherited(), query_fn=fake_query
+    )
+
+    with pytest.raises(AgentExecutionError) as failure:
+        agent.run(prompt="p", system_prompt="s", cwd=tmp_path)
+
+    # `"text".replace("", x)` inserts x between every character.
+    assert str(failure.value) == "connection refused"

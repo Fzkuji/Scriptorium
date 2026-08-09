@@ -83,20 +83,35 @@ def _turn_records(message: Any) -> list[dict[str, Any]]:
 
 @dataclass(frozen=True)
 class ClaudeCodeConfig:
-    base_url: str
-    api_key: str
-    model: str
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
     cli_path: str | None = None
+    # Run as the user rather than as a separate tenant: no endpoint, no key,
+    # no model. Background memory writing is work the user is already paying
+    # for, so asking them to provision a second credential to get it is a
+    # worse deal than the feature is worth.
+    inherit_auth: bool = False
 
     def __post_init__(self) -> None:
-        if not self.base_url.strip():
-            raise ValueError("base_url is required")
-        if not self.api_key:
-            raise ValueError("api_key is required")
-        if not self.model.strip():
-            raise ValueError("model is required")
+        if not self.inherit_auth:
+            if not self.base_url.strip():
+                raise ValueError("base_url is required")
+            if not self.api_key:
+                raise ValueError("api_key is required")
+            if not self.model.strip():
+                raise ValueError("model is required")
         if self.cli_path is not None and not self.cli_path.strip():
             raise ValueError("cli_path must not be empty")
+
+    @classmethod
+    def inherited(
+        cls, *, model: str | None = None, cli_path: str | None = None
+    ) -> "ClaudeCodeConfig":
+        """Use whatever login and model the user's own CLI already has."""
+        return cls(
+            model=model or "", cli_path=cli_path, inherit_auth=True
+        )
 
 
 @dataclass(frozen=True)
@@ -140,6 +155,17 @@ class ClaudeCodeAgent:
     ) -> None:
         self.config = config
         self._query = query_fn or sdk_query
+
+    def _redact(self, text: str) -> str:
+        """Hide the key in an error message, if there is a key to hide.
+
+        `str.replace("", x)` inserts x between every character, so an
+        inherited run with no key of its own would shred the very message
+        someone is trying to read.
+        """
+        if not self.config.api_key:
+            return text
+        return text.replace(self.config.api_key, "[redacted]")
 
     def run(
         self,
@@ -212,14 +238,19 @@ class ClaudeCodeAgent:
                 system_prompt=system_prompt,
                 mcp_servers=mcp_servers,
                 permission_mode="dontAsk",
-                model=self.config.model,
+                # Empty means "whatever the CLI would pick", which is what an
+                # inherited run wants.
+                model=self.config.model or None,
                 thinking={"type": "disabled"},
                 max_turns=max_turns,
                 max_budget_usd=max_budget_usd,
                 cwd=cwd,
                 cli_path=self.config.cli_path,
                 setting_sources=[],
-                env={
+                # Overriding these is what isolates a benchmark run from the
+                # user's own login. An inherited run wants the opposite, and
+                # the CLI reads its own config only when nothing is set here.
+                env=None if self.config.inherit_auth else {
                     "ANTHROPIC_BASE_URL": self.config.base_url,
                     "ANTHROPIC_API_KEY": self.config.api_key,
                     "ANTHROPIC_AUTH_TOKEN": "",
@@ -252,7 +283,7 @@ class ClaudeCodeAgent:
                         final = message
             except Exception as exc:
                 if final is None:
-                    message = str(exc).replace(self.config.api_key, "[redacted]")
+                    message = self._redact(str(exc))
                     raise AgentExecutionError(
                         message, turns,
                         system_prompt=system_prompt, prompt=prompt,
@@ -269,7 +300,7 @@ class ClaudeCodeAgent:
                 )
                 if getattr(final, "api_error_status", None) is not None:
                     details += f"; API status {final.api_error_status}"
-                details = details.replace(self.config.api_key, "[redacted]")
+                details = self._redact(details)
                 raise AgentExecutionError(
                     details, turns,
                     system_prompt=system_prompt, prompt=prompt,
