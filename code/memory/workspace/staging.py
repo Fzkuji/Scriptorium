@@ -1,12 +1,17 @@
 """Transactional editable memory workspace."""
 
+import ctypes
+import ctypes.util
 import hashlib
+import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
 
 from ..markdown import parse_topic_tree
 from .block_views import BlockViewsMixin
@@ -29,6 +34,48 @@ from .transaction import (
     workspace_write_lock,
 )
 from .layout import TEMPORARY_PREFIX, is_internal_path, runtime_dir
+
+
+def _load_clonefile() -> Any:
+    """`clonefile(2)`, where the platform has it.
+
+    It clones a whole directory hierarchy in one call and copies none of the
+    data: the blocks are shared until one side writes, and then only the
+    written blocks are separated. Everywhere else this is None and staging
+    falls back to copying.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        entry = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True).clonefile
+    except (OSError, AttributeError):  # pragma: no cover - platform dependent
+        return None
+    entry.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+    entry.restype = ctypes.c_int
+    return entry
+
+
+_CLONEFILE = _load_clonefile()
+
+
+def clone_tree(source: Path, target: Path) -> None:
+    """Put a copy of `source` at `target`, by reference where that is offered.
+
+    The stage is rebuilt from the workspace on every write, and rebuilding it
+    meant copying every file in the memory: a workspace grown to 448 topic
+    files cost 448 file copies before a single fact could be recorded, on
+    every Add, while the memory only grows. A clone costs one call and no
+    data, and because writes to it are copy-on-write the stage stays exactly
+    as separate from the workspace as a copy would have made it.
+
+    Falls back to copying when the filesystem cannot clone — a different
+    volume, or anything that is not APFS — which is a slower stage and not a
+    wrong one.
+    """
+    if _CLONEFILE is not None:
+        if _CLONEFILE(os.fsencode(source), os.fsencode(target), 0) == 0:
+            return
+    shutil.copytree(source, target)
 
 
 class MemoryWorkspace(
@@ -79,7 +126,7 @@ class MemoryWorkspace(
         for name in ("topics", "timeline", "sources"):
             source = self.memory_dir / name
             if source.exists():
-                shutil.copytree(source, self.stage_dir / name)
+                clone_tree(source, self.stage_dir / name)
         (self.stage_dir / "topics").mkdir(exist_ok=True)
         recent = self.memory_dir / "recent_events.jsonl"
         if recent.exists():
