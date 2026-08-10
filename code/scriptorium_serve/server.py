@@ -40,6 +40,7 @@ from memory.agent_runtime import (
     OpenAIWriterAgent,
 )
 from memory.management import MemoryConfig
+from memory.workspace.layout import runtime_dir
 from memory.workspace.transaction import TransactionError, workspace_write_lock
 from memory.writing.parallel import write_sessions_in_parallel
 from memory.retrieval import QueryConfig, nearest, read
@@ -265,6 +266,30 @@ def _observation_date(messages: list[Message]) -> str:
     return datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
 
 
+def _handled_requests(workspace: Path) -> Path:
+    """Where this user's finished request IDs are kept.
+
+    Under the runtime directory, which is excluded from everything that reads
+    the workspace as memory: it must not change a revision or make a stage
+    look dirty.
+    """
+    return runtime_dir(workspace) / "handled-requests.txt"
+
+
+def _already_written(workspace: Path, request_id: str) -> bool:
+    handled = _handled_requests(workspace)
+    if not handled.is_file():
+        return False
+    return request_id in handled.read_text(encoding="utf-8").split("\n")
+
+
+def _mark_written(workspace: Path, request_id: str) -> None:
+    handled = _handled_requests(workspace)
+    handled.parent.mkdir(parents=True, exist_ok=True)
+    with handled.open("a", encoding="utf-8") as record:
+        record.write(f"{request_id}\n")
+
+
 def _ingest(payload: AddRequest) -> None:
     workspace = _workspace(payload.user_id)
     arrived = time.monotonic()
@@ -281,6 +306,17 @@ def _ingest(payload: AddRequest) -> None:
         workspace, timeout_s=ADD_SECONDS
     ):
         ensure_workspace(workspace)
+        # A caller that did not hear the answer sends the chunk again. Reading
+        # it a second time costs another model pass and files the same facts
+        # twice, and a retry that is as slow as the call it is retrying keeps
+        # missing whatever deadline lost the first one. The work is already
+        # committed; say so and return.
+        if _already_written(workspace, payload.request_id):
+            _record(
+                "add-repeat", arrived,
+                messages=len(payload.messages), user=payload.user_id,
+            )
+            return
         turns = [(m.role, m.content) for m in payload.messages]
         # refs are the per-turn citation handles the writer footnotes against.
         # Scriptorium accepts `provider/thread/message`, which maps cleanly onto
@@ -312,6 +348,9 @@ def _ingest(payload: AddRequest) -> None:
             (row for row in reversed(written or []) if row.get("tool") == "agent"),
             {},
         )
+        # Recorded only now, so a pass that raised is retried rather than
+        # remembered as done.
+        _mark_written(workspace, payload.request_id)
         _record(
             "add", arrived,
             waited=round(waited, 2),
