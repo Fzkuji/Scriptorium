@@ -144,6 +144,24 @@ _REMEMBER_SCHEMA = [{
 }]
 
 
+def _stage(
+    workspace: MemoryWorkspace,
+    audit: list[dict[str, Any]],
+    observed: str,
+    facts: list[dict],
+    *,
+    commit_each: bool,
+) -> None:
+    """Record every fact through the writing tool that files it."""
+    remember = next(
+        definition for definition in writing_tools(
+            workspace, audit, observed=observed, commit_each=commit_each
+        ) if definition.name == "remember"
+    )
+    for fact in facts:
+        asyncio.run(remember.handler(fact))
+
+
 def write_sessions_in_parallel(
     memory_dir: str | Path,
     *,
@@ -176,15 +194,17 @@ def write_sessions_in_parallel(
             ))
 
         baseline = _baseline(workspace)
-        remember = next(
-            definition for definition in writing_tools(
-                workspace, audit, observed=observed
-            ) if definition.name == "remember"
-        )
-        for facts, _ in found:
-            for fact in facts:
-                asyncio.run(remember.handler(fact))
+        everything = [fact for facts, _ in found for fact in facts]
+        _stage(workspace, audit, observed, everything, commit_each=False)
         error = _commit_turn(workspace, baseline, audit)
+        if error:
+            # The batch was refused whole, and one malformed fact is enough to
+            # do that. Redo it a transaction at a time so the refusal costs
+            # only the fact that earned it.
+            workspace._refresh_stage()
+            baseline = _baseline(workspace)
+            _stage(workspace, audit, observed, everything, commit_each=True)
+            error = _commit_turn(workspace, baseline, audit)
 
         spent = [usage for _, usage in found]
         audit.append({

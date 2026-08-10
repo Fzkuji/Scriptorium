@@ -58,18 +58,26 @@ def writing_tools(
     audit: list[dict[str, Any]],
     *,
     observed: str = "",
+    commit_each: bool = True,
 ) -> list[Any]:
     """The three verbs a writing pass may call: remember, update, forget.
 
     Nothing else is offered in this pass. Recording a fact needs one tool
     call; a shell or a whole-file writer would only be latitude for a weak
     model to spend on a rejected edit instead of on the conversation.
+
+    `commit_each` is for a caller that holds every fact before it records any
+    of them: it stages the edits and commits the batch once. A model calling
+    these tools between turns keeps the default, because the verdict on one
+    edit is what it needs to decide the next.
     """
     # Imported here so reading memory does not require the agent SDK: only a
     # run that actually writes needs it.
     from claude_agent_sdk import tool
 
-    _apply, _record = edit_tools(workspace, audit, _repair_guidance)
+    _apply, _record = edit_tools(
+        workspace, audit, _repair_guidance, commit_each=commit_each
+    )
 
     @tool(
         "remember",

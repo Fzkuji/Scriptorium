@@ -34,6 +34,8 @@ def edit_tools(
     workspace: MemoryWorkspace,
     audit: list[dict[str, Any]],
     guidance: Callable[[str], str],
+    *,
+    commit_each: bool = True,
 ) -> tuple[
     Callable[[str, Callable[[Path], None]], str],
     Callable[[str, dict[str, Any], Callable[[], str]], dict[str, Any]],
@@ -63,8 +65,20 @@ def edit_tools(
 
         Same validation, same rollback: a rejected edit leaves the workspace
         as it was, and the reason comes back as the tool result.
+
+        A commit parses every topic file, rebuilds the block index and
+        re-checks every source reference in the workspace, so committing per
+        edit costs the whole workspace once per edit: twelve facts against a
+        fifty-topic memory measured 8.4s, and it grows as the memory does.
+        A model editing between turns needs that verdict immediately. A
+        caller holding every edit already needs it once, at the end.
         """
         target = staged_path(workspace, path)
+        if not commit_each:
+            workspace.last_changed_topics = []
+            workspace.last_created_blocks = 0
+            change(target)
+            return f"wrote {path}"
         before_units, before_block_ids, before_topics, before_sources = (
             workspace.baseline()
         )
