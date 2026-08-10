@@ -332,3 +332,50 @@ def test_a_batch_stops_at_a_change_of_day(
     assert seen == [["r0", "r1"], ["r2", "r3"]]
     dates = {server._observation_date(p.messages) for p in [chunk("x", stamp=DAY)]}
     assert dates, "the date is what the grouping is on"
+
+
+def test_the_same_conversation_is_one_memory_across_jobs(queue: Path) -> None:
+    """A cancelled job must leave its work where the next one can find it.
+
+    The platform names a conversation for the job that asked about it, so the
+    same conversation was a different user every time and six jobs in a row
+    each began from an empty memory.
+    """
+    first = "eval:scriptmem:20260807T052712Z_55b3f972:longmemeval_s:conv-7"
+    again = "eval:scriptmem:20260811T031500Z_9ab41f02:longmemeval_s:conv-7"
+
+    assert server._stable_id(first) == server._stable_id(again)
+    assert server._workspace(first) == server._workspace(again)
+    assert server._queue_dir(first) == server._queue_dir(again)
+
+
+def test_different_conversations_stay_apart(queue: Path) -> None:
+    """Only the run is dropped. Everything that isolates retrieval is kept."""
+    run = "eval:scriptmem:20260807T052712Z_55b3f972"
+    assert server._workspace(f"{run}:longmemeval_s:conv-7") != server._workspace(
+        f"{run}:longmemeval_s:conv-8"
+    ), "one conversation from the next"
+    assert server._workspace(f"{run}:longmemeval_s:conv-7") != server._workspace(
+        f"{run}:locomo:conv-7"
+    ), "one suite from another"
+    assert "longmemeval_s" in server._stable_id(f"{run}:longmemeval_s:conv-7")
+
+
+def test_an_identifier_carrying_no_run_is_left_alone(queue: Path) -> None:
+    """cambench names a conversation by its content and already carries none."""
+    name = "cambench:c3a629bcb3910f76bac9b4f79bc86ecc05f5224b8f83940653c858f0"
+    assert server._stable_id(name) == name
+
+
+def test_a_chunk_written_by_an_earlier_job_is_skipped(
+    queue: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server, "WORKSPACE_ROOT", tmp_path / "ws")
+    (tmp_path / "ws").mkdir()
+    old = "eval:scriptmem:20260807T052712Z_55b3f972:longmemeval_s:conv-7:chunk-3"
+    new = "eval:scriptmem:20260811T031500Z_9ab41f02:longmemeval_s:conv-7:chunk-3"
+    workspace = server._workspace("eval:scriptmem:20260807T052712Z_55b3f972:x:y")
+
+    server._mark_written(workspace, old)
+
+    assert server._already_written(workspace, new), "the later job skips it"

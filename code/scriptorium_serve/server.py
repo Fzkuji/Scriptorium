@@ -297,6 +297,31 @@ def _authorize(
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+# What a run calls itself inside an identifier: a stamp and a token, as in
+# `eval:scriptmem:20260807T052712Z_55b3f972:longmemeval_refined:conv-0`.
+_RUN_ID = re.compile(r"\A(?:\d{8}T\d{6}Z_[0-9a-f]{4,}|run_[0-9a-f]{6,})\Z")
+
+
+def _stable_id(value: str) -> str:
+    """The identifier with the run it belonged to taken out.
+
+    The platform names a conversation for the job that asked about it, so the
+    same conversation is a different user every time and a job that was
+    cancelled leaves nothing behind for the next one: six of them in a row
+    each started from an empty memory and each died at thirteen minutes.
+    Dropping the run keeps a conversation's memory across attempts, so a chunk
+    already written is recognised and skipped rather than read again.
+
+    Everything that tells one conversation from another is kept — the suite
+    and the conversation both survive — so retrieval stays separated exactly
+    where the platform separates it. The benchmark's own cambench identifiers
+    already work this way: they name the conversation by its content and carry
+    no run at all.
+    """
+    kept = [part for part in value.split(":") if not _RUN_ID.match(part)]
+    return ":".join(kept) if kept else value
+
+
 def _workspace(user_id: str) -> Path:
     """Map a user_id to its own workspace directory.
 
@@ -304,7 +329,7 @@ def _workspace(user_id: str) -> Path:
     used as a path component, so anything outside a conservative allowlist is
     escaped rather than trusted.
     """
-    safe = _SAFE_ID.sub("_", user_id)
+    safe = _SAFE_ID.sub("_", _stable_id(user_id))
     if not safe or safe in (".", ".."):
         raise HTTPException(status_code=400, detail="invalid user_id")
     path = WORKSPACE_ROOT / safe
@@ -374,7 +399,7 @@ def _already_written(workspace: Path, request_id: str) -> bool:
     handled = _handled_requests(workspace)
     if not handled.is_file():
         return False
-    return _ref_component(request_id) in handled.read_text(
+    return _ref_component(_stable_id(request_id)) in handled.read_text(
         encoding="utf-8"
     ).split("\n")
 
@@ -386,12 +411,12 @@ def _mark_written(workspace: Path, request_id: str) -> None:
     handled = _handled_requests(workspace)
     handled.parent.mkdir(parents=True, exist_ok=True)
     with handled.open("a", encoding="utf-8") as record:
-        record.write(f"{_ref_component(request_id)}\n")
+        record.write(f"{_ref_component(_stable_id(request_id))}\n")
 
 
 def _queue_dir(user_id: str) -> Path:
     """Where this user's chunks wait to be written."""
-    safe = _SAFE_ID.sub("_", user_id)
+    safe = _SAFE_ID.sub("_", _stable_id(user_id))
     if not safe or safe in (".", ".."):
         raise HTTPException(status_code=400, detail="invalid user_id")
     return QUEUE_ROOT / safe
@@ -409,7 +434,7 @@ def _already_queued(user_id: str, request_id: str) -> bool:
     folder = _queue_dir(user_id)
     if not folder.is_dir():
         return False
-    return any(folder.glob(f"*-{_ref_component(request_id)}.json"))
+    return any(folder.glob(f"*-{_ref_component(_stable_id(request_id))}.json"))
 
 
 def _enqueue(payload: AddRequest) -> None:
@@ -431,7 +456,7 @@ def _enqueue(payload: AddRequest) -> None:
         else:
             os.write(opened, str(time.time()).encode())
             os.close(opened)
-    name = f"{time.time_ns():020d}-{_ref_component(payload.request_id)}.json"
+    name = f"{time.time_ns():020d}-{_ref_component(_stable_id(payload.request_id))}.json"
     partial = folder / f"{name}.part"
     partial.write_text(payload.model_dump_json(), encoding="utf-8")
     partial.rename(folder / name)
@@ -639,8 +664,8 @@ def _session_of(payload: AddRequest) -> dict[str, Any]:
     platform's identifiers: the source session becomes the thread and each
     message is addressed within its chunk.
     """
-    thread = _ref_component(payload.session_id)
-    chunk = _ref_component(payload.request_id)
+    thread = _ref_component(_stable_id(payload.session_id))
+    chunk = _ref_component(_stable_id(payload.request_id))
     return {
         "observation_date": _observation_date(payload.messages),
         "turns": [(message.role, message.content) for message in payload.messages],
