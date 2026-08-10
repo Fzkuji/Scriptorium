@@ -109,6 +109,38 @@ ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "150"))
 # cost of the ceiling is the facts the unfinished round would have added.
 READ_SECONDS = float(os.environ.get("SCRIPTORIUM_READ_SECONDS", "30"))
 
+# Where a chunk waits between arriving and being written.
+#
+# Add used to hold its connection for the whole write, so the caller — which
+# sends one chunk and waits for the answer before sending the next — advanced
+# at one chunk per write. At a five second median that is twelve a minute, and
+# a job cancelled after thirteen minutes had taken in under eighty. The rate
+# was our latency and nothing else.
+#
+# Writing behind the answer breaks that coupling: the caller is told the chunk
+# is safely recorded, which it is, and the model pass happens off its clock.
+# What the contract actually needs is that a Search never reads a user whose
+# chunks are still outstanding, and that is held in Search instead.
+#
+# Beside the workspaces rather than inside them: everything that walks the root
+# treats each entry as a memory.
+QUEUE_ROOT = WORKSPACE_ROOT.with_name(WORKSPACE_ROOT.name + "-queue")
+
+# How many users one process writes at a time. The work is a model call, not
+# local, so these are mostly waiting.
+DRAIN_THREADS = int(os.environ.get("SCRIPTORIUM_DRAIN_THREADS", "4"))
+
+# How long Search waits for a user's queued chunks. Long, because answering
+# early means answering from a memory that is missing what was just sent; it
+# exists so a stuck queue degrades to a poor answer instead of no answer.
+SEARCH_WAIT_SECONDS = float(
+    os.environ.get("SCRIPTORIUM_SEARCH_WAIT_SECONDS", "1200")
+)
+
+# A user is claimed by one process while its chunks are written, and the claim
+# is refreshed after each one. Older than this and the holder is gone.
+CLAIM_STALE_SECONDS = 300.0
+
 # Retrieval is one shot here, so the agent is given room to look more than
 # once; the caller's own timeout is the real ceiling. Source verification is
 # off because the caller never sees a citation to check — it sees the memory.
@@ -177,6 +209,21 @@ async def _check_search_backend() -> None:
         SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
     else:
         import rank_bm25  # noqa: F401
+
+
+@app.on_event("startup")
+async def _start_writers() -> None:
+    """Start the threads that write what Add has already answered for.
+
+    Every worker process runs its own, and they take users from the queue by
+    claiming them, so adding processes adds throughput without any of them
+    needing to know about the others.
+    """
+    QUEUE_ROOT.mkdir(parents=True, exist_ok=True)
+    for number in range(DRAIN_THREADS):
+        threading.Thread(
+            target=_drain_forever, name=f"write-{number}", daemon=True
+        ).start()
 
 # Writes to one workspace are serialised by Scriptorium's own file lock, but the
 # platform fans out 64 workers and may hit the same user_id concurrently. A
@@ -311,6 +358,136 @@ def _mark_written(workspace: Path, request_id: str) -> None:
         record.write(f"{_ref_component(request_id)}\n")
 
 
+def _queue_dir(user_id: str) -> Path:
+    """Where this user's chunks wait to be written."""
+    safe = _SAFE_ID.sub("_", user_id)
+    if not safe or safe in (".", ".."):
+        raise HTTPException(status_code=400, detail="invalid user_id")
+    return QUEUE_ROOT / safe
+
+
+def _queued(user_id: str) -> list[Path]:
+    """This user's waiting chunks, oldest first."""
+    folder = _queue_dir(user_id)
+    if not folder.is_dir():
+        return []
+    return sorted(folder.glob("*.json"))
+
+
+def _already_queued(user_id: str, request_id: str) -> bool:
+    folder = _queue_dir(user_id)
+    if not folder.is_dir():
+        return False
+    return any(folder.glob(f"*-{_ref_component(request_id)}.json"))
+
+
+def _enqueue(payload: AddRequest) -> None:
+    """Put a chunk where the writer will find it, in the order it arrived.
+
+    Named by arrival so a plain sort replays the conversation in sequence, and
+    renamed into place so a reader never sees half a file.
+    """
+    folder = _queue_dir(payload.user_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    name = f"{time.time_ns():020d}-{_ref_component(payload.request_id)}.json"
+    partial = folder / f"{name}.part"
+    partial.write_text(payload.model_dump_json(), encoding="utf-8")
+    partial.rename(folder / name)
+
+
+def _claim(folder: Path) -> bool:
+    """Take this user, so two processes never write their chunks at once.
+
+    Their order is the point: the file lock would keep two writers from
+    corrupting each other but not from committing the second chunk first.
+    """
+    marker = folder / "busy"
+    try:
+        holder = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        try:
+            if time.time() - marker.stat().st_mtime > CLAIM_STALE_SECONDS:
+                marker.unlink()  # whoever held it is gone
+        except OSError:  # pragma: no cover - another process got there first
+            pass
+        return False
+    os.write(holder, str(os.getpid()).encode())
+    os.close(holder)
+    return True
+
+
+def _drain_user(folder: Path) -> int:
+    """Write everything this user has waiting, in order. Returns how many."""
+    written = 0
+    for path in sorted(folder.glob("*.json")):
+        began = time.monotonic()
+        try:
+            payload = AddRequest.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        except Exception as error:  # a file we cannot read is not a chunk
+            _record("queue-unreadable", began,
+                    file=path.name, reason=str(error)[:200])
+            path.unlink(missing_ok=True)
+            continue
+        try:
+            _ingest(payload)
+        except Exception as error:
+            # Already answered 200, so there is nobody to raise to. Moved aside
+            # rather than dropped: it stays readable, and it stops holding
+            # Search open for a chunk that will not write.
+            _record("add-failed", began,
+                    reason=f"{type(error).__name__}: {error}"[:300],
+                    user=payload.user_id, file=path.name)
+            refused = folder / "refused"
+            refused.mkdir(exist_ok=True)
+            path.rename(refused / path.name)
+            continue
+        path.unlink(missing_ok=True)
+        written += 1
+        (folder / "busy").touch()  # the claim is still held by a live process
+    return written
+
+
+def _drain_forever() -> None:
+    """Write queued chunks for whichever users are not already being written."""
+    while True:
+        worked = False
+        try:
+            folders = sorted(QUEUE_ROOT.iterdir()) if QUEUE_ROOT.is_dir() else []
+        except OSError:  # pragma: no cover - the root came and went
+            folders = []
+        for folder in folders:
+            if not folder.is_dir() or not any(folder.glob("*.json")):
+                continue
+            if not _claim(folder):
+                continue
+            try:
+                worked = bool(_drain_user(folder)) or worked
+            finally:
+                (folder / "busy").unlink(missing_ok=True)
+        if not worked:
+            time.sleep(0.2)
+
+
+def _wait_for_writes(user_id: str) -> tuple[float, int]:
+    """Hold Search until this user's queued chunks are written.
+
+    Add answers as soon as a chunk is on disk, which is what lets the caller
+    keep sending instead of spending a model call per chunk. The promise it
+    made — that a Search sees everything already sent — is kept here.
+    """
+    began = time.monotonic()
+    while True:
+        left = len(_queued(user_id))
+        if not left:
+            return time.monotonic() - began, 0
+        if time.monotonic() - began > SEARCH_WAIT_SECONDS:
+            _record("search-waited-out", began, user=user_id, left=left)
+            return time.monotonic() - began, left
+        time.sleep(0.25)
+
+
 def _ingest(payload: AddRequest) -> None:
     workspace = _workspace(payload.user_id)
     arrived = time.monotonic()
@@ -359,10 +536,11 @@ def _ingest(payload: AddRequest) -> None:
                 "turns": turns,
                 "refs": refs,
             }],
-            config=replace(
-                MEMORY_CONFIG,
-                max_seconds=min(READ_SECONDS, max(1.0, ADD_SECONDS - waited)),
-            ),
+            # A flat ceiling per chunk. It used to be whatever was left of the
+            # caller's deadline, which was right while the caller was holding
+            # the connection open; now that it is not, a chunk that sat in the
+            # queue would have been given a second to write in.
+            config=replace(MEMORY_CONFIG, max_seconds=READ_SECONDS),
         )
         # write_sessions reports an audit trail; its closing row carries what
         # the one agent pass cost.
@@ -412,22 +590,30 @@ async def add(payload: AddRequest, _: None = Depends(_authorize)) -> dict[str, A
             "session_id": payload.session_id,
         }
     began = time.monotonic()
-    try:
-        await run_in_threadpool(_ingest, payload)
-    except (AgentExecutionError, TransactionError) as error:
-        # A refused write left no usage line, so a run could fail on hundreds
-        # of them against a log that showed only the successes. It is the
-        # failures that need reading. TransactionError is here for the one the
-        # workspace lock raises when another worker has held the same user for
-        # the whole budget: rare, but a bare 500 is the wrong way to say it.
-        _record("add-failed", began, reason=str(error)[:300], user=payload.user_id)
-        raise HTTPException(status_code=502, detail=str(error)) from error
-    return {
+    answer = {
         "success": True,
         "request_id": payload.request_id,
         "user_id": payload.user_id,
         "session_id": payload.session_id,
     }
+    workspace = _workspace(payload.user_id)
+    if _already_written(workspace, payload.request_id) or _already_queued(
+        payload.user_id, payload.request_id
+    ):
+        _record("add-repeat", began,
+                messages=len(payload.messages), user=payload.user_id)
+        return answer
+    try:
+        await run_in_threadpool(_enqueue, payload)
+    except OSError as error:
+        # The chunk is not recorded anywhere, so this is the one case that must
+        # still be refused: answering 200 would lose it silently.
+        _record("queue-failed", began, reason=str(error)[:300],
+                user=payload.user_id)
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    _record("add-queued", began,
+            messages=len(payload.messages), user=payload.user_id)
+    return answer
 
 
 def _passages(text: str) -> list[str]:
@@ -545,6 +731,12 @@ def _distinct(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 async def search(payload: SearchRequest, _: None = Depends(_authorize)) -> dict[str, Any]:
     if not payload.query.strip():
         raise HTTPException(status_code=400, detail="query is required")
+    # Add answers before the write, so this is where the contract is honoured:
+    # a question is not answered from a memory that is still being written.
+    waited, left = await run_in_threadpool(_wait_for_writes, payload.user_id)
+    if waited > 1.0:
+        _record("search-waited", time.monotonic() - waited,
+                user=payload.user_id, unwritten=left)
     data = await run_in_threadpool(_retrieve, payload)
     return {"data": data}
 
