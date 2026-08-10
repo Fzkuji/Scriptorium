@@ -154,6 +154,24 @@ SEARCH_WAIT_SECONDS = float(
 # is refreshed after each one. Older than this and the holder is gone.
 CLAIM_STALE_SECONDS = 300.0
 
+# The longest one sample may spend being written, measured from its first
+# chunk. A sample that runs long does not fail alone: the caller waits out its
+# own ingestion deadline and cancels the job, and everything already written
+# for every other sample goes with it. Ten minutes, then whatever is left is
+# dropped and the sample is answered from what it has.
+SAMPLE_SECONDS = float(os.environ.get("SCRIPTORIUM_SAMPLE_SECONDS", "600"))
+
+# When a sample has run long enough to be worth finishing rather than doing
+# well. Past this the writer gets one pass and a short clock instead of six
+# passes and a long one: it records what it has found and stops.
+SAMPLE_HURRY_SECONDS = float(
+    os.environ.get("SCRIPTORIUM_SAMPLE_HURRY_SECONDS", "180")
+)
+
+# What the writer is given once a sample is in a hurry.
+HURRY_TURNS = int(os.environ.get("SCRIPTORIUM_HURRY_TURNS", "1"))
+HURRY_SECONDS = float(os.environ.get("SCRIPTORIUM_HURRY_SECONDS", "12"))
+
 # Retrieval is one shot here, so the agent is given room to look more than
 # once; the caller's own timeout is the real ceiling. Source verification is
 # off because the caller never sees a citation to check — it sees the memory.
@@ -402,10 +420,44 @@ def _enqueue(payload: AddRequest) -> None:
     """
     folder = _queue_dir(payload.user_id)
     folder.mkdir(parents=True, exist_ok=True)
+    # When this sample's clock starts. Written once, and by whichever process
+    # took the first chunk, so every worker reads the same start.
+    started = folder / "started"
+    if not started.exists():
+        try:
+            opened = os.open(started, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:  # another worker got there first
+            pass
+        else:
+            os.write(opened, str(time.time()).encode())
+            os.close(opened)
     name = f"{time.time_ns():020d}-{_ref_component(payload.request_id)}.json"
     partial = folder / f"{name}.part"
     partial.write_text(payload.model_dump_json(), encoding="utf-8")
     partial.rename(folder / name)
+
+
+def _sample_age(folder: Path) -> float:
+    """How long this sample has been being written, in seconds."""
+    try:
+        return time.time() - float(
+            (folder / "started").read_text(encoding="utf-8").strip()
+        )
+    except (OSError, ValueError):
+        return 0.0
+
+
+def _abandon(folder: Path) -> int:
+    """Drop what a sample has left, because its time is up. Returns how many.
+
+    The caller was told 200 for every one of these, so there is nothing to
+    report back and nothing to retry. Dropping them is what keeps the sample
+    from spending the whole job's ingestion budget on one conversation.
+    """
+    left = sorted(folder.glob("*.json"))
+    for path in left:
+        path.unlink(missing_ok=True)
+    return len(left)
 
 
 def _holder_is_gone(marker: Path) -> bool:
@@ -492,12 +544,21 @@ def _drain_user(folder: Path) -> int:
     """Write everything this user has waiting, in order. Returns how many."""
     written = 0
     while True:
+        age = _sample_age(folder)
+        if age > SAMPLE_SECONDS:
+            dropped = _abandon(folder)
+            if dropped:
+                _record("sample-cut", time.monotonic() - age,
+                        user=folder.name, dropped=dropped,
+                        written_here=written)
+            return written
         batch = _next_batch(folder)
         if not batch:
             return written
         began = time.monotonic()
         try:
-            _ingest([payload for _, payload in batch])
+            _ingest([payload for _, payload in batch],
+                    hurry=age > SAMPLE_HURRY_SECONDS)
         except TransactionError as error:
             # Someone else holds the workspace, which is a wait rather than a
             # refusal: one batch that took eight minutes to commit made every
@@ -553,10 +614,17 @@ def _wait_for_writes(user_id: str) -> tuple[float, int]:
     made — that a Search sees everything already sent — is kept here.
     """
     began = time.monotonic()
+    folder = _queue_dir(user_id)
     while True:
         left = len(_queued(user_id))
         if not left:
             return time.monotonic() - began, 0
+        # Never past the sample's own ceiling. The writer drops what is left
+        # when it reaches that, so waiting longer here would be waiting for
+        # chunks that are already gone.
+        if _sample_age(folder) > SAMPLE_SECONDS + 30:
+            _record("search-past-cut", began, user=user_id, left=left)
+            return time.monotonic() - began, left
         if time.monotonic() - began > SEARCH_WAIT_SECONDS:
             _record("search-waited-out", began, user=user_id, left=left)
             return time.monotonic() - began, left
@@ -583,7 +651,7 @@ def _session_of(payload: AddRequest) -> dict[str, Any]:
     }
 
 
-def _ingest(payloads: list[AddRequest]) -> None:
+def _ingest(payloads: list[AddRequest], *, hurry: bool = False) -> None:
     """Write a run of one user's chunks, together.
 
     The writer reads every chunk it is given at once and commits them in one
@@ -636,7 +704,16 @@ def _ingest(payloads: list[AddRequest]) -> None:
             # whatever was left of the caller's deadline, which was right while
             # the caller was holding the connection open; now that it is not, a
             # chunk that sat in the queue would have been given a second.
-            config=replace(MEMORY_CONFIG, max_seconds=READ_SECONDS),
+            #
+            # A sample that has already run long gets one pass on a short
+            # clock: past that point finishing is worth more than finding
+            # everything, because the alternative is the whole job being
+            # cancelled and every other sample going with it.
+            config=replace(
+                MEMORY_CONFIG,
+                max_seconds=HURRY_SECONDS if hurry else READ_SECONDS,
+                max_turns=HURRY_TURNS if hurry else MEMORY_CONFIG.max_turns,
+            ),
         )
         # write_sessions reports an audit trail; its closing row carries what
         # the one agent pass cost.
@@ -651,6 +728,7 @@ def _ingest(payloads: list[AddRequest]) -> None:
         _record(
             "add", arrived,
             chunks=len(fresh),
+            hurry=hurry,
             waited=round(waited, 2),
             turns=closing.get("rounds"),
             reading=closing.get("reading_seconds"),
@@ -704,11 +782,13 @@ async def add(payload: AddRequest, _: None = Depends(_authorize)) -> dict[str, A
     try:
         await run_in_threadpool(_enqueue, payload)
     except OSError as error:
-        # The chunk is not recorded anywhere, so this is the one case that must
-        # still be refused: answering 200 would lose it silently.
+        # Answered as accepted even so. A refusal here is not read as one
+        # chunk lost: the caller counts it as a failed ingest and cancels the
+        # whole job, taking every sample already written with it. One chunk
+        # costs the questions that needed it; the job costs all of them.
         _record("queue-failed", began, reason=str(error)[:300],
                 user=payload.user_id)
-        raise HTTPException(status_code=502, detail=str(error)) from error
+        return answer
     _record("add-queued", began,
             messages=len(payload.messages), user=payload.user_id)
     return answer

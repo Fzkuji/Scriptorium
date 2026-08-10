@@ -126,6 +126,99 @@ def test_a_claim_held_by_a_live_writer_is_left_alone(queue: Path) -> None:
     assert (folder / "busy").exists(), "not cleared while its holder lives"
 
 
+def test_a_sample_that_runs_long_is_cut(
+    queue: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One slow sample must not spend the whole job's ingestion budget.
+
+    The caller cancels the job when ingestion runs past its own deadline, and
+    everything already written for every other sample goes with it. Ten
+    minutes, then whatever is left is dropped and the sample answers from what
+    it has.
+    """
+    monkeypatch.setattr(server, "SAMPLE_SECONDS", 600.0)
+    for number in range(4):
+        server._enqueue(chunk(f"r{number}"))
+        time.sleep(0.002)
+    folder = queue / "u1"
+    (folder / "started").write_text(str(time.time() - 601), encoding="utf-8")
+    monkeypatch.setattr(server, "_ingest", lambda batch, hurry=False: None)
+
+    written = server._drain_user(folder)
+
+    assert written == 0, "its time was up before this pass"
+    assert server._queued("u1") == [], "and nothing is left holding Search open"
+
+
+def test_a_sample_still_inside_its_time_is_written(
+    queue: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server._enqueue(chunk("r1"))
+    (queue / "u1" / "started").write_text(str(time.time()), encoding="utf-8")
+    monkeypatch.setattr(server, "_ingest", lambda batch, hurry=False: None)
+
+    assert server._drain_user(queue / "u1") == 1
+
+
+def test_a_long_sample_is_told_to_wrap_up(
+    queue: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Past the hurry mark the writer gets one pass and a short clock."""
+    monkeypatch.setattr(server, "SAMPLE_HURRY_SECONDS", 180.0)
+    server._enqueue(chunk("r1"))
+    folder = queue / "u1"
+    (folder / "started").write_text(str(time.time() - 181), encoding="utf-8")
+    hurried: list[bool] = []
+    monkeypatch.setattr(
+        server, "_ingest", lambda batch, hurry=False: hurried.append(hurry)
+    )
+
+    server._drain_user(folder)
+
+    assert hurried == [True]
+
+
+def test_a_fresh_sample_is_not_hurried(
+    queue: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server._enqueue(chunk("r1"))
+    hurried: list[bool] = []
+    monkeypatch.setattr(
+        server, "_ingest", lambda batch, hurry=False: hurried.append(hurry)
+    )
+
+    server._drain_user(queue / "u1")
+
+    assert hurried == [False]
+
+
+def test_the_clock_starts_at_the_first_chunk_and_does_not_restart(
+    queue: Path,
+) -> None:
+    server._enqueue(chunk("r1"))
+    first = (queue / "u1" / "started").read_text(encoding="utf-8")
+    time.sleep(0.01)
+
+    server._enqueue(chunk("r2"))
+
+    assert (queue / "u1" / "started").read_text(encoding="utf-8") == first
+
+
+def test_search_does_not_wait_past_the_cut(
+    queue: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Waiting longer than the sample lives is waiting for nothing."""
+    monkeypatch.setattr(server, "SAMPLE_SECONDS", 600.0)
+    monkeypatch.setattr(server, "SEARCH_WAIT_SECONDS", 9999.0)
+    server._enqueue(chunk("r1"))
+    (queue / "u1" / "started").write_text(str(time.time() - 700), encoding="utf-8")
+
+    waited, left = server._wait_for_writes("u1")
+
+    assert left == 1
+    assert waited < 3, "it did not sit out the search budget"
+
+
 def test_search_waits_for_what_is_still_queued(
     queue: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -170,7 +263,7 @@ def test_a_chunk_that_cannot_be_written_stops_holding_search_open(
     server._enqueue(chunk("r1"))
     folder = queue / "u1"
 
-    def refuse(payload: AddRequest) -> None:
+    def refuse(batch: list[AddRequest], hurry: bool = False) -> None:
         raise RuntimeError("the writer said no")
 
     monkeypatch.setattr(server, "_ingest", refuse)
@@ -188,7 +281,8 @@ def test_a_written_chunk_leaves_the_queue(
     server._enqueue(chunk("r2"))
     seen: list[list[str]] = []
     monkeypatch.setattr(
-        server, "_ingest", lambda batch: seen.append([p.request_id for p in batch])
+        server, "_ingest",
+        lambda batch, hurry=False: seen.append([p.request_id for p in batch])
     )
 
     written = server._drain_user(queue / "u1")
@@ -206,7 +300,8 @@ def test_a_batch_is_bounded(queue: Path, monkeypatch: pytest.MonkeyPatch) -> Non
         time.sleep(0.002)
     seen: list[list[str]] = []
     monkeypatch.setattr(
-        server, "_ingest", lambda batch: seen.append([p.request_id for p in batch])
+        server, "_ingest",
+        lambda batch, hurry=False: seen.append([p.request_id for p in batch])
     )
 
     written = server._drain_user(queue / "u1")
@@ -228,7 +323,8 @@ def test_a_batch_stops_at_a_change_of_day(
         time.sleep(0.002)
     seen: list[list[str]] = []
     monkeypatch.setattr(
-        server, "_ingest", lambda batch: seen.append([p.request_id for p in batch])
+        server, "_ingest",
+        lambda batch, hurry=False: seen.append([p.request_id for p in batch])
     )
 
     server._drain_user(queue / "u1")
