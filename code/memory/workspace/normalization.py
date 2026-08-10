@@ -28,14 +28,23 @@ def _is_local_label(value: str) -> bool:
 class TopicNormalizationMixin:
     @staticmethod
     def _topic_fingerprints(root: Path) -> dict[str, str]:
+        """A mark per topic file, for spotting which ones a write changed.
+
+        Size and modification time rather than a digest of the contents. This
+        runs twice per write over every topic file in the memory, and opening
+        and reading all of them to hash them cost more than the write did: at
+        163 files that is 326 reads for an answer that a stat already gives.
+        A file that was written has a new mtime; one that was not, does not.
+        """
         if not root.exists():
             return {}
-        return {
-            path.relative_to(root).as_posix(): hashlib.sha256(
-                path.read_bytes()
-            ).hexdigest()
-            for path in root.rglob("*.md")
-        }
+        marks = {}
+        for path in root.rglob("*.md"):
+            mark = path.stat()
+            marks[path.relative_to(root).as_posix()] = (
+                f"{mark.st_size}:{mark.st_mtime_ns}"
+            )
+        return marks
 
     @staticmethod
     def _stable_local_id(
@@ -358,12 +367,21 @@ class TopicNormalizationMixin:
 
     @staticmethod
     def _tree_fingerprint(root: Path) -> str:
+        """One mark for a whole tree, for spotting that anything in it moved.
+
+        This guards the evidence record, which is append-only and which a
+        write never touches, and it too ran twice per write — reading and
+        hashing every archived source, 2.8MB of them in a grown memory, to
+        confirm each time that nothing had happened to them. Sizes and
+        modification times answer that without opening anything.
+        """
         digest = hashlib.sha256()
         if root.exists():
             for path in sorted(root.rglob("*")):
                 if path.is_file():
+                    mark = path.stat()
                     digest.update(
                         path.relative_to(root).as_posix().encode()
                     )
-                    digest.update(path.read_bytes())
+                    digest.update(f"{mark.st_size}:{mark.st_mtime_ns}".encode())
         return digest.hexdigest()
