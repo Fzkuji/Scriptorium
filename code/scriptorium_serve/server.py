@@ -74,16 +74,20 @@ WRITER_API_KEY = os.environ.get("SCRIPTORIUM_WRITER_API_KEY", "")
 # call as well as the turn count: a turn that cannot finish inside what is
 # left ends the pass, and everything earlier turns wrote stays committed.
 #
-# Ninety seconds, which is where the caller's own patience puts it. A
-# Cloudflare quick tunnel used to cut this path at a hundred seconds and was
-# taken out of it; the proxy's log then showed the platform still hanging up
-# on 135 of 1493 Adds, nine per cent, against nine to ten per cent of that
-# hour's writes running past 120s. Two counts agreeing puts the caller's
-# limit near two minutes, so the budget sits below it with room for staging
-# and the hop, and an ordinary write — 39s for a four-turn pass — never
-# reaches it.
+# A hundred and fifty seconds, and the number has been wrong twice. It was
+# first sized to duck under a hundred-second ceiling that turned out to
+# belong to a Cloudflare tunnel, then under a two-minute one read from the
+# proxy log. Per-request timings finally settled it: the caller waited 488s
+# for one Add and answered it, and the requests it abandoned had waited a
+# median of 35s, less than the ones it kept. It is not a timeout at all, so
+# there is nothing to duck under.
+#
+# What the ninety-second version did instead was cut its own writes: 125 of
+# 300 passes stopped on the budget, 118 of them part-way through a second
+# turn, which is where the model finishes recording. Against a median of 62s
+# and a p90 of 135s this only trims the tail that runs away.
 MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True, max_turns=6)
-ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "90"))
+ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "150"))
 
 # Retrieval is one shot here, so the agent is given room to look more than
 # once; the caller's own timeout is the real ceiling. Source verification is
