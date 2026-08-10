@@ -130,6 +130,19 @@ QUEUE_ROOT = WORKSPACE_ROOT.with_name(WORKSPACE_ROOT.name + "-queue")
 # local, so these are mostly waiting.
 DRAIN_THREADS = int(os.environ.get("SCRIPTORIUM_DRAIN_THREADS", "4"))
 
+# How many of one user's chunks are written together.
+#
+# Chunks of one conversation must commit in order, so a user is written by one
+# thread and threads do not help: with two conversations in flight, fourteen of
+# sixteen writers had nothing to take, and five hundred queued chunks were five
+# hundred model calls end to end. Batching is where the parallelism is — the
+# writer reads a whole batch at once and commits it in one transaction, so a
+# batch costs about what its slowest chunk costs.
+#
+# It is also how many calls one writer holds open, so it is bounded rather
+# than "whatever arrived".
+BATCH_CHUNKS = int(os.environ.get("SCRIPTORIUM_BATCH_CHUNKS", "12"))
+
 # How long Search waits for a user's queued chunks. Long, because answering
 # early means answering from a memory that is missing what was just sent; it
 # exists so a stuck queue degrades to a poor answer instead of no answer.
@@ -395,6 +408,34 @@ def _enqueue(payload: AddRequest) -> None:
     partial.rename(folder / name)
 
 
+def _holder_is_gone(marker: Path) -> bool:
+    """Whether the process that claimed this user has died.
+
+    A claim outlives the process that took it, so a restart left every user in
+    flight claimed by nobody. Waiting out the clock instead meant a new build
+    wrote nothing for five minutes, which is a third of the window a job gets.
+    The claim names its process, so the usual case is answered directly and the
+    clock is only the backstop for a pid that has been handed to someone else.
+    """
+    try:
+        pid = int(marker.read_text(encoding="utf-8").strip() or 0)
+    except (OSError, ValueError):
+        return True
+    if pid > 0:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:  # alive, and not ours to signal
+            return False
+        else:
+            return False
+    try:
+        return time.time() - marker.stat().st_mtime > CLAIM_STALE_SECONDS
+    except OSError:  # pragma: no cover - it went away while we looked
+        return True
+
+
 def _claim(folder: Path) -> bool:
     """Take this user, so two processes never write their chunks at once.
 
@@ -406,8 +447,10 @@ def _claim(folder: Path) -> bool:
         holder = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
     except FileExistsError:
         try:
-            if time.time() - marker.stat().st_mtime > CLAIM_STALE_SECONDS:
-                marker.unlink()  # whoever held it is gone
+            if _holder_is_gone(marker) or (
+                time.time() - marker.stat().st_mtime > CLAIM_STALE_SECONDS
+            ):
+                marker.unlink()
         except OSError:  # pragma: no cover - another process got there first
             pass
         return False
@@ -416,10 +459,17 @@ def _claim(folder: Path) -> bool:
     return True
 
 
-def _drain_user(folder: Path) -> int:
-    """Write everything this user has waiting, in order. Returns how many."""
-    written = 0
-    for path in sorted(folder.glob("*.json")):
+def _next_batch(folder: Path) -> list[tuple[Path, AddRequest]]:
+    """The next run of this user's chunks that can be written together.
+
+    Ordered by arrival, and stopped at a change of observation date because
+    the writer stamps a whole batch with the date of its first chunk. Stopped
+    at BATCH_CHUNKS as well: every chunk in a batch reads at the same time, so
+    the batch is also how many calls are open at once.
+    """
+    batch: list[tuple[Path, AddRequest]] = []
+    observed: str | None = None
+    for path in sorted(folder.glob("*.json"))[:BATCH_CHUNKS]:
         began = time.monotonic()
         try:
             payload = AddRequest.model_validate_json(
@@ -430,23 +480,40 @@ def _drain_user(folder: Path) -> int:
                     file=path.name, reason=str(error)[:200])
             path.unlink(missing_ok=True)
             continue
+        date = _observation_date(payload.messages)
+        if observed is not None and date != observed:
+            break
+        observed = date
+        batch.append((path, payload))
+    return batch
+
+
+def _drain_user(folder: Path) -> int:
+    """Write everything this user has waiting, in order. Returns how many."""
+    written = 0
+    while True:
+        batch = _next_batch(folder)
+        if not batch:
+            return written
+        began = time.monotonic()
         try:
-            _ingest(payload)
+            _ingest([payload for _, payload in batch])
         except Exception as error:
             # Already answered 200, so there is nobody to raise to. Moved aside
-            # rather than dropped: it stays readable, and it stops holding
-            # Search open for a chunk that will not write.
+            # rather than dropped: they stay readable, and they stop holding
+            # Search open for chunks that will not write.
             _record("add-failed", began,
                     reason=f"{type(error).__name__}: {error}"[:300],
-                    user=payload.user_id, file=path.name)
+                    user=batch[0][1].user_id, chunks=len(batch))
             refused = folder / "refused"
             refused.mkdir(exist_ok=True)
-            path.rename(refused / path.name)
+            for path, _ in batch:
+                path.rename(refused / path.name)
             continue
-        path.unlink(missing_ok=True)
-        written += 1
+        for path, _ in batch:
+            path.unlink(missing_ok=True)
+        written += len(batch)
         (folder / "busy").touch()  # the claim is still held by a live process
-    return written
 
 
 def _drain_forever() -> None:
@@ -488,8 +555,42 @@ def _wait_for_writes(user_id: str) -> tuple[float, int]:
         time.sleep(0.25)
 
 
-def _ingest(payload: AddRequest) -> None:
-    workspace = _workspace(payload.user_id)
+def _session_of(payload: AddRequest) -> dict[str, Any]:
+    """One chunk in the shape the writer reads it in.
+
+    refs are the per-turn citation handles the writer footnotes against.
+    Scriptorium accepts `provider/thread/message`, which maps cleanly onto the
+    platform's identifiers: the source session becomes the thread and each
+    message is addressed within its chunk.
+    """
+    thread = _ref_component(payload.session_id)
+    chunk = _ref_component(payload.request_id)
+    return {
+        "observation_date": _observation_date(payload.messages),
+        "turns": [(message.role, message.content) for message in payload.messages],
+        "refs": [
+            f"leaderboard/{thread}/{chunk}-{position}"
+            for position, _ in enumerate(payload.messages)
+        ],
+    }
+
+
+def _ingest(payloads: list[AddRequest]) -> None:
+    """Write a run of one user's chunks, together.
+
+    The writer reads every chunk it is given at once and commits them in one
+    transaction, so a batch costs about what its slowest chunk costs rather
+    than the sum. One at a time, a conversation of five hundred chunks was
+    five hundred model calls end to end; the caller sends them in a minute and
+    would have waited most of an hour to ask its first question.
+
+    They still commit in the order they arrived: the facts are staged in the
+    order the chunks are passed, which is what recency is read from.
+    """
+    if not payloads:
+        return
+    first = payloads[0]
+    workspace = _workspace(first.user_id)
     arrived = time.monotonic()
     # Chunks of one conversation arrive concurrently and commit through one
     # transaction, so they queue here. That wait is the caller's deadline being
@@ -500,46 +601,33 @@ def _ingest(payload: AddRequest) -> None:
     # makes it safe to serve from more than one. Committing a write is Python
     # walking the whole workspace, and one interpreter runs one of those at a
     # time however many requests are in flight, so the server runs several.
-    with _user_lock(payload.user_id), workspace_write_lock(
+    with _user_lock(first.user_id), workspace_write_lock(
         workspace, timeout_s=ADD_SECONDS
     ):
         ensure_workspace(workspace)
         # A caller that did not hear the answer sends the chunk again. Reading
         # it a second time costs another model pass and files the same facts
-        # twice, and a retry that is as slow as the call it is retrying keeps
-        # missing whatever deadline lost the first one. The work is already
-        # committed; say so and return.
-        if _already_written(workspace, payload.request_id):
-            _record(
-                "add-repeat", arrived,
-                messages=len(payload.messages), user=payload.user_id,
-            )
-            return
-        turns = [(m.role, m.content) for m in payload.messages]
-        # refs are the per-turn citation handles the writer footnotes against.
-        # Scriptorium accepts `provider/thread/message`, which maps cleanly onto
-        # the platform's identifiers: the source session becomes the thread and
-        # each message is addressed within its chunk.
-        thread = _ref_component(payload.session_id)
-        chunk = _ref_component(payload.request_id)
-        refs = [
-            f"leaderboard/{thread}/{chunk}-{position}"
-            for position, _ in enumerate(payload.messages)
+        # twice. The work is already committed; drop it and write the rest.
+        fresh = [
+            payload for payload in payloads
+            if not _already_written(workspace, payload.request_id)
         ]
+        repeats = len(payloads) - len(fresh)
+        if repeats:
+            _record("add-repeat", arrived, chunks=repeats, user=first.user_id)
+        if not fresh:
+            return
         began = time.monotonic()
         waited = began - arrived
         written = write_sessions_in_parallel(
             workspace,
             agent=_agent(),
-            sessions=[{
-                "observation_date": _observation_date(payload.messages),
-                "turns": turns,
-                "refs": refs,
-            }],
-            # A flat ceiling per chunk. It used to be whatever was left of the
-            # caller's deadline, which was right while the caller was holding
-            # the connection open; now that it is not, a chunk that sat in the
-            # queue would have been given a second to write in.
+            sessions=[_session_of(payload) for payload in fresh],
+            # A flat ceiling per chunk, and the chunks of a batch read at the
+            # same time, so this is the batch's ceiling too. It used to be
+            # whatever was left of the caller's deadline, which was right while
+            # the caller was holding the connection open; now that it is not, a
+            # chunk that sat in the queue would have been given a second.
             config=replace(MEMORY_CONFIG, max_seconds=READ_SECONDS),
         )
         # write_sessions reports an audit trail; its closing row carries what
@@ -550,17 +638,19 @@ def _ingest(payload: AddRequest) -> None:
         )
         # Recorded only now, so a pass that raised is retried rather than
         # remembered as done.
-        _mark_written(workspace, payload.request_id)
+        for payload in fresh:
+            _mark_written(workspace, payload.request_id)
         _record(
             "add", arrived,
+            chunks=len(fresh),
             waited=round(waited, 2),
             turns=closing.get("rounds"),
             reading=closing.get("reading_seconds"),
             input_tokens=closing.get("input_tokens"),
             output_tokens=closing.get("output_tokens"),
             stop=closing.get("reason"),
-            messages=len(payload.messages),
-            user=payload.user_id,
+            messages=sum(len(payload.messages) for payload in fresh),
+            user=first.user_id,
         )
         # Nothing to invalidate: retrieval rebuilds its index from the
         # workspace on every call, so a committed write is visible to the

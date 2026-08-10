@@ -26,11 +26,19 @@ def queue(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def chunk(request_id: str, user: str = "u1", text: str = "hello") -> AddRequest:
+def chunk(
+    request_id: str,
+    user: str = "u1",
+    text: str = "hello",
+    stamp: int | None = None,
+) -> AddRequest:
     return AddRequest(
         request_id=request_id, user_id=user, session_id="s1",
-        messages=[Message(role="user", content=text)],
+        messages=[Message(role="user", content=text, timestamp=stamp)],
     )
+
+
+DAY = 86_400_000  # one day, in the milliseconds the platform stamps with
 
 
 def test_a_queued_chunk_is_waiting_for_its_user(queue: Path) -> None:
@@ -92,6 +100,32 @@ def test_a_claim_left_by_a_dead_writer_is_taken_back(
     assert server._claim(folder), "and the next one takes it"
 
 
+def test_a_claim_left_by_a_restart_is_taken_back_at_once(queue: Path) -> None:
+    """A restart must not stall writing until the claim clock runs out.
+
+    Killing a build left every user in flight claimed by a process that no
+    longer exists, and the next build wrote nothing until those claims aged
+    out: five minutes of a thirteen minute window, spent on nothing.
+    """
+    folder = queue / "u1"
+    folder.mkdir(parents=True)
+    # A pid that is not running. Claimed just now, so the clock says nothing.
+    (folder / "busy").write_text("2147483646", encoding="utf-8")
+
+    assert not server._claim(folder), "the first attempt clears it"
+    assert server._claim(folder), "and the next one takes it straight away"
+
+
+def test_a_claim_held_by_a_live_writer_is_left_alone(queue: Path) -> None:
+    folder = queue / "u1"
+    folder.mkdir(parents=True)
+
+    assert server._claim(folder)  # ours, and we are running
+
+    assert not server._claim(folder)
+    assert (folder / "busy").exists(), "not cleared while its holder lives"
+
+
 def test_search_waits_for_what_is_still_queued(
     queue: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -150,12 +184,55 @@ def test_a_written_chunk_leaves_the_queue(
     queue: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     server._enqueue(chunk("r1"))
+    time.sleep(0.002)
     server._enqueue(chunk("r2"))
-    seen: list[str] = []
-    monkeypatch.setattr(server, "_ingest", lambda p: seen.append(p.request_id))
+    seen: list[list[str]] = []
+    monkeypatch.setattr(
+        server, "_ingest", lambda batch: seen.append([p.request_id for p in batch])
+    )
 
     written = server._drain_user(queue / "u1")
 
     assert written == 2
-    assert seen == ["r1", "r2"], "in order"
+    assert seen == [["r1", "r2"]], "written together, in order"
     assert server._queued("u1") == []
+
+
+def test_a_batch_is_bounded(queue: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every chunk in a batch reads at once, so the batch is the call count."""
+    monkeypatch.setattr(server, "BATCH_CHUNKS", 3)
+    for number in range(7):
+        server._enqueue(chunk(f"r{number}"))
+        time.sleep(0.002)
+    seen: list[list[str]] = []
+    monkeypatch.setattr(
+        server, "_ingest", lambda batch: seen.append([p.request_id for p in batch])
+    )
+
+    written = server._drain_user(queue / "u1")
+
+    assert written == 7
+    assert seen == [["r0", "r1", "r2"], ["r3", "r4", "r5"], ["r6"]]
+
+
+def test_a_batch_stops_at_a_change_of_day(
+    queue: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The writer stamps a batch with the date of its first chunk.
+
+    Carrying one day's date onto the next day's facts would put them on the
+    wrong date in a memory whose questions are largely about when.
+    """
+    for number, stamp in enumerate([DAY, DAY, 2 * DAY, 2 * DAY]):
+        server._enqueue(chunk(f"r{number}", stamp=stamp))
+        time.sleep(0.002)
+    seen: list[list[str]] = []
+    monkeypatch.setattr(
+        server, "_ingest", lambda batch: seen.append([p.request_id for p in batch])
+    )
+
+    server._drain_user(queue / "u1")
+
+    assert seen == [["r0", "r1"], ["r2", "r3"]]
+    dates = {server._observation_date(p.messages) for p in [chunk("x", stamp=DAY)]}
+    assert dates, "the date is what the grouping is on"
