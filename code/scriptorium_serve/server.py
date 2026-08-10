@@ -280,14 +280,19 @@ def _already_written(workspace: Path, request_id: str) -> bool:
     handled = _handled_requests(workspace)
     if not handled.is_file():
         return False
-    return request_id in handled.read_text(encoding="utf-8").split("\n")
+    return _ref_component(request_id) in handled.read_text(
+        encoding="utf-8"
+    ).split("\n")
 
 
 def _mark_written(workspace: Path, request_id: str) -> None:
+    # Kept in the form the citations use, which is what makes the record
+    # recoverable: every chunk already written names itself in the sources it
+    # archived, so a workspace that predates this file can be given one.
     handled = _handled_requests(workspace)
     handled.parent.mkdir(parents=True, exist_ok=True)
     with handled.open("a", encoding="utf-8") as record:
-        record.write(f"{request_id}\n")
+        record.write(f"{_ref_component(request_id)}\n")
 
 
 def _ingest(payload: AddRequest) -> None:

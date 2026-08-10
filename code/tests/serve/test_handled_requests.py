@@ -34,6 +34,21 @@ def test_ids_sharing_a_prefix_stay_apart(tmp_path: Path) -> None:
     assert not _already_written(tmp_path, "req")
 
 
+def test_an_id_is_recognised_through_the_form_citations_use(tmp_path: Path) -> None:
+    """The record holds the citation form, so a backfill can write it.
+
+    A workspace written before this file existed can still be given one: the
+    chunk that wrote it named itself in every source it archived, and that
+    name is the request ID with the characters a reference cannot carry
+    replaced. Recognising a repeat has to go through the same replacement.
+    """
+    _mark_written(tmp_path, "eval:run7:session-2:chunk-1")
+
+    text = _handled_requests(tmp_path).read_text(encoding="utf-8")
+    assert "eval-run7-session-2-chunk-1" in text, "stored as a reference names it"
+    assert _already_written(tmp_path, "eval:run7:session-2:chunk-1")
+
+
 def test_the_record_is_not_part_of_the_memory(tmp_path: Path) -> None:
     """It must not make a stage look dirty, or every commit installs nothing.
 
