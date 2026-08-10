@@ -59,10 +59,14 @@ class MemoryWorkspace(
         self.committed = False
         self.last_changed_topics: list[str] = []
         self.last_created_blocks = 0
+        self._anchors_by_source: dict[Path, set[str]] = {}
         if stage:
             self._refresh_stage()
 
     def _refresh_stage(self) -> None:
+        # The stage is about to be rebuilt from the workspace, so anything
+        # remembered about what is staged no longer describes it.
+        self._anchors_by_source = {}
         # Staged sources are chmod'd read-only, so restore write access before
         # removing the tree: on some systems the file's own mode blocks it.
         sources = self.stage_dir / "sources"
@@ -116,7 +120,7 @@ class MemoryWorkspace(
         before = self._workspace_fingerprint()
         before_topics = self._topic_fingerprints(self.stage_dir / "topics")
         before_sources = self._tree_fingerprint(self.stage_dir / "sources")
-        before_units = parse_topic_tree(self.stage_dir / "topics")
+        before_units = self._staged_units()
         before_block_ids = {unit.memory_id for unit in before_units}
         core = self.stage_dir / "core.md"
         if core.is_file():
@@ -151,7 +155,7 @@ class MemoryWorkspace(
         the paragraphs it can still parse seed the "existing IDs" a repair
         must not drop, instead of the snapshot itself refusing to be taken.
         """
-        units = parse_topic_tree(self.stage_dir / "topics", strict=strict)
+        units = self._staged_units(strict=strict)
         block_ids = {unit.memory_id for unit in units}
         core = self.stage_dir / "core.md"
         if core.is_file():
@@ -187,7 +191,7 @@ class MemoryWorkspace(
             self._normalize_topic_edits(before_block_ids)
             self._validate_topic_contract(before_units, before_block_ids)
             self._synchronize()
-            after_units = parse_topic_tree(self.stage_dir / "topics")
+            after_units = self._staged_units()
             after_topics = self._topic_fingerprints(self.stage_dir / "topics")
             self.last_changed_topics = [
                 "topics/" + path

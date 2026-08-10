@@ -19,6 +19,9 @@ from ..markdown import (
 from ..markdown.syntax import SINGLE_CITATION, definitions
 from .layout import runtime_dir
 
+# The anchor an archived source carries for each turn it holds.
+ANCHOR_ID = re.compile(r'<a id="([^"]+)"></a>')
+
 
 class BlockViewsMixin:
     def _synchronize(self) -> str:
@@ -36,23 +39,43 @@ class BlockViewsMixin:
                 )
             self._validate_core_sources(core)
         return self._synchronize_block_topics(
-            parse_topic_tree(self.stage_dir / "topics")
+            self._staged_units()
         )
+
+    def _source_anchors(self, source: Path) -> set[str]:
+        """Every anchor in one archived source, read once and kept.
+
+        Checking a reference used to read the whole source file and search it
+        for one anchor, and a commit checks every reference in the workspace:
+        a grown memory has thousands of them against a handful of source
+        files, so the same few hundred kilobytes were read and scanned
+        thousands of times per Add. Reading each file once and asking a set
+        answers the same question. Sources are archived before the stage is
+        taken and never change inside a pass, so the answers stay good for as
+        long as this workspace object lives.
+        """
+        remembered = self._anchors_by_source.get(source)
+        if remembered is None:
+            remembered = (
+                set(ANCHOR_ID.findall(source.read_text(encoding="utf-8")))
+                if source.is_file() else set()
+            )
+            self._anchors_by_source[source] = remembered
+        return remembered
 
     def _validate_source_reference(self, ref: str) -> None:
         legacy = re.fullmatch(r"D(\d+):(\d+)", ref)
         if legacy:
             conversation, turn = legacy.groups()
             source = self.stage_dir / "sources" / f"D{conversation}.md"
-            anchor = f'<a id="d{conversation}-{turn}"></a>'
+            anchor = f"d{conversation}-{turn}"
         else:
             location = self._provider_source_location(ref)
             if location is None:
                 raise ValueError(f"invalid source reference: {ref}")
-            relative, source_anchor = location
+            relative, anchor = location
             source = self.stage_dir / relative
-            anchor = f'<a id="{source_anchor}"></a>'
-        if not source.exists() or anchor not in source.read_text(encoding="utf-8"):
+        if anchor not in self._source_anchors(source):
             raise ValueError(f"missing source reference: {ref}")
 
     def _validate_core_sources(self, core: Path) -> None:
@@ -147,7 +170,7 @@ class BlockViewsMixin:
 
     def _synchronize_block_topics(self, units: list[Any]) -> str:
         self._rewrite_block_links(units)
-        units = parse_topic_tree(self.stage_dir / "topics")
+        units = self._staged_units()
         ids = {unit.memory_id for unit in units}
         for unit in units:
             missing_targets = set(unit.relation_targets) - ids

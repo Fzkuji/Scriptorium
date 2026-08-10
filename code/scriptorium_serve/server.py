@@ -40,6 +40,7 @@ from memory.agent_runtime import (
     OpenAIWriterAgent,
 )
 from memory.management import MemoryConfig
+from memory.workspace.transaction import workspace_write_lock
 from memory.writing.parallel import write_sessions_in_parallel
 from memory.retrieval import QueryConfig, nearest, read
 from scriptorium.cli import ensure_workspace
@@ -271,7 +272,14 @@ def _ingest(payload: AddRequest) -> None:
     # transaction, so they queue here. That wait is the caller's deadline being
     # spent before any work starts, which is why the budget is measured from
     # arrival rather than from the top of the write.
-    with _user_lock(payload.user_id):
+    # The in-process lock keeps this server's own requests for one user off
+    # each other; the file lock does the same across processes, which is what
+    # makes it safe to serve from more than one. Committing a write is Python
+    # walking the whole workspace, and one interpreter runs one of those at a
+    # time however many requests are in flight, so the server runs several.
+    with _user_lock(payload.user_id), workspace_write_lock(
+        workspace, timeout_s=ADD_SECONDS
+    ):
         ensure_workspace(workspace)
         turns = [(m.role, m.content) for m in payload.messages]
         # refs are the per-turn citation handles the writer footnotes against.

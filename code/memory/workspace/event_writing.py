@@ -166,7 +166,7 @@ class EventWritingMixin:
 
     def save_memory(self, events: list[dict[str, Any]]) -> str:
         rows = []
-        existing = parse_topic_tree(self.stage_dir / "topics")
+        existing = self._staged_units()
         used = {unit.memory_id for unit in existing}
         identities = {
             (unit.when, unit.content, unit.source_refs): unit.memory_id

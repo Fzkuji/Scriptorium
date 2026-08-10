@@ -26,6 +26,26 @@ def _is_local_label(value: str) -> bool:
 
 
 class TopicNormalizationMixin:
+    def _staged_units(self, *, strict: bool = True) -> list[Any]:
+        """The staged topic tree, parsed once however often it is asked for.
+
+        Committing one write asks for it four times over — to take a
+        baseline, to normalize, to synchronize, and to see what changed — and
+        every parse walks every topic file in the memory: 324 files and
+        200,000 regex matches in a grown workspace, four times, per Add. The
+        stat marks say whether anything has been written since the last
+        parse, so the three that follow a parse reuse it, and rewriting block
+        links, which is the step that does write, invalidates it by itself.
+        """
+        topics = self.stage_dir / "topics"
+        mark = (self._topic_fingerprints(topics), strict)
+        if getattr(self, "_parsed_mark", None) != mark:
+            self._parsed_units = parse_topic_tree(topics, strict=strict)
+            self._parsed_mark = mark
+        # A copy, so a caller that sorts or filters what it gets back is not
+        # editing what the next caller will be handed.
+        return list(self._parsed_units)
+
     @staticmethod
     def _topic_fingerprints(root: Path) -> dict[str, str]:
         """A mark per topic file, for spotting which ones a write changed.
@@ -314,7 +334,7 @@ class TopicNormalizationMixin:
         ID that existed before the edit must still be findable after it.
         """
         before = {unit.memory_id: unit for unit in before_units}
-        units = parse_topic_tree(self.stage_dir / "topics")
+        units = self._staged_units()
         if before_block_ids:
             surviving = {unit.memory_id for unit in units}
             core = self.stage_dir / "core.md"
