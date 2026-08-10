@@ -164,6 +164,43 @@ def _stage(
         asyncio.run(remember.handler(fact))
 
 
+def _install_by_halves(
+    workspace: MemoryWorkspace,
+    audit: list[dict[str, Any]],
+    observed: str,
+    facts: list[dict],
+) -> int:
+    """Install what can be installed, isolating what cannot. Returns the losses.
+
+    A commit parses every topic file in the workspace and re-checks every
+    source reference, so it costs the whole memory once however much it
+    installs. Retrying a refused batch one fact at a time therefore costs the
+    memory once per fact: on a workspace grown to six thousand topics that was
+    one batch holding the write lock for eight and a half minutes, against
+    nineteen seconds of reading, and the batches queued behind it timed out and
+    were discarded.
+
+    Halving pays that cost a handful of times instead of a couple of hundred:
+    one bad fact among two hundred and fifty is found in about seventeen
+    commits. The good facts on either side of it are installed, which is the
+    same outcome the slow version reached.
+    """
+    workspace._refresh_stage()
+    baseline = _baseline(workspace)
+    _stage(workspace, audit, observed, facts, commit_each=False)
+    if not _commit_turn(workspace, baseline, audit):
+        return 0
+    if len(facts) == 1:
+        # This is the one the memory refused. Leaving it out is what lets the
+        # rest of the batch land.
+        return 1
+    middle = len(facts) // 2
+    return (
+        _install_by_halves(workspace, audit, observed, facts[:middle])
+        + _install_by_halves(workspace, audit, observed, facts[middle:])
+    )
+
+
 def write_sessions_in_parallel(
     memory_dir: str | Path,
     *,
@@ -205,20 +242,19 @@ def write_sessions_in_parallel(
         everything = [fact for facts, _ in found for fact in facts]
         _stage(workspace, audit, observed, everything, commit_each=False)
         error = _commit_turn(workspace, baseline, audit)
+        lost = 0
         if error:
             # The batch was refused whole, and one malformed fact is enough to
-            # do that. Redo it a transaction at a time so the refusal costs
-            # only the fact that earned it.
-            workspace._refresh_stage()
-            baseline = _baseline(workspace)
-            _stage(workspace, audit, observed, everything, commit_each=True)
-            error = _commit_turn(workspace, baseline, audit)
+            # do that. Find it by halving rather than by retrying every fact on
+            # its own, which costs the whole workspace once per fact.
+            lost = _install_by_halves(workspace, audit, observed, everything)
 
         spent = [usage for _, usage in found]
         audit.append({
             "tool": "agent",
-            "status": "rejected" if error else "ok",
-            "reason": "rejected" if error else "complete",
+            "status": "rejected" if lost else "ok",
+            "reason": "rejected" if lost else "complete",
+            "refused_facts": lost,
             "rounds": len(prompts),
             # How much of the pass was the endpoint. The rest is this
             # side: staging, the commit, and whatever the machine was

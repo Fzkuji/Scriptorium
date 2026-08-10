@@ -498,6 +498,14 @@ def _drain_user(folder: Path) -> int:
         began = time.monotonic()
         try:
             _ingest([payload for _, payload in batch])
+        except TransactionError as error:
+            # Someone else holds the workspace, which is a wait rather than a
+            # refusal: one batch that took eight minutes to commit made every
+            # batch behind it time out, and discarding those threw away eight
+            # chunks that nothing was wrong with. Leave them queued.
+            _record("add-deferred", began, reason=str(error)[:200],
+                    user=batch[0][1].user_id, chunks=len(batch))
+            return written
         except Exception as error:
             # Already answered 200, so there is nobody to raise to. Moved aside
             # rather than dropped: they stay readable, and they stop holding

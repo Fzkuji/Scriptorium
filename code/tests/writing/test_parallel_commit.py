@@ -101,7 +101,33 @@ def test_a_refused_fact_does_not_cost_the_others(tmp_path: Path) -> None:
     assert "Person 0 moved to Berlin" in written
     assert "Person 2 moved to Berlin" in written
     assert "Person 1 moved to Berlin" not in written
-    assert any(
-        row.get("tool") == "remember" and row.get("status") == "error"
-        for row in audit
-    ), "the refusal is still reported"
+    closing = next(row for row in reversed(audit) if row.get("tool") == "agent")
+    assert closing["refused_facts"] == 1, "the refusal is still reported"
+    assert closing["status"] == "rejected"
+
+
+def test_finding_a_refused_fact_costs_a_handful_of_commits_not_one_each(
+    tmp_path: Path,
+) -> None:
+    """Halving, because a commit costs the whole workspace however small it is.
+
+    Retrying every fact on its own made one refusal cost one full validation
+    per fact: on a memory grown to six thousand topics, a batch spent eight and
+    a half minutes holding the write lock against nineteen seconds of reading,
+    and everything queued behind it timed out.
+    """
+    facts = [_fact(number) for number in range(16)]
+    facts[9] = _fact(9, sources=["nowhere/at/all"])
+
+    audit = _audit_for(tmp_path, facts)
+
+    commits = [row for row in audit if row.get("tool") == "commit"]
+    assert len(commits) <= 12, f"halving, not one per fact: {len(commits)}"
+
+    written = " ".join(
+        path.read_text(encoding="utf-8")
+        for path in (tmp_path / "topics").rglob("*.md")
+    )
+    assert "Person 9 moved to Berlin" not in written
+    for number in [n for n in range(16) if n != 9]:
+        assert f"Person {number} moved to Berlin" in written, number
