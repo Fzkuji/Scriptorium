@@ -3,6 +3,9 @@
 import time
 from types import SimpleNamespace
 
+import pytest
+
+from memory.agent_runtime import openai_agent
 from memory.agent_runtime.openai_agent import OpenAIAgentConfig, OpenAIWriterAgent
 
 
@@ -53,6 +56,17 @@ def _run(client: _NeverFinishes, tmp_path, **limits):
     )
 
 
+@pytest.fixture
+def brisk(monkeypatch):
+    """Shrink the floor under one call so budgets can be expressed in tests.
+
+    Production sizes it for a real endpoint, where anything under twenty
+    seconds cannot land. A test that waited that out would say the same thing
+    a thousand times slower.
+    """
+    monkeypatch.setattr(openai_agent, "_MINIMUM_CALL_SECONDS", 0.02)
+
+
 def test_the_turn_ceiling_stops_a_loop_that_would_not_stop_itself(tmp_path):
     result = _run(_NeverFinishes(), tmp_path, max_turns=4)
 
@@ -60,7 +74,7 @@ def test_the_turn_ceiling_stops_a_loop_that_would_not_stop_itself(tmp_path):
     assert result.num_turns == 4
 
 
-def test_a_spent_wall_clock_budget_stops_the_loop_before_the_turn_ceiling(tmp_path):
+def test_a_spent_wall_clock_budget_stops_the_loop_before_the_turn_ceiling(brisk, tmp_path):
     client = _NeverFinishes(seconds_per_turn=0.05)
 
     result = _run(client, tmp_path, max_turns=50, max_seconds=0.12)
@@ -75,15 +89,38 @@ def test_a_spent_wall_clock_budget_stops_the_loop_before_the_turn_ceiling(tmp_pa
     assert client.timeouts and max(client.timeouts) <= 0.12
 
 
-def test_the_budget_never_costs_the_first_turn(tmp_path):
-    """A caller that arrives with no time left still gets one attempt.
+def test_a_call_that_ignores_its_own_timeout_is_abandoned_on_the_clock(brisk, tmp_path):
+    """The client's timeout is an idle timeout, so it is not the bound.
 
-    The alternative is an Add that reports success having written nothing,
-    which is worse than answering late.
+    A gateway that keeps the connection warm while an upstream model generates
+    resets it on every read; one production call ran 786s against a 180s
+    setting. This stub does the same thing: it is handed a timeout and ignores
+    it.
     """
-    client = _NeverFinishes(seconds_per_turn=0.05)
+    class _IgnoresTimeout(_NeverFinishes):
+        def create(self, **_: object):
+            time.sleep(5)
+            raise AssertionError("the loop waited for a call it should have dropped")
+
+    began = time.monotonic()
+    result = _run(_IgnoresTimeout(), tmp_path, max_turns=4, max_seconds=0.3)
+
+    assert result.stop_reason == "max_seconds"
+    assert time.monotonic() - began < 3
+    assert result.num_turns == 0
+
+
+def test_a_budget_already_spent_still_grants_the_first_turn_the_floor(brisk, tmp_path):
+    """The first turn is the only chance the pass has to write anything.
+
+    So it is granted the floor even when the caller's budget was gone before
+    the pass began, and a call that fits inside the floor lands. The
+    alternative is an Add that reports success having written nothing.
+    """
+    client = _NeverFinishes(seconds_per_turn=0.005)
 
     result = _run(client, tmp_path, max_turns=50, max_seconds=0.0001)
 
     assert result.num_turns == 1
     assert client.calls == 1
+    assert client.timeouts == [0.02]

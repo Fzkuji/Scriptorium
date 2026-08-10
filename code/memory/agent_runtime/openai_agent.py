@@ -12,6 +12,7 @@ and the transaction rules are all unchanged — only the model transport differs
 from __future__ import annotations
 
 import json
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,45 @@ from .claude_code import AgentExecutionError, AgentResult
 # A call given less than this has no chance of returning, and cutting the first
 # turn off leaves the pass with nothing to commit at all.
 _MINIMUM_CALL_SECONDS = 20.0
+
+
+class _CallOverran(Exception):
+    """One endpoint call outlived the time the caller had left for it."""
+
+
+def _within(seconds: float | None, call: Any) -> Any:
+    """Run ``call``, giving up on it once ``seconds`` have passed.
+
+    The client's own timeout does not bound this. It is an idle timeout: a
+    gateway that trickles bytes, or sends keepalives while an upstream model
+    generates, resets it on every read, and one measured call ran 786s against
+    a 180s setting. Only the wall clock bounds a wall clock, so the call runs
+    on a thread this one stops waiting for.
+
+    The abandoned thread finishes into nothing. That wastes the tokens the
+    call had already earned, which is the price of answering the caller who is
+    still holding the line — and at 18 abandonments in 768 writes, it is a
+    price worth paying.
+    """
+    if seconds is None:
+        return call()
+
+    outcome: dict[str, Any] = {}
+
+    def settle() -> None:
+        try:
+            outcome["value"] = call()
+        except BaseException as exc:  # carried back to the waiting thread
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=settle, daemon=True)
+    worker.start()
+    worker.join(seconds)
+    if worker.is_alive():
+        raise _CallOverran(f"no response within {seconds:.0f}s")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
 
 
 @dataclass(frozen=True)
@@ -135,16 +175,15 @@ class OpenAIWriterAgent:
             if max_seconds is not None:
                 left = max_seconds - (time.time() - started)
                 # Too little left to be worth a round trip: stop here rather
-                # than spend the remainder on a call that cannot land. The
-                # headroom is capped at a third of the budget, so a short
-                # budget still buys more than its first turn, and the floor
-                # never exceeds the budget the caller allowed.
-                floor = min(_MINIMUM_CALL_SECONDS, max_seconds / 3)
-                if turns > 1 and left < floor:
+                # than spend the remainder on a call that cannot land.
+                if turns > 1 and left < _MINIMUM_CALL_SECONDS:
                     turns -= 1
                     stop_reason = "max_seconds"
                     break
-                left = max(floor, left)
+                # The first turn is the only chance this pass has to write
+                # anything, so it gets the floor even when that overruns a
+                # budget already spent before the pass began.
+                left = max(_MINIMUM_CALL_SECONDS, left)
 
             client = self._client
             if left is not None:
@@ -154,13 +193,13 @@ class OpenAIWriterAgent:
                 client = client.with_options(timeout=left, max_retries=0)
             call_started = time.time()
             try:
-                response = client.chat.completions.create(
+                response = _within(left, lambda: client.chat.completions.create(
                     model=self.config.model,
                     messages=messages,
                     tools=schemas or None,
                     temperature=self.config.temperature,
-                )
-            except APITimeoutError:
+                ))
+            except (APITimeoutError, _CallOverran):
                 # Out of time. Earlier turns already wrote through the tools,
                 # so the pass reports what it got instead of failing whole.
                 api_ms += int((time.time() - call_started) * 1000)
