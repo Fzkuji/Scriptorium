@@ -74,16 +74,16 @@ WRITER_API_KEY = os.environ.get("SCRIPTORIUM_WRITER_API_KEY", "")
 # call as well as the turn count: a turn that cannot finish inside what is
 # left ends the pass, and everything earlier turns wrote stays committed.
 #
-# Three minutes, where this first carried seventy-five seconds. That number
-# was chosen to clear a hundred-second ceiling read as the platform's, and
-# measurement put it elsewhere: one 130s request answers 524 after 125s
-# through a Cloudflare quick tunnel and 200 after 130s through plain SSH
-# forwarding, and this service reached straight through the VPS had served
-# Adds of 545s without one being dropped. The tunnel is out of the path now,
-# so the budget only has to stop a write from hanging, and an ordinary write —
-# 39s for a four-turn pass — never reaches it.
+# Ninety seconds, which is where the caller's own patience puts it. A
+# Cloudflare quick tunnel used to cut this path at a hundred seconds and was
+# taken out of it; the proxy's log then showed the platform still hanging up
+# on 135 of 1493 Adds, nine per cent, against nine to ten per cent of that
+# hour's writes running past 120s. Two counts agreeing puts the caller's
+# limit near two minutes, so the budget sits below it with room for staging
+# and the hop, and an ordinary write — 39s for a four-turn pass — never
+# reaches it.
 MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True, max_turns=6)
-ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "180"))
+ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "90"))
 
 # Retrieval is one shot here, so the agent is given room to look more than
 # once; the caller's own timeout is the real ceiling. Source verification is
@@ -305,11 +305,32 @@ def _ingest(payload: AddRequest) -> None:
 async def add(payload: AddRequest, _: None = Depends(_authorize)) -> dict[str, Any]:
     if not payload.messages:
         raise HTTPException(status_code=400, detail="messages must not be empty")
-    if any(not m.content.strip() for m in payload.messages):
-        raise HTTPException(status_code=400, detail="content must not be empty")
+    # A blank message is a fact about the benchmark's transcript, not a fault
+    # in the request, and rejecting the chunk it arrived in threw away the
+    # nineteen good messages beside it: 484 chunks in one run, each read by
+    # the caller as a failed ingest. Drop the blanks and write the rest.
+    usable = [message for message in payload.messages if message.content.strip()]
+    blank = len(payload.messages) - len(usable)
+    payload.messages = usable
+    if blank:
+        _record("blanks", time.monotonic(), dropped=blank, user=payload.user_id)
+    if not payload.messages:
+        # Nothing to commit, so nothing to be retrievable, and the caller is
+        # owed the same answer either way.
+        return {
+            "success": True,
+            "request_id": payload.request_id,
+            "user_id": payload.user_id,
+            "session_id": payload.session_id,
+        }
+    began = time.monotonic()
     try:
         await run_in_threadpool(_ingest, payload)
     except AgentExecutionError as error:
+        # A refused write left no usage line, so a run could fail on hundreds
+        # of them against a log that showed only the successes. It is the
+        # failures that need reading.
+        _record("add-failed", began, reason=str(error)[:300], user=payload.user_id)
         raise HTTPException(status_code=502, detail=str(error)) from error
     return {
         "success": True,

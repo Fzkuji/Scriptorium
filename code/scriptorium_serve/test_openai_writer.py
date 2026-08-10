@@ -212,3 +212,54 @@ def test_api_key_is_redacted_from_errors() -> None:
         with pytest.raises(AgentExecutionError) as caught:
             agent.run(prompt="p", system_prompt="s", cwd=cwd, tools=[])
     assert "sk-secret-123" not in str(caught.value)
+
+
+def test_a_blank_message_does_not_cost_the_chunk_it_arrived_in(tmp_path, monkeypatch):
+    """The benchmark's transcripts carry blank turns; the good ones travel with them.
+
+    Rejecting the whole chunk read to the caller as a failed ingest, 484 times
+    in one run, and threw away the nineteen messages beside each blank.
+    """
+    from fastapi.testclient import TestClient
+
+    from scriptorium_serve import server
+
+    monkeypatch.setattr(server, "WORKSPACE_ROOT", tmp_path)
+    monkeypatch.setattr(server, "SERVICE_TOKEN", "")
+    written: list[int] = []
+    monkeypatch.setattr(server, "_ingest", lambda payload: written.append(len(payload.messages)))
+
+    client = TestClient(server.app)
+    answer = client.post("/add", json={
+        "request_id": "r1",
+        "user_id": "u1",
+        "session_id": "s1",
+        "messages": [
+            {"role": "user", "content": "I moved to Berlin in March."},
+            {"role": "assistant", "content": "   "},
+            {"role": "user", "content": "The flat is near Tempelhof."},
+        ],
+    })
+
+    assert answer.status_code == 200
+    assert written == [2], "the blank is dropped and the other two are written"
+
+
+def test_a_chunk_that_is_entirely_blank_is_accepted_and_writes_nothing(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from scriptorium_serve import server
+
+    monkeypatch.setattr(server, "WORKSPACE_ROOT", tmp_path)
+    monkeypatch.setattr(server, "SERVICE_TOKEN", "")
+    written: list[int] = []
+    monkeypatch.setattr(server, "_ingest", lambda payload: written.append(len(payload.messages)))
+
+    client = TestClient(server.app)
+    answer = client.post("/add", json={
+        "request_id": "r2", "user_id": "u2", "session_id": "s2",
+        "messages": [{"role": "user", "content": " "}, {"role": "assistant", "content": ""}],
+    })
+
+    assert answer.status_code == 200
+    assert written == [], "nothing to commit, so nothing was committed"
