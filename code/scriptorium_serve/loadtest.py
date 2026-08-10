@@ -83,6 +83,13 @@ def corpus(workspaces: Path, per_chunk: int, limit: int) -> list[list[dict]]:
     return chunks
 
 
+# The platform reaches the service directly. This machine sits behind a local
+# proxy that urllib would honour from the environment, and a run through it
+# reported 502s the service never sent, so the test would have been measuring
+# the proxy.
+_direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def _post(base: str, path: str, token: str, body: dict, timeout: float) -> tuple[int, float, str]:
     request = urllib.request.Request(
         f"{base.rstrip('/')}{path}",
@@ -94,7 +101,7 @@ def _post(base: str, path: str, token: str, body: dict, timeout: float) -> tuple
     )
     began = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _direct.open(request, timeout=timeout) as response:
             response.read()
             return response.status, time.monotonic() - began, ""
     except urllib.error.HTTPError as error:
