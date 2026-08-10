@@ -40,7 +40,7 @@ from memory.agent_runtime import (
     OpenAIWriterAgent,
 )
 from memory.management import MemoryConfig
-from memory.workspace.transaction import workspace_write_lock
+from memory.workspace.transaction import TransactionError, workspace_write_lock
 from memory.writing.parallel import write_sessions_in_parallel
 from memory.retrieval import QueryConfig, nearest, read
 from scriptorium.cli import ensure_workspace
@@ -353,10 +353,12 @@ async def add(payload: AddRequest, _: None = Depends(_authorize)) -> dict[str, A
     began = time.monotonic()
     try:
         await run_in_threadpool(_ingest, payload)
-    except AgentExecutionError as error:
+    except (AgentExecutionError, TransactionError) as error:
         # A refused write left no usage line, so a run could fail on hundreds
         # of them against a log that showed only the successes. It is the
-        # failures that need reading.
+        # failures that need reading. TransactionError is here for the one the
+        # workspace lock raises when another worker has held the same user for
+        # the whole budget: rare, but a bare 500 is the wrong way to say it.
         _record("add-failed", began, reason=str(error)[:300], user=payload.user_id)
         raise HTTPException(status_code=502, detail=str(error)) from error
     return {
