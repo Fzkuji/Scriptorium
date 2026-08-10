@@ -93,6 +93,22 @@ WRITER_API_KEY = os.environ.get("SCRIPTORIUM_WRITER_API_KEY", "")
 MEMORY_CONFIG = MemoryConfig(few_shot_instructions=True, max_turns=6)
 ADD_SECONDS = float(os.environ.get("SCRIPTORIUM_ADD_SECONDS", "150"))
 
+# What one reading call may take, which is what decides how long an Add can
+# run: the local half is under a second and the rest is the endpoint.
+#
+# The ceiling matters more than the median. A caller runs a fixed number of
+# Adds at once, so a pass that takes eighty seconds holds one of those slots
+# for eighty seconds, and the chunks waiting behind it spend their own
+# deadline queued. At the far end that shows up as requests cancelled in the
+# same instant they were sent: measured at the packet level, a SYN, our
+# SYN-ACK one round trip later, and a reset with no payload acknowledged —
+# a request whose budget was gone before the connection finished opening.
+#
+# A call that overruns is not an error. The turns already taken wrote what
+# they found, and the pass reports them with `stop: max_seconds`, so the
+# cost of the ceiling is the facts the unfinished round would have added.
+READ_SECONDS = float(os.environ.get("SCRIPTORIUM_READ_SECONDS", "30"))
+
 # Retrieval is one shot here, so the agent is given room to look more than
 # once; the caller's own timeout is the real ceiling. Source verification is
 # off because the caller never sees a citation to check — it sees the memory.
@@ -344,7 +360,8 @@ def _ingest(payload: AddRequest) -> None:
                 "refs": refs,
             }],
             config=replace(
-                MEMORY_CONFIG, max_seconds=max(1.0, ADD_SECONDS - waited)
+                MEMORY_CONFIG,
+                max_seconds=min(READ_SECONDS, max(1.0, ADD_SECONDS - waited)),
             ),
         )
         # write_sessions reports an audit trail; its closing row carries what
