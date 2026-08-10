@@ -145,10 +145,13 @@ def test_add_writes_memory_and_search_returns_it(monkeypatch) -> None:
             "session_id": SESSION_ID,
         }
 
-        # Writing offers exactly one tool, and the model drove it. A shell or
-        # a whole-file writer here is latitude a weak model spends on
-        # rejected edits rather than on recording the conversation.
-        assert client.completions.seen_tools == ["remember", "update", "forget"]
+        # A served write only ever records, so recording is all it is offered.
+        # Across 1905 production passes the model called `remember` 14142
+        # times and `update` or `forget` not once; offering them here would be
+        # latitude a weak model spends on rejected edits instead of on the
+        # conversation, and keeping them would forbid reading the chunk in
+        # several groups at once, which is where its latency went.
+        assert client.completions.seen_tools == ["remember"]
 
         # Retrieval runs a model too, and it is a different job: read the
         # workspace and report the memory that bears on the query. Standing

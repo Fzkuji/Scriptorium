@@ -136,6 +136,10 @@ class OpenAIWriterAgent:
         max_seconds: float | None = None,
         max_budget_usd: float | None = None,
         output_schema: dict[str, Any] | None = None,
+        # Offer these schemas and hand the calls back instead of dispatching
+        # them. A pass that only reads has no handlers to run and wants the
+        # arguments themselves.
+        tool_schemas: list[dict[str, Any]] | None = None,
     ) -> AgentResult:
         if max_turns < 1:
             raise ValueError("max_turns must be positive")
@@ -145,7 +149,7 @@ class OpenAIWriterAgent:
         # The SDK tools are async callables carrying their own schema; keep a
         # lookup so tool calls can be dispatched by name.
         handlers = {definition.name: definition.handler for definition in (tools or [])}
-        schemas = _tool_schemas(tools or [])
+        schemas = tool_schemas or _tool_schemas(tools or [])
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
@@ -241,6 +245,18 @@ class OpenAIWriterAgent:
                     },
                 } for call in calls],
             })
+
+            if tool_schemas is not None:
+                # Reading, not editing: the caller asked what the model would
+                # record, and records it itself. Arguments come back whole,
+                # because here they are the answer rather than a note on how
+                # the turn went.
+                trajectory.extend({
+                    "tool": call.function.name,
+                    "arguments": call.function.arguments,
+                } for call in calls)
+                stop_reason = choice.finish_reason or "complete"
+                break
 
             for call in calls:
                 output = self._dispatch(handlers, call)

@@ -38,7 +38,8 @@ from memory.agent_runtime import (
     OpenAIAgentConfig,
     OpenAIWriterAgent,
 )
-from memory.management import MemoryConfig, write_sessions
+from memory.management import MemoryConfig
+from memory.writing.parallel import write_sessions_in_parallel
 from memory.retrieval import QueryConfig, nearest, read
 from scriptorium.cli import ensure_workspace
 
@@ -272,7 +273,7 @@ def _ingest(payload: AddRequest) -> None:
         ]
         began = time.monotonic()
         waited = began - arrived
-        written = write_sessions(
+        written = write_sessions_in_parallel(
             workspace,
             agent=_agent(),
             sessions=[{
