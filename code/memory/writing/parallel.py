@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -171,7 +172,10 @@ def write_sessions_in_parallel(
 ) -> list[dict[str, Any]]:
     """Read one chunk in several groups at once, record what they all found."""
     config = config or MemoryConfig()
-    workspace = MemoryWorkspace(memory_dir, config=config)
+    # Archiving writes into the workspace, so the stage has to be taken after
+    # it. Taking one on the way in as well copied every topic file in the
+    # memory for nothing.
+    workspace = MemoryWorkspace(memory_dir, config=config, stage=False)
     try:
         workspace.archive_sessions(sessions)
         workspace._refresh_stage()
@@ -188,10 +192,12 @@ def write_sessions_in_parallel(
 
         # Every group gets the whole budget, because they run together and the
         # pass is over when the slowest returns.
+        reading = time.monotonic()
         with ThreadPoolExecutor(max_workers=len(prompts)) as pool:
             found = list(pool.map(
                 lambda p: _facts_from(agent, p, config.max_seconds), prompts
             ))
+        reading = time.monotonic() - reading
 
         baseline = _baseline(workspace)
         everything = [fact for facts, _ in found for fact in facts]
@@ -212,6 +218,10 @@ def write_sessions_in_parallel(
             "status": "rejected" if error else "ok",
             "reason": "rejected" if error else "complete",
             "rounds": len(prompts),
+            # How much of the pass was the endpoint. The rest is this
+            # side: staging, the commit, and whatever the machine was
+            # doing instead of running this request.
+            "reading_seconds": round(reading, 2),
             "turns": [],
             "input_tokens": sum(u["input_tokens"] for u in spent),
             "output_tokens": sum(u["output_tokens"] for u in spent),

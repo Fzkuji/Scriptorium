@@ -57,8 +57,12 @@ def _within(seconds: float | None, call: Any) -> Any:
             outcome["error"] = exc
 
     worker = threading.Thread(target=settle, daemon=True)
+    # The clock starts before the thread does. Starting one waits for it to be
+    # scheduled, and in a process already running hundreds of them that wait
+    # is time the caller has spent but the budget never saw.
+    deadline = time.monotonic() + seconds
     worker.start()
-    worker.join(seconds)
+    worker.join(max(0.0, deadline - time.monotonic()))
     if worker.is_alive():
         raise _CallOverran(f"no response within {seconds:.0f}s")
     if "error" in outcome:

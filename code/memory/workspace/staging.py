@@ -42,7 +42,15 @@ class MemoryWorkspace(
         memory_dir: str | Path,
         *,
         config: MemoryConfig | None = None,
+        stage: bool = True,
     ):
+        """Open a workspace, staged and ready to edit.
+
+        ``stage=False`` is for a caller that archives into ``memory_dir``
+        before it edits anything: the stage it would be handed here is one it
+        immediately has to take again, and a stage costs a copy of every topic
+        file in the workspace.
+        """
         self.memory_dir = Path(memory_dir).resolve()
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         self.stage_dir = Path(tempfile.mkdtemp(prefix=f"{TEMPORARY_PREFIX}topics-"))
@@ -51,7 +59,8 @@ class MemoryWorkspace(
         self.committed = False
         self.last_changed_topics: list[str] = []
         self.last_created_blocks = 0
-        self._refresh_stage()
+        if stage:
+            self._refresh_stage()
 
     def _refresh_stage(self) -> None:
         # Staged sources are chmod'd read-only, so restore write access before

@@ -23,6 +23,7 @@ import threading
 import time
 from dataclasses import replace
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -227,17 +228,29 @@ def _user_lock(user_id: str) -> threading.Lock:
         return _user_locks.setdefault(user_id, threading.Lock())
 
 
+@lru_cache(maxsize=1)
+def _writer() -> OpenAIWriterAgent:
+    """The one writer every request shares.
+
+    Building it per request built an HTTP client per request, and a client
+    owns its connection pool: sixty concurrent Adds meant sixty pools that
+    each opened their own TLS connections, used them for one chunk and threw
+    them away. One client keeps its connections and hands them back.
+    """
+    return OpenAIWriterAgent(OpenAIAgentConfig(
+        base_url=WRITER_BASE_URL,
+        api_key=WRITER_API_KEY,
+        model=WRITER_MODEL,
+    ))
+
+
 def _agent() -> OpenAIWriterAgent:
     if not WRITER_BASE_URL or not WRITER_API_KEY:
         raise HTTPException(
             status_code=503,
             detail="writer endpoint not configured",
         )
-    return OpenAIWriterAgent(OpenAIAgentConfig(
-        base_url=WRITER_BASE_URL,
-        api_key=WRITER_API_KEY,
-        model=WRITER_MODEL,
-    ))
+    return _writer()
 
 
 def _observation_date(messages: list[Message]) -> str:
@@ -295,6 +308,7 @@ def _ingest(payload: AddRequest) -> None:
             "add", arrived,
             waited=round(waited, 2),
             turns=closing.get("rounds"),
+            reading=closing.get("reading_seconds"),
             input_tokens=closing.get("input_tokens"),
             output_tokens=closing.get("output_tokens"),
             stop=closing.get("reason"),
