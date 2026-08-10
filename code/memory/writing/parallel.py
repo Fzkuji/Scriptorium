@@ -32,6 +32,7 @@ from typing import Any
 from ..config import MemoryConfig
 from ..workspace import MemoryWorkspace
 from ..workspace.agent_pass import _baseline, _commit_turn
+from ..workspace.staging import discard_tree
 from .session import render_conversation
 from .tools import writing_tools
 
@@ -177,8 +178,9 @@ def write_sessions_in_parallel(
     # memory for nothing.
     workspace = MemoryWorkspace(memory_dir, config=config, stage=False)
     try:
+        # Archiving takes the stage itself once it has written, so asking for
+        # one here staged the whole memory a second time for nothing.
         workspace.archive_sessions(sessions)
-        workspace._refresh_stage()
         audit: list[dict[str, Any]] = []
         observed = sessions[0]["observation_date"] if sessions else ""
 
@@ -229,6 +231,4 @@ def write_sessions_in_parallel(
         })
         return audit
     finally:
-        import shutil
-
-        shutil.rmtree(workspace.stage_dir, ignore_errors=True)
+        discard_tree(workspace.stage_dir)

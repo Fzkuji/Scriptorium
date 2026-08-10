@@ -3,12 +3,14 @@
 import ctypes
 import ctypes.util
 import hashlib
+import itertools
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +80,29 @@ def clone_tree(source: Path, target: Path) -> None:
     shutil.copytree(source, target)
 
 
+_DISCARD = ThreadPoolExecutor(max_workers=2, thread_name_prefix="discard-stage")
+_DISCARDED = itertools.count()
+
+
+def discard_tree(path: Path) -> None:
+    """Take a tree out of the way now and delete it off the caller's clock.
+
+    Removing a stage costs one unlink per file, and a memory grown to two
+    thousand topic files pays all of them twice per Add: once to rebuild the
+    stage and once to drop it at the end. A rename is one call at any size.
+    The unlinks still happen, just not while a request waits for them.
+    """
+    if not path.exists():
+        return
+    doomed = path.with_name(f"{path.name}.discarded-{next(_DISCARDED)}")
+    try:
+        path.rename(doomed)
+    except OSError:  # pragma: no cover - a rename across devices, or a race
+        shutil.rmtree(path, ignore_errors=True)
+        return
+    _DISCARD.submit(shutil.rmtree, doomed, True)
+
+
 class MemoryWorkspace(
     TopicNormalizationMixin,
     SourceArchiveMixin,
@@ -114,14 +139,11 @@ class MemoryWorkspace(
         # The stage is about to be rebuilt from the workspace, so anything
         # remembered about what is staged no longer describes it.
         self._anchors_by_source = {}
-        # Staged sources are chmod'd read-only, so restore write access before
-        # removing the tree: on some systems the file's own mode blocks it.
-        sources = self.stage_dir / "sources"
-        if sources.exists():
-            for path in sources.rglob("*"):
-                if path.is_file():
-                    path.chmod(0o644)
-        shutil.rmtree(self.stage_dir, ignore_errors=True)
+        # Staged sources are read-only files, which is no obstacle to removing
+        # them: unlink asks the containing directory for permission, never the
+        # file. Walking the tree to make each one writable first was a second
+        # pass over every source in the memory, buying nothing.
+        discard_tree(self.stage_dir)
         self.stage_dir.mkdir()
         for name in ("topics", "timeline", "sources"):
             source = self.memory_dir / name
@@ -254,20 +276,49 @@ class MemoryWorkspace(
             raise
 
     def stage_is_dirty(self) -> bool:
-        """Whether the stage differs from what is committed on disk."""
-        staged = {
-            path.relative_to(self.stage_dir).as_posix(): path.read_bytes()
-            for path in sorted(self.stage_dir.rglob("*"))
-            if path.is_file()
-            and not is_internal_path(path.relative_to(self.stage_dir))
-        }
-        committed = {
-            path.relative_to(self.memory_dir).as_posix(): path.read_bytes()
-            for path in sorted(self.memory_dir.rglob("*"))
-            if path.is_file()
-            and not is_internal_path(path.relative_to(self.memory_dir))
-        }
-        return staged != committed
+        """Whether the stage differs from what is committed on disk.
+
+        Compared by size and modification time. Comparing content read every
+        file on both sides, so a memory grown to two thousand topics spent
+        four thousand reads on every Add to answer one yes-or-no, and the
+        answer is almost always no.
+
+        A write moves the nanosecond mtime, so an edit cannot hide behind an
+        unchanged mark. The reverse is possible: a file rewritten with what it
+        already held reads as changed, and costs a commit that finds nothing
+        to install. Staging clones the workspace, and a clone carries the
+        mtime it was made from, so an untouched file matches.
+        """
+        return self._marks(self.stage_dir) != self._marks(self.memory_dir)
+
+    @staticmethod
+    def _marks(root: Path) -> dict[str, tuple[int, int]]:
+        """Every memory file under `root`, by size and modification time.
+
+        Walked over plain strings. The same walk built from Path objects spent
+        more time making them and taking them apart than it spent asking the
+        filesystem anything: rglob and relative_to together were most of the
+        cost of deciding whether a stage had been touched.
+        """
+        marks: dict[str, tuple[int, int]] = {}
+        base = os.fspath(root)
+        cut = len(base) + 1
+        for directory, subdirectories, names in os.walk(base):
+            top = directory == base
+            if top:
+                # Only the first segment of a path decides whether it holds
+                # memory, so pruning the walk here covers everything below.
+                subdirectories[:] = [
+                    name for name in subdirectories
+                    if not is_internal_path(Path(name))
+                ]
+            for name in names:
+                if top and is_internal_path(Path(name)):
+                    continue
+                path = os.path.join(directory, name)
+                mark = os.stat(path)
+                marks[path[cut:]] = (mark.st_size, mark.st_mtime_ns)
+        return marks
 
     def revision(self) -> str:
         """Fingerprint of the committed workspace, for optimistic concurrency."""
