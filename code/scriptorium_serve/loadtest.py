@@ -117,19 +117,31 @@ def main(argv: list[str] | None = None) -> int:
                        help="messages per Add; the platform sends at most 20")
     parse.add_argument("--ceiling", type=float, default=120.0,
                        help="seconds above which a request counts as a tail risk")
+    parse.add_argument("--min-chars", type=int, default=0,
+                       help="drop chunks lighter than this. The first run of "
+                            "this tool sampled a median of 1673 characters and "
+                            "reported a 24.8s median, while production was "
+                            "writing 8k-character chunks in 45s and hanging on "
+                            "the tail; a test that never sends the heavy ones "
+                            "cannot see what fails")
     parse.add_argument("--workspaces", type=Path,
                        default=Path("/Users/fzkuji/scriptorium-runs/live-workspaces"))
     parse.add_argument("--clean", action="store_true",
                        help="delete the loadtest workspaces when done")
     args = parse.parse_args(argv)
 
-    chunks = corpus(args.workspaces, args.per_chunk, limit=400)
+    chunks = corpus(args.workspaces, args.per_chunk, limit=1500)
+    if args.min_chars:
+        chunks = [c for c in chunks
+                  if sum(len(m['content']) for m in c) >= args.min_chars]
     if not chunks:
         print(f"no archived sources under {args.workspaces}", file=sys.stderr)
         return 2
+    sizes = sorted(sum(len(m["content"]) for m in c) for c in chunks)
     print(f"{len(chunks)} recorded chunks, "
           f"median {statistics.median(len(c) for c in chunks):.0f} messages, "
-          f"median {statistics.median(sum(len(m['content']) for m in c) for c in chunks):.0f} chars")
+          f"chars median {sizes[len(sizes) // 2]} p90 {sizes[int(len(sizes) * .9)]} "
+          f"max {sizes[-1]}")
 
     stamp = time.strftime("%H%M%S")
     deadline = time.monotonic() + args.minutes * 60
@@ -148,10 +160,14 @@ def main(argv: list[str] | None = None) -> int:
                 "request_id": f"loadtest-{stamp}-{sequence}",
                 "user_id": f"loadtest-{stamp}:conv-{conversation}",
                 "session_id": f"loadtest-session-{conversation}",
+                # Every fourth chunk carries a blank turn, because the
+                # benchmark's transcripts do and rejecting the chunk over one
+                # cost a run a fifth of its writes.
                 "messages": [
                     {**message, "timestamp": 1_700_000_000_000 + sequence * 86_400_000}
                     for message in messages
-                ],
+                ] + ([{"role": "assistant", "content": "  ",
+                       "timestamp": 1_700_000_000_000}] if sequence % 4 == 0 else []),
             }, timeout=args.ceiling * 5)
             with guard:
                 results.append(outcome)
