@@ -187,10 +187,12 @@ class OpenAIWriterAgent:
 
             client = self._client
             if left is not None:
-                # No retries under a deadline: a second attempt would double
-                # the ceiling, and a turn that ends early still leaves what
-                # earlier turns wrote committed.
-                client = client.with_options(timeout=left, max_retries=0)
+                # Retries stay on under a deadline. Dropping them looked like
+                # the way to keep a call inside its budget, but the budget is
+                # already kept by the clock below, and a gateway's transient
+                # 429 or 502 would instead end the write outright and be
+                # reported to the caller as a failed ingest.
+                client = client.with_options(timeout=left)
             call_started = time.time()
             try:
                 response = _within(left, lambda: client.chat.completions.create(

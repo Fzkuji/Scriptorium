@@ -21,10 +21,12 @@ class _NeverFinishes:
         self.seconds_per_turn = seconds_per_turn
         self.calls = 0
         self.timeouts: list[float] = []
+        self.overrides: list[dict] = []
         self.chat = SimpleNamespace(completions=self)
 
-    def with_options(self, *, timeout: float, **_: object) -> "_NeverFinishes":
+    def with_options(self, *, timeout: float, **rest: object) -> "_NeverFinishes":
         self.timeouts.append(timeout)
+        self.overrides.append(rest)
         return self
 
     def create(self, **_: object) -> SimpleNamespace:
@@ -108,6 +110,20 @@ def test_a_call_that_ignores_its_own_timeout_is_abandoned_on_the_clock(brisk, tm
     assert result.stop_reason == "max_seconds"
     assert time.monotonic() - began < 3
     assert result.num_turns == 0
+
+
+def test_a_transient_endpoint_failure_is_still_retried_under_a_deadline(brisk, tmp_path):
+    """The clock keeps the budget, so the client's retries can stay on.
+
+    Turning them off to keep a call inside its budget makes one 429 from the
+    gateway end the write outright and report a failed ingest to the caller,
+    which is the more expensive failure by far.
+    """
+    client = _NeverFinishes()
+
+    _run(client, tmp_path, max_turns=1, max_seconds=5)
+
+    assert client.overrides == [{}], "the deadline must narrow the timeout and nothing else"
 
 
 def test_a_budget_already_spent_still_grants_the_first_turn_the_floor(brisk, tmp_path):
