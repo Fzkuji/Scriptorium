@@ -23,6 +23,8 @@ Last updated: 2026-08-12
 ### Background processing
 
 - Normal memory construction runs in the background.
+- Each Claude Code session tracks and saves its own new conversation content.
+- Multiple sessions write into the same configured memory address.
 - The background Writer uses a cheap model by default.
 - The Writer model is configurable manually and may also be configured by an
   agent.
@@ -62,8 +64,8 @@ approved.
 
 ## Open questions
 
-- Whether the 100,000-token threshold is per session, per project across
-  sessions, or global.
+- The token or lifecycle condition that triggers processing within each
+  session; 100,000 tokens is only a candidate value.
 - When pending content below the threshold is processed.
 - What an active save requests and whether it causes immediate background
   processing.
