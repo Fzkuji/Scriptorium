@@ -1,5 +1,12 @@
 # LongMemEval Experiment Findings
 
+> Consolidated status: the current cross-platform problem register, implemented
+> fixes, deferred work, and WSL/macOS reconciliation are maintained in
+> [`LONGMEMEVAL-WSL-EXPERIMENT-FINDINGS.md`](LONGMEMEVAL-WSL-EXPERIMENT-FINDINGS.md).
+> This file retains the original macOS incident chronology and raw-evidence
+> index; where a historical status conflicts with the consolidated register,
+> the consolidated register takes precedence.
+
 This log records runtime findings that may affect reliability, recovery, or
 future tuning. Raw experiment artifacts remain the source of truth; this file
 is an index of notable incidents and proposed follow-up work.

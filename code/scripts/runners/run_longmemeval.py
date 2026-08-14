@@ -29,6 +29,10 @@ from scripts.runners.longmemeval.selection import (  # noqa: E402
 from src import build as adapter  # noqa: E402
 from src import management as memory  # noqa: E402
 from src import retrieval  # noqa: E402
+from src.execution_platform import (  # noqa: E402
+    PLATFORM_PROFILES,
+    resolve_execution_profile,
+)
 from src.shell_backend import is_wsl_drvfs_path  # noqa: E402
 
 
@@ -141,6 +145,15 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     result.add_argument(
+        "--platform-profile",
+        choices=PLATFORM_PROFILES,
+        default="auto",
+        help=(
+            "execution host profile: auto-detect, or require WSL/macOS; "
+            "the profile only resolves platform adapters and audit metadata"
+        ),
+    )
+    result.add_argument(
         "--verify-sources", action=argparse.BooleanOptionalAction, default=True
     )
     return result
@@ -169,6 +182,15 @@ def main() -> int:
 
     data_path = args.data.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
+    try:
+        execution_profile = resolve_execution_profile(
+            args.platform_profile,
+            shell_backend=args.shell_backend,
+            output_dir=output_dir,
+        )
+    except ValueError as exc:
+        built.error(str(exc))
+    args.shell_backend = execution_profile.shell_backend
     data = common.load_dataset(data_path, expected_count=common.EXPECTED_LONGMEMEVAL_SIZE)
     common.validate_longmemeval_s(data)
     if args.question_type:
@@ -260,11 +282,15 @@ def main() -> int:
         "code": {
             "git_commit": common.git_head(),
             "runner_sha256": common.sha256_file(Path(__file__)),
+            "execution_platform_sha256": common.sha256_file(
+                ROOT / "src" / "execution_platform.py"
+            ),
             "management_sha256": source_tree_sha256(ROOT / "src" / "management"),
             "build_sha256": common.sha256_file(ROOT / "src" / "build.py"),
             "retrieval_sha256": source_tree_sha256(ROOT / "src" / "retrieval"),
         },
         "request_audit": {"mode": "claude_agent_sdk"},
+        "execution": execution_profile.to_manifest(),
     }
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest = common.create_or_resume_manifest(
@@ -285,6 +311,7 @@ def main() -> int:
         "question_type": args.question_type,
         "reverse": args.reverse,
         "claim_db": str(claim_db) if claim_db else None,
+        "execution": execution_profile.to_manifest(),
     })
     common.refresh_outputs(output_dir, manifest)
 

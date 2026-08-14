@@ -4,6 +4,15 @@ This document describes how to run a non-overlapping LongMemEval build shard on
 macOS and merge the completed artifacts with runs produced under WSL.  The Mac
 and WSL workers must use the same source snapshot and experiment protocol.
 
+The shared runner accepts `--platform-profile auto|wsl|macos`. New formal Mac
+configs should set `"platform_profile": "macos"`; a profile launched on the
+wrong host is rejected before the run output is created. `auto` is suitable
+for portable smoke runs. On WSL and macOS it resolves an automatic shell to
+the same `posix-bash` contract and records the detected host, resolved shell,
+and output-storage class in the run manifest. It does not manage `launchctl`,
+choose an output directory, or change prompts, Writer, repair, checkpoint, or
+evaluation semantics.
+
 ## What is and is not stored in Git
 
 The private repository contains source code, tests, configuration examples,

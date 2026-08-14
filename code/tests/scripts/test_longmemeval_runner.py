@@ -11,6 +11,18 @@ MOD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MOD)
 
 
+def test_parser_accepts_platform_profile():
+    args = MOD.parser().parse_args([
+        "--output-dir", "out",
+        "--start", "0",
+        "--limit", "1",
+        "--api-key", "test-only",
+        "--platform-profile", "macos",
+    ])
+
+    assert args.platform_profile == "macos"
+
+
 def test_private_key_file_is_readable_on_current_platform(tmp_path):
     key = tmp_path / "provider-api-key.txt"
     key.write_text("secret-value\n", encoding="utf-8")

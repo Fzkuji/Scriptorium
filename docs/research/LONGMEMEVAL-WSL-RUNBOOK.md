@@ -2,6 +2,8 @@
 
 本文档用于在 WSL2 Ubuntu 环境中启动、监控、恢复和验收 Scriptorium 的 LongMemEval-S 构建实验。命令默认仓库位于 Windows `E:\Scriptorium`，对应 WSL 路径 `/mnt/e/Scriptorium`。
 
+统一 runner 支持 `--platform-profile auto|wsl|macos`。WSL 正式配置建议写入 `"platform_profile": "wsl"`；若配置误在 macOS 或原生 Linux 上启动，runner 会在创建实验输出前拒绝。`auto` 用于便携 smoke，自动识别 WSL/macOS，并在这两个平台把 `shell_backend=auto` 解析为统一的 `posix-bash`。该开关只处理平台适配与 manifest 审计，不改变 prompt、Writer、repair、checkpoint 或评测语义。
+
 ## 1. 安全约束
 
 - API key 只保存在仓库根目录 `provider-api-key.txt`，不得复制到配置、命令行明文、日志或 Git。
