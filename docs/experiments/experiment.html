@@ -13,11 +13,30 @@
 .metric-tab:focus-visible{outline:3px solid #4263eb;outline-offset:2px}
 .metric-panel{display:none}
 .metric-panel.active{display:block}
+.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.75rem;margin:1rem 0 1.25rem}
+.status-card{border:1px solid hsl(var(--b3));border-radius:10px;padding:.85rem .95rem;border-left-width:4px}
+.status-card.ok{border-left-color:#2b8a3e}
+.status-card.warn{border-left-color:#e8590c}
+.status-card.pending{border-left-color:hsl(var(--bc)/.3)}
+.status-label{font-size:.78rem;color:hsl(var(--bc)/.65);margin:0 0 .3rem}
+.status-value{font-size:1.65rem;font-weight:800;line-height:1;margin:0 0 .35rem}
+.status-note{font-size:.76rem;color:hsl(var(--bc)/.6);margin:0;line-height:1.45}
+.section-note{font-size:.82rem;color:hsl(var(--bc)/.66);line-height:1.6}
+.tag-latest{display:inline-block;font-size:.68rem;font-weight:700;padding:.1rem .38rem;border-radius:4px;background:#2b8a3e;color:#fff;vertical-align:middle;margin-left:.3rem}
+.detail-block{border:1px solid hsl(var(--b3));border-radius:10px;padding:.6rem .9rem;margin:1rem 0}
+.detail-block>summary{cursor:pointer;font-weight:600;font-size:.88rem}
+.detail-block[open]>summary{margin-bottom:.6rem;padding-bottom:.5rem;border-bottom:1px solid hsl(var(--b3))}
+.archive-note{font-size:.82rem;color:hsl(var(--bc)/.6);border-left:3px solid hsl(var(--bc)/.2);padding-left:.7rem;margin:.5rem 0 1rem}
 </style></head>
 <body>
 <div id="progress-bar"></div>
 <div class="document-shell">
   <aside class="document-sidebar"><p class="document-sidebar-brand">Scriptorium</p><nav id="toc">
+<a class="toc-link" href="#0-status">当前进度</a>
+<a class="toc-link toc-h3" href="#latest-locomo">0.1 LoCoMo conv-50 扫描</a>
+<a class="toc-link toc-h3" href="#latest-beam">0.2 BEAM-100K</a>
+<a class="toc-link toc-h3" href="#latest-temporal">0.3 时间过滤</a>
+<a class="toc-link toc-h3" href="#latest-calibration">0.4 容量校准</a>
 <a class="toc-link" href="#4-1-setup">4.1 Experimental Setup</a>
 <a class="toc-link toc-h3" href="#master-config">Evaluation Protocol</a>
 <a class="toc-link toc-h3" href="#datasets">Datasets</a>
@@ -55,11 +74,150 @@
 <header class="document-header">
   <p class="document-eyebrow">Evaluation</p>
   <h1>Experiments</h1>
-  <p class="document-lead">按实验设置、主结果、效率、规模分析、案例、消融和执行计划组织；早期协议结果单独存档。</p>
-  <p class="document-meta">updated 2026-07-31</p>
+  <p class="document-lead">最新结果置顶，其后是设置、主表、效率、规模、消融与执行状态；早期协议结果折叠存档。</p>
+  <p class="document-meta">updated 2026-08-11 · 最新结果见「当前进度」</p>
 </header>
 
 <p>本页面负责实验设置、主结果、效率、规模、消融和执行状态。详细评测规则见 <a href="protocols/unified_evaluation_protocol.md">Unified Evaluation Protocol</a>，结果依据见 <a href="results/our_results.md">NativeMem Results</a>，已有工作的分类和方法差异见 <a href="../related-work/survey.html">Agent Memory Survey</a>。</p>
+
+<!-- ================================================================== -->
+<section id="current-status">
+<h2 id="0-status">当前进度</h2>
+
+<div class="status-grid">
+  <div class="status-card ok">
+    <p class="status-label">LoCoMo conv-50 · DeepSeek V4 Flash</p>
+    <p class="status-value">96.2</p>
+    <p class="status-note">judge accuracy，158 题 cat1–4。单 conversation 诊断，非主表。</p>
+  </div>
+  <div class="status-card ok">
+    <p class="status-label">同题 · GPT-4o-mini backbone</p>
+    <p class="status-value">77.2</p>
+    <p class="status-note">同一 conv-50、同 judge。backbone 差 19.0 分。</p>
+  </div>
+  <div class="status-card ok">
+    <p class="status-label">BEAM-100K · pass rate</p>
+    <p class="status-value">70.0%</p>
+    <p class="status-note">S1 三模型均值，官方 nugget 指标（avg score 0.574）。最好单模型 Terra 75.0%。</p>
+  </div>
+  <div class="status-card pending">
+    <p class="status-label">LoCoMo 10-conv 全量主表</p>
+    <p class="status-value">待跑</p>
+    <p class="status-note">正式轮全套 gpt-4o-mini，~$40。</p>
+  </div>
+</div>
+
+<p class="section-note">下面 §0.1–§0.3 是 2026-08-01 之后的新结果，尚未并入 §4.2 主表。§4.1–§4.6 的历史结果多数产自 wiki-era 与 gpt-5.5 judge，解读前先看 §4.1 的校准说明。</p>
+
+<h3 id="latest-locomo">0.1 LoCoMo conv-50：Writer 输入上限扫描（2026-08-04 → 08-09）</h3>
+
+<p>全部为 LoCoMo <code>conv-50</code> 单 conversation：30 session、568 消息，锁定评估器统计 cat 1–4 的 158 题，judge 固定 gpt-4o-mini。Builder 与 Answerer 同为 DeepSeek V4 Flash，除非另注。</p>
+
+<div style="overflow-x:auto">
+<table tabindex="0" style="font-size:.82rem;white-space:nowrap">
+<thead><tr><th>Run</th><th>Writer cap</th><th>Overall</th><th>temporal</th><th>multi-hop</th><th>open-dom</th><th>single-hop</th><th>Build 时长</th><th>Calls</th><th>成本</th></tr></thead>
+<tbody>
+<tr><td><strong>conv50-20260809</strong> <span class="tag-latest">最新</span></td><td>32768</td><td><strong style="color:#2b8a3e">96.20</strong></td><td>87.5</td><td>96.9</td><td>100.0</td><td>98.9</td><td>1,720.9 s</td><td>159</td><td>$5.21</td></tr>
+<tr><td>toolsfix-deepseek-20260808</td><td>32768</td><td><strong style="color:#2b8a3e">96.20</strong></td><td>93.8</td><td>96.9</td><td>100.0</td><td>96.6</td><td>1,923.8 s</td><td>186</td><td>$6.58</td></tr>
+<tr><td>conv50-20260805-cap16384</td><td>16384</td><td>95.57</td><td>90.6</td><td>93.8</td><td>100.0</td><td>97.7</td><td>2,352.1 s</td><td>215</td><td>$11.74</td></tr>
+<tr><td>builtin-tools-deepseek-20260808</td><td>32768</td><td>94.94</td><td>90.6</td><td>90.6</td><td>85.7</td><td>98.9</td><td>1,830.3 s</td><td>149</td><td>$10.57</td></tr>
+<tr><td>runtime-ids-deepseek-20260808</td><td>32768</td><td>94.30</td><td>90.6</td><td>93.8</td><td>100.0</td><td>95.4</td><td>2,545.3 s</td><td>153</td><td>$12.00</td></tr>
+<tr><td>conv50-20260805-cap4096</td><td>4096</td><td>94.30</td><td>96.9</td><td>87.5</td><td>85.7</td><td>96.6</td><td>7,199.0 s</td><td>577</td><td>$36.09</td></tr>
+<tr><td>conv50-cap8192-20260804</td><td>8192</td><td>94.30</td><td>87.5</td><td>93.8</td><td>85.7</td><td>97.7</td><td>2,742.3 s</td><td>255</td><td>$33.23</td></tr>
+<tr><td>conv50-cap32768-20260804</td><td>32768</td><td>93.67</td><td>90.6</td><td>96.9</td><td>85.7</td><td>94.3</td><td>958.4 s</td><td>143</td><td>$15.56</td></tr>
+<tr><td>conv50-20260805-cap8192</td><td>8192</td><td>93.04</td><td>84.4</td><td>93.8</td><td>85.7</td><td>96.6</td><td>3,679.6 s</td><td>348</td><td>$18.37</td></tr>
+<tr><td>conv50-20260805-cap32768</td><td>32768</td><td>93.04</td><td>93.8</td><td>90.6</td><td>100.0</td><td>93.1</td><td>2,339.7 s</td><td>232</td><td>$13.05</td></tr>
+<tr><td>conv50-cap16384-20260804</td><td>16384</td><td>91.77</td><td>87.5</td><td>90.6</td><td>85.7</td><td>94.3</td><td>1,165.1 s</td><td>173</td><td>$18.86</td></tr>
+<tr style="border-top:2px solid hsl(var(--b3))"><td><strong>toolsfix-gpt4omini-20260808</strong><br><span style="font-size:.78rem;color:hsl(var(--bc)/.6)">builder + answerer = gpt-4o-mini</span></td><td>32768</td><td><strong style="color:#c92a2a">77.22</strong></td><td>50.0</td><td>75.0</td><td>71.4</td><td>88.5</td><td>422.9 s</td><td>131</td><td>$7.81</td></tr>
+</tbody></table>
+</div>
+
+<div class="callout warn" style="margin-top:.6rem">
+<p><strong>这张表现在只支持一个结论：backbone 差距（96.2 vs 77.2，19.0 分）远大于 writer cap 的影响。</strong>cap 本身不可解读——同一 cap 32768 上三个 run 分别是 96.20 / 93.67 / 93.04，固定 cap 的波动幅度（约 3 分）与 cap 扫描的全幅相当，且分数不随 cap 单调变化。</p>
+<p style="margin-top:.4rem"><strong>成本列不可跨批比较</strong>：0804 批用 OpenRouter 前缀 model id <code>deepseek/deepseek-v4-flash</code>，几乎无 cache read（输入计数百万级）；0805 及之后用裸 id <code>deepseek-v4-flash</code>，输入约 40 万但 cache read 数百万。两批的 <code>max_turns</code> 也不同（100 vs 60）。</p>
+</div>
+
+<h3 id="latest-beam">0.2 BEAM-100K</h3>
+
+<p>BEAM 官方指标是 <strong>逐 rubric nugget 打 0 / 0.5 / 1 再平均</strong>（Mem0 <code>benchmarks/beam/prompts.py</code> 的 <code>get_beam_nugget_judge_prompt</code>），并以 avg score ≥ 0.5 记为该题 pass。下表是三个 writer 模型 × 两种 session 分组的完整结果，每格 40 题、103 个 rubric nugget，judge 统一 GPT-4o-mini。</p>
+
+<div style="overflow-x:auto">
+<table tabindex="0" style="font-size:.82rem;white-space:nowrap">
+<thead><tr><th>Question type</th><th>n</th><th>Luna S1</th><th>Terra S1</th><th>Sol S1</th><th>Luna S2</th><th>Terra S2</th><th>Sol S2</th></tr></thead>
+<tbody>
+<tr><td>instruction_following</td><td>4</td><td>0.750</td><td><strong>1.000</strong></td><td>0.875</td><td><strong>1.000</strong></td><td><strong>1.000</strong></td><td><strong>1.000</strong></td></tr>
+<tr><td>summarization</td><td>4</td><td>0.838</td><td>0.838</td><td>0.675</td><td>0.637</td><td>0.908</td><td>0.825</td></tr>
+<tr><td>information_extraction</td><td>4</td><td>0.938</td><td>0.917</td><td>0.792</td><td>0.500</td><td>0.688</td><td>0.750</td></tr>
+<tr><td>knowledge_update</td><td>4</td><td>0.750</td><td><strong>1.000</strong></td><td>0.750</td><td><strong>1.000</strong></td><td>0.750</td><td><strong>1.000</strong></td></tr>
+<tr><td>preference_following</td><td>4</td><td>0.625</td><td>0.875</td><td>0.562</td><td>0.500</td><td>0.750</td><td>0.500</td></tr>
+<tr><td>event_ordering</td><td>4</td><td>0.608</td><td>0.617</td><td>0.625</td><td>0.617</td><td>0.417</td><td>0.483</td></tr>
+<tr><td>multi_session_reasoning</td><td>4</td><td>0.438</td><td>0.375</td><td>0.438</td><td>0.438</td><td>0.438</td><td>0.562</td></tr>
+<tr><td>contradiction_resolution</td><td>4</td><td>0.312</td><td>0.375</td><td>0.500</td><td>0.125</td><td>0.188</td><td>0.375</td></tr>
+<tr><td style="color:#c92a2a">temporal_reasoning</td><td>4</td><td style="color:#c92a2a">0.250</td><td style="color:#c92a2a">0.125</td><td style="color:#c92a2a">0.250</td><td style="color:#c92a2a">0.125</td><td style="color:#c92a2a">0.062</td><td style="color:#c92a2a">0.250</td></tr>
+<tr><td style="color:#c92a2a">abstention</td><td>4</td><td style="color:#c92a2a">0.000</td><td style="color:#c92a2a">0.125</td><td style="color:#c92a2a">0.000</td><td style="color:#c92a2a">0.500</td><td style="color:#c92a2a">0.000</td><td style="color:#c92a2a">0.000</td></tr>
+<tr style="border-top:2px solid hsl(var(--b3))"><td><strong>Overall avg score</strong></td><td>40</td><td>0.551</td><td><strong style="color:#2b8a3e">0.625</strong></td><td>0.547</td><td>0.544</td><td>0.520</td><td>0.575</td></tr>
+<tr><td><strong>Pass rate</strong>（avg ≥ 0.5）</td><td>40</td><td>62.5%</td><td><strong style="color:#2b8a3e">75.0%</strong></td><td>72.5%</td><td>55.0%</td><td>57.5%</td><td>67.5%</td></tr>
+</tbody></table>
+</div>
+
+<p><strong>S1 三模型平均 pass rate 70.0%（avg score 0.574）；S2 为 60.0%（0.546）。</strong>单模型最好是 Terra S1 的 75.0%。来源：<code>code/results/formal/gpt56-session-group-scores/beam-100k/&lt;model&gt;/&lt;group&gt;/beam-semantic/*/metrics.json</code>。</p>
+
+<div class="callout warn" style="margin-top:.6rem">
+<p><strong>两个稳定的低分类</strong>：temporal_reasoning 六格全部 ≤ 0.250，abstention 六格里五格 ≤ 0.125，与 writer 模型和分组都无关。但两者性质不同——<a href="#4-5-case">§4.5</a> 逐题核过判词：temporal 是真实短板（日期相减算错，或跨 session 关联不上直接弃答），abstention 的低分里混有评测口径问题（正确答「信息不足」被 judge 以 non-responsive 判 0，与错误编造同分）。改进清单只收 temporal。相对地 instruction_following、knowledge_update、summarization、information_extraction 稳定在 0.67 以上。</p>
+</div>
+
+<h4>08-08 → 08-09 的 DeepSeek 批（指标不同，不与上表并列）</h4>
+
+<p>3 session、188 消息、20 题。Answerer DeepSeek V4 Flash，共用同一次 memory 构建（110 events，2,339.1 s，155 calls，$7.77）。这批只落了 <code>judge_score</code>，即整题<strong>全对才 1、缺一条即 0</strong> 的二值判定，<code>beam_nugget_score</code> 字段为空，因此分数天然低于上表的逐 nugget 口径，两者不可比。仓库里 <code>judge_beam_nuggets</code> 与 <code>judge_beam_ordering</code> 已实现官方指标，重跑 judge 即可补齐（约 130 次 gpt-4o-mini 短调用），无需重建 memory。</p>
+
+<table tabindex="0">
+<thead><tr><th>Run</th><th>二值 judge 均值</th><th>correct / 20</th><th>官方 nugget 分</th></tr></thead>
+<tbody>
+<tr><td><strong>beam-userframe</strong></td><td>0.4500</td><td>9 / 20</td><td><span style="color:#c92a2a">未计算</span></td></tr>
+<tr><td>beam100K-1-20260809-answerfix</td><td>0.3000</td><td>6 / 20</td><td><span style="color:#c92a2a">未计算</span></td></tr>
+<tr><td>beam100K-1-20260809</td><td>0.2500</td><td>5 / 20</td><td><span style="color:#c92a2a">未计算</span></td></tr>
+<tr><td><s>beam-uf2</s></td><td colspan="3"><span style="color:#c92a2a">评估失败，不计入</span>：<code>status.phase = failed</code>，<code>ValueError: existing evaluation metadata differs at input_sha256</code>。<code>eval_full.json</code> 虽有内容但被 resume 校验拒绝，可能对应另一批输入。</td></tr>
+</tbody></table>
+
+<p class="section-note">二值口径如何压分，逐题可见：<code>beam-userframe</code> 的 11 个 0 分里，一题 6 条 rubric 的 information_extraction 答出了 sprint 先后端排期但漏若干条目记 0，一题 4 条 rubric 的 multi_session_reasoning 答对 2 条（角色数与 RBAC）也记 0。按官方逐 nugget 计这些题应在 0.5 上下。abstention 0/2 则与指标无关，两题都该拒答而模型给了断言式回答，逐 nugget 下同样是 0，与上表的 abstention 短板一致。</p>
+
+<h3 id="latest-temporal">0.3 时间过滤对检索的作用（2026-08-02）</h3>
+
+<p>LongMemEval-S 的 128 道 temporal 问题，Topic memory 取自 <code>v11-deepseek-bytype-20260723</code>。比较 oracle 语义日期区间过滤与不过滤。</p>
+
+<table tabindex="0">
+<thead><tr><th>Retriever</th><th>Metric</th><th>无过滤</th><th>Oracle 过滤</th><th>Δ</th></tr></thead>
+<tbody>
+<tr><td rowspan="4">BM25</td><td>MRR</td><td>82.96%</td><td>86.56%</td><td>+3.60</td></tr>
+<tr><td>Hit@10</td><td>95.31%</td><td>97.66%</td><td>+2.34</td></tr>
+<tr><td>Recall@10</td><td>86.22%</td><td>89.27%</td><td>+3.05</td></tr>
+<tr><td>All-evidence@10</td><td>75.00%</td><td>78.91%</td><td>+3.91</td></tr>
+<tr><td rowspan="4">Embedding</td><td>MRR</td><td>85.37%</td><td>88.72%</td><td>+3.36</td></tr>
+<tr><td>Hit@10</td><td>96.88%</td><td>99.22%</td><td>+2.34</td></tr>
+<tr><td>Recall@10</td><td>91.61%</td><td>95.52%</td><td>+3.91</td></tr>
+<tr><td>All-evidence@10</td><td>83.59%</td><td>89.06%</td><td>+5.47</td></tr>
+</tbody></table>
+
+<p class="section-note">Recall@10 的 Δ 配对 bootstrap 95% CI：BM25 +0.70 ~ +6.02，Embedding +1.43 ~ +7.03，均不含 0。候选量 190.78 → 154.23 events/题（−19.2%）。Topic memory 含 99.61% 的 gold evidence session，即检索天花板。<strong>这是 oracle 区间，不是可用系统</strong>，且只测检索指标，不构成端到端答案准确率的收益证据。来源：<a href="../../code/results/analysis/temporal-filter-effectiveness-20260802/summary.md">summary.md</a>。</p>
+
+<h3 id="latest-calibration">0.4 Writer 容量校准更新（2026-08-03）</h3>
+
+<p>DeepSeek V4 Flash 的固定校准器（20 session × 20 消息 × 1 fact）给出 <code>safe_input_tokens = 32768</code>、<code>recommended = 32768</code>，<strong>取代本页此前引用的 27314</strong>。但逐档 pass_rate 为 4096:0.0 · 8192:0.0 · 12288:0.5 · 16384:0.0 · 20480:0.0 · 24576:0.5 · 32768:1.0，fact coverage 非单调（16384 反而低于 12288），每档仅 1–2 trial，属单次探针而非稳定测量。这也解释了 §0.1 中 cap 与分数不单调的现象。来源：<a href="../../code/results/model_capacity/packyapi--deepseek-v4-flash/deepseek-v4-flash-fixed20x20x1-final-20260803-r1/calibration.json">calibration.json</a>。</p>
+
+<details class="detail-block">
+<summary>未完成 / 不可用的运行（避免误引）</summary>
+<ul>
+<li><code>fused-deepseek-20260808</code>：<code>phase = building</code>，无 <code>finished_at</code>，只有 memory 与 status，无任何分数。</li>
+<li><code>conv50-cap4096-20260804</code>：构建中崩溃，<code>ValueError: verification did not return structured output</code>，无分数。注意与已完成的 <code>conv50-20260805-cap4096</code>（94.30）区分。</li>
+<li><code>conv50-20260805-cap16384</code>：<code>status.phase = building</code> 且缺 <code>performance.json</code>，但 <code>build.json</code> 与 <code>eval_full.json</code> 完整。95.57 取自完整 eval，运行记录本身不自洽，引用前需复核。</li>
+<li><code>beam-uf2</code>：见 §0.2。</li>
+<li><code>claude-sdk-retrieval-dsml-20260803-r1</code>：仅 <code>q7.json</code> 分片，无聚合。</li>
+<li><code>analysis/nativemem-ablation-gpt56-sol</code>：V11 时代未执行的计划，用的是已移除的环境变量，非结果。</li>
+<li><code>results/pilots/</code> 下 20260801–0802 各 run：1–2 session、0–7 题的调试探针，不作结果引用。</li>
+<li>iCloud 冲突副本（<code>* 2.json</code>、<code>README 2.md</code> 等）一律以无后缀文件为准。</li>
+</ul>
+</details>
+</section>
 
 <!-- ================================================================== -->
 <section id="protocol-block">
@@ -150,6 +308,7 @@
 <tr><td><strong>S1</strong></td><td>1</td><td>64</td><td><strong>64.7</strong></td><td>38,746.5</td><td><strong>55.08% / 62.5%</strong></td><td><strong>62.46% / 75.0%</strong></td><td>54.67% / <strong>72.5%</strong></td><td><strong>57.40%</strong></td><td>97.59%</td><td>3,594</td></tr>
 <tr><td>S2</td><td>1.5</td><td>94</td><td>97.0</td><td>58,018</td><td>54.42% / 55.0%</td><td>52.00% / 57.5%</td><td><strong>57.46%</strong> / 67.5%</td><td>54.62%</td><td>88.49%</td><td>3,058</td></tr>
 </tbody></table>
+<p class="section-note">同一批数据的完整 per-category 分解见 <a href="#latest-beam">§0.2</a>。S1 三模型平均 pass rate 70.0%，S2 为 60.0%。</p>
 </div>
 <p>BEAM 的单个 session 已包含约 38.7K source tokens，S2 的实际中位长度达到 58.0K tokens。S2 仅将单位 source token 的输入成本降低 14.9%，但三模型平均 rubric mean 下降 2.78 个百分点，final source coverage 下降 9.10 个百分点；其中 Luna 下降 0.67、Terra 下降 10.46、Sol 上升 2.79 个百分点。因此 BEAM 后续实验采用 S1。</p>
 
@@ -333,7 +492,9 @@
 </div>
 
 <h3 id="master-beam">BEAM</h3>
-<p>公开数字仅 Mem0-Platform 自报（GPT-5 配置，不可比）。两张表<strong>完全靠我们实测</strong>：先 100K 冒烟 → 1M 全量 700 题；行 = NativeMem / Mem0 / Full-ctx / BM25。</p>
+<p>公开数字仅 Mem0-Platform 自报（GPT-5 配置，不可比），所以这张表靠我们实测填。</p>
+<p><strong>100K 已完成</strong>：三个 writer 模型 × 两种 session 分组，每格 40 题 103 个 rubric nugget，官方逐 nugget 指标 + GPT-4o-mini judge。S1 三模型平均 pass rate <strong>70.0%</strong>（avg score 0.574），单模型最好 Terra 75.0%。完整 per-category 分解见 <a href="#latest-beam">§0.2</a>。</p>
+<p><strong>待补</strong>：1M 全量 700 题；对照行 Mem0 / Full-context / BM25 尚未跑，目前只有我们自己的绝对分，没有同口径基线对比。</p>
 </section>
 
 <section id="pending-evaluation">
@@ -388,7 +549,10 @@
 <li>Mem0 仲裁（预期 ~61.8）· BM25 下界 · MIRIX 仲裁（64 vs 85）</li>
 <li>桶 C 首复现：<s>LightMem</s> ✓ 主表采用其自报 72.0（我们 s0 复现 73.0 验证一致，不再补跑）· Nemori / EverMemOS / MemMachine / Hindsight / SimpleMem / E-Mem</li>
 <li style="color:#2b8a3e"><strong>协议修复 ✓ 完成（2026-07-03）</strong>：筛查轮 judge 一律 <strong>gpt-4o-mini via OpenRouter</strong>（代码默认已改，llm_clients.py；三 run 全量重判共 $0.029）。gpt-5.5 对 paraphrase 系统性过严已实证。<s>Zep 与 full-ctx 重判</s> ✓。新解读规则：<strong>绝对分含 5.4-mini answerer 提升 ~+7.6，对文献比较看相对 Full-ctx(80.3) 锚点的差值</strong></li>
-<li>正式轮：全套 gpt-4o-mini 重跑（~$40，需 OpenAI key）</li>
+<li>正式轮：全套 gpt-4o-mini 重跑（~$40，需 OpenAI key）。<strong>已有单点参照</strong>：conv-50 上 builder+answerer 同为 gpt-4o-mini 得 77.22，同题 DeepSeek V4 Flash 96.20，backbone 差 19.0 分（<a href="#latest-locomo">§0.1</a>）</li>
+<li><strong>BEAM 补齐</strong>：<s>100K</s> ✓ S1 三模型平均 pass 70.0%（<a href="#latest-beam">§0.2</a>）→ 待 1M 全量 700 题 + 同口径基线行（Mem0 / Full-ctx / BM25）</li>
+<li><strong>BEAM 08-09 DeepSeek 批重判</strong>：三个 run 只有二值分，官方 nugget 分未算；重跑 judge 约 130 次 gpt-4o-mini 短调用，不需重建 memory</li>
+<li><strong>Writer cap 结论待定</strong>：conv-50 上同一 cap 32768 的三个 run 分别 96.20 / 93.67 / 93.04，固定 cap 波动与 cap 扫描全幅相当，且不单调。要下 cap 结论需同配置多 seed 重复（<a href="#latest-locomo">§0.1</a>）</li>
 </ol>
 </section>
 
@@ -631,6 +795,7 @@
 
 <!-- ================================================================== -->
 <h2 id="4-3-efficiency">4.3 Retrieval Efficiency</h2>
+<div class="archive-note"><strong>历史结果</strong>：本节数据产自 Wiki Memory 时代（qwen3.6-flash / gpt-5.5 judge），§4.1 已说明 gpt-5.5 对 paraphrase 系统性过严（−8~12 分），这批 run 未重判。结论方向可参考，绝对分不能与 §0 的新结果或论文主表并列。</div>
 
 <p>基于 1,497 QA 的检索日志分析：</p>
 
@@ -695,6 +860,7 @@
 </table>
 
 <h3>Full Pipeline Scaling（不同模型跑全流程）</h3>
+<div class="archive-note"><strong>历史结果</strong>：本节数据产自 Wiki Memory 时代（qwen3.6-flash / gpt-5.5 judge），§4.1 已说明 gpt-5.5 对 paraphrase 系统性过严（−8~12 分），这批 run 未重判。结论方向可参考，绝对分不能与 §0 的新结果或论文主表并列。</div>
 
 <p>用不同模型跑完整 pipeline（建 wiki + 检索 + 回答），统一 gpt-5.5 judge（Sample 0, 50 QA）：</p>
 
@@ -749,16 +915,45 @@
 <!-- ================================================================== -->
 <h2 id="4-5-case">4.5 Case Study</h2>
 
-<p>展示 wiki 的实际内容和检索过程：</p>
-<ul>
-<li>一个 wiki 的文件结构示例</li>
-<li>一个成功检索的完整路径（ls → 文件 → 答案）</li>
-<li>一个失败案例的分析（信息丢失 or 检索路径偏差）</li>
-<li>wiki 文件的人可读性展示</li>
-</ul>
+<p>BEAM-100K 上 temporal_reasoning 与 abstention 两类跨模型稳定失败（<a href="#latest-beam">§0.2</a>）。逐题看判词，这两类各自是一种机制，而且只有一种是方法的问题。案例取自 Terra S1 的 <code>results.json</code>，判词为 GPT-4o-mini nugget judge 原文。</p>
+
+<h3>失败机制一：日期算术（真实短板）</h3>
+
+<p>temporal 题的 rubric 通常要求两件事：算出的跨度，以及支撑它的起止日期。</p>
+
+<table tabindex="0">
+<thead><tr><th>问题</th><th>模型回答</th><th>Rubric 要求</th><th>判分</th></tr></thead>
+<tbody>
+<tr><td>scheduling the meeting 到 testing period 开始隔几天</td><td><strong>11 days</strong></td><td>21 days；from March 15 till April 5</td><td>0.0 — 算错</td></tr>
+<tr><td>拿到 OpenWeather API key 到完成 UI wireframe 隔几天</td><td>I don't have enough information</td><td>2 days；from March 10 till March 12</td><td>0.0 — 弃答</td></tr>
+<tr><td>transaction management 完成到最终部署隔几周</td><td>I don't have enough information</td><td>8 weeks；from January 15 till March 15</td><td>0.0 — 弃答</td></tr>
+</tbody></table>
+
+<p>两种表现：一是取到了日期但相减算错（11 vs 21），二是没能把散落在不同 session 的两个日期关联起来而直接弃答。两者都是真实能力缺口。§0.3 的检索分析给出了一致的旁证——Topic memory 里有 99.61% 的 gold evidence，oracle 时间区间过滤能把 Recall@10 提高 3~4 个百分点，说明<strong>证据在库里，缺的是把时间条件用起来的那一步</strong>。</p>
+
+<h3>失败机制二：abstention 判分口径（评测问题为主）</h3>
+
+<p>BEAM 的 abstention 题 rubric 写成一句否定断言，形如「Based on the provided chat, there is no information related to X」。judge 要判的是回答是否与这句一致。四个案例分成两种情况：</p>
+
+<table tabindex="0">
+<thead><tr><th>问题</th><th>模型回答</th><th>判词</th><th>性质</th></tr></thead>
+<tbody>
+<tr><td>Airbnb 风格里我启用了哪些具体 ESLint 规则</td><td>列出 <code>extends: airbnb</code>、<code>indent: 2</code>、<code>quotes: single</code> 等一串规则</td><td>直接与「无相关信息」矛盾</td><td><span style="color:#c92a2a">真实失败</span>：该拒答却编造具体值</td></tr>
+<tr><td>Jira 上除 autocomplete.js 的 TypeError 外还记了哪些 bug</td><td>I don't have enough information</td><td>「未提供其他 bug 的信息，因此 non-responsive」</td><td><span style="color:#e8590c">评测口径</span>：正确拒答被判 0</td></tr>
+<tr><td>讲讲我的背景和以往开发项目</td><td>答出了 budget tracker 项目，未答背景</td><td>「详述了项目但未涉及背景，而背景是 rubric 关键部分」</td><td><span style="color:#e8590c">评测口径</span>：部分作答落入否定 rubric 的夹缝</td></tr>
+</tbody></table>
+
+<p>第二行是最清楚的一例：题目问「除了 X 还有哪些」，库里确实没有，模型答「信息不足」——这正是 abstention 想要的行为，judge 却以 non-responsive 判 0。按官方 prompt 的负向约束条款，拒答与 off-topic 同归 0.0，因此<strong>正确拒答与错误编造得到相同分数</strong>。</p>
+
+<div class="callout warn">
+<p><strong>结论分开写</strong>：temporal_reasoning 的 ≤ 0.250 是方法短板，应作为改进目标。abstention 的 ≤ 0.125 里混有评测口径造成的扣分，在把正确拒答与错误编造分开统计之前，不应把这个数字当作方法的拒答能力。§0.2 表中两类都标红，但只有前者进改进清单。</p>
+</div>
+
+<p class="section-note">wiki 结构示例与成功检索路径的完整 trace 尚未整理，待补。</p>
 
 <!-- ================================================================== -->
 <h2 id="4-6-ablation">4.6 Ablation Study</h2>
+<div class="archive-note"><strong>历史结果</strong>：本节数据产自 Wiki Memory 时代（qwen3.6-flash / gpt-5.5 judge），§4.1 已说明 gpt-5.5 对 paraphrase 系统性过严（−8~12 分），这批 run 未重判。结论方向可参考，绝对分不能与 §0 的新结果或论文主表并列。</div>
 
 <p>消融实验拆分各组件的贡献（Sample 0, 50 QA, gpt-5.5 via ChatGPT proxy）：</p>
 
@@ -798,6 +993,9 @@
 
 <div id="execution-relocated"></div>
 
+<h3>Wiki Memory 阶段执行记录（已归档）</h3>
+<div class="archive-note"><strong>历史记录</strong>：下表是 Wiki Memory 阶段（qwen3.6-flash / gpt-5.5 judge）的执行清单，最后更新于 2026-06-26，其中的分数沿用已停用的 judge 协议。保留作为过程记录，当前进度以本节末尾的状态说明和 <a href="#0-status">§0</a> 为准。</div>
+
 <table tabindex="0">
 <thead><tr><th>Step</th><th>Task</th><th>Status</th></tr></thead>
 <tbody>
@@ -818,7 +1016,11 @@
 </table>
 
 <div class="callout idea">
-<p><strong>当前状态（2026-06-26 15:00）</strong>：统一 gpt-5.5 judge 后，LoCoMo 全量结果：Ours LJ=66.1 vs Mnemis LJ=75.0。消融实验 6 变体全部完成。Mnemis LME 重打分完成（LJ=90.9）。LongMemEval 采样评测 4/30 进行中（LJ=91.2）。</p>
+<p><strong>当前状态（2026-08-11）</strong></p>
+<p style="margin-top:.4rem"><strong>已完成</strong>：LoCoMo conv-50 单会话诊断 96.20（DeepSeek V4 Flash）与同题 gpt-4o-mini 对照 77.22；BEAM-100K 三模型 × 两分组全部跑完，S1 三模型平均 pass rate 70.0%；时间过滤检索分析（oracle 区间，Recall@10 +3.05 ~ +3.91 pp）；DeepSeek V4 Flash writer 容量校准（32768）。</p>
+<p style="margin-top:.4rem"><strong>进行中 / 待跑</strong>：LoCoMo 10-conversation 全量正式轮（全套 gpt-4o-mini，~$40）；BEAM 1M 全量 700 题；BEAM 与 LoCoMo 的同口径基线行（Mem0 / Full-ctx / BM25）；08-09 BEAM 批的官方 nugget 重判；writer cap 的多 seed 重复。</p>
+<p style="margin-top:.4rem"><strong>已知短板</strong>：BEAM 的 temporal_reasoning 六格全部 ≤ 0.250，跨 writer 模型与分组稳定复现，是方法本身而非配置问题（日期相减算错，或跨 session 关联不上而弃答）。abstention 同样低（六格里五格 ≤ 0.125），但逐题核对后其中含评测口径造成的扣分，见 <a href="#4-5-case">§4.5</a>。</p>
+<p style="margin-top:.4rem">明细见 <a href="#0-status">§0 当前进度</a>。</p>
 </div>
 
 <!-- ================================================================== -->

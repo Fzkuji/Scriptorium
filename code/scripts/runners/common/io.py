@@ -21,9 +21,18 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def tree_sha256(root: Path) -> str:
+def tree_sha256(root: Path, *, skip: tuple[str, ...] = ()) -> str:
+    """Hash every byte under `root`, in path order.
+
+    Published run records carry this over the whole workspace, so the default
+    covers everything. `skip` names top-level directories to leave out, for
+    the one caller that asks a narrower question: whether the query phase
+    changed the *memory*, which the runtime's own scratch area is not part of.
+    """
     digest = hashlib.sha256()
     for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        if path.relative_to(root).parts[0] in skip:
+            continue
         relative = path.relative_to(root).as_posix().encode()
         payload = path.read_bytes()
         digest.update(len(relative).to_bytes(8, "big"))

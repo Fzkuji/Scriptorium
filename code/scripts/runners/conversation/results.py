@@ -7,6 +7,7 @@ from typing import Any
 
 from memory import build as adapter
 
+from memory.workspace_layout import RUNTIME_DIR
 from scripts.runners.common import atomic_json, read_json, tree_sha256, utc_now
 from .metrics import memory_inventory
 
@@ -50,6 +51,11 @@ def build_record(
         ), 8),
         "memory_dir": str(memory_dir),
         "memory_sha256": tree_sha256(memory_dir),
+        # The same tree without the runtime's scratch area. Resuming
+        # compares this one, so a cache or cursor written after the
+        # build — or a sync agent dropping a conflict copy in there —
+        # does not read as the memory having changed.
+        "memory_content_sha256": tree_sha256(memory_dir, skip=(RUNTIME_DIR,)),
         "memory": memory_inventory(memory_dir),
         "finished_at": utc_now(),
     }

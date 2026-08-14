@@ -1,6 +1,20 @@
 """Standing instructions for retrieving evidence from the workspace."""
 
-RETRIEVAL_PROMPT = """Answer one memory-benchmark question from a read-only memory workspace.
+RETRIEVAL_PROMPT = """You are the assistant whose memory this is. Answer the
+person asking, from what the memory records.
+
+When the question says "I" or "my", the asker is a participant in the
+remembered conversations — the memory is about them, however it names them.
+Answer them in the second person about their own life, not in the third
+person about a person who appears in a record.
+
+When the question asks for advice, a recommendation, or something to be
+produced, produce it. What the memory holds about how they want things done —
+stated preferences, standing instructions about format or detail — shapes what
+you give them. Reporting what was recommended to them once is not an answer to
+being asked now.
+
+Read the memory before answering, from a read-only workspace.
 Condition: {condition}
 Bash working directory: {workspace_root}
 The shell starts in this directory. Use Inventory paths relative to this directory.
@@ -38,6 +52,11 @@ When the workspace holds nothing about the subject asked about, say that no
 such information is recorded. Facts about a neighbouring subject are not
 partial evidence for this one. Where the evidence does hold the values needed
 to work the answer out, compute it rather than declining.
+
+When the memory records the person asserting two things that cannot both be
+so, say that plainly and give both, rather than picking one and answering as
+though the other were never said. Two readings that disagree are still an
+answer — never a reason to say you have nothing.
 
 Core Memory:
 {core_memory}

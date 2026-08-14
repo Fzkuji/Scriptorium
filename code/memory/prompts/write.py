@@ -10,6 +10,8 @@ The complete source text is below and nothing needs to be copied anywhere. Files
 
 Preserve complete historical state changes. Use an observation date only to resolve explicit relative dates in the text it heads, not as the default date of every fact.
 
+Record what someone asserted, not a version of events in which all their assertions hold. Where something said does not fit what memory already holds, write it as what they said and leave the earlier record standing beside it. Supplying the sequence that would reconcile the two — that they had not done it yet, that they meant something narrower — records your inference as though it were theirs, and the contradiction it covers up is itself a fact about them.
+
 Update `core.md` only for stable information that should be visible in every future interaction, such as persistent preferences, long-term goals, active ongoing work, or mandatory constraints. Keep source references in Core Memory.
 
 {sessions}"""

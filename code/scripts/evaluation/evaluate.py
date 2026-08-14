@@ -42,7 +42,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from scripts.evaluation.metrics import compute_lexical
 from scripts.evaluation.answerer import generate_answer
-from scripts.evaluation.judges import judge_beam, judge_locomo, judge_longmemeval
+from scripts.evaluation.judges import (judge_beam, judge_beam_nuggets,
+                                       judge_beam_ordering, judge_locomo,
+                                       judge_longmemeval)
 from scripts.evaluation.llm_clients import (ANSWERER_BASE, ANSWERER_MODEL,
                                         JUDGE_BASE, JUDGE_MODEL)
 
@@ -182,6 +184,19 @@ def run_judge(records, benchmark, out_path, meta):
             score, raw, usage = judge_beam(
                 r["question"], r.get("gold", ""), r["answer"],
                 rubric=r.get("rubric"), abstention=bool(r.get("abstention")))
+            # BEAM's own metric alongside the harness's binary one. The
+            # paper's numbers are nugget averages, so a comparison against
+            # them has to be made on this score, not on the binary label.
+            official = (
+                judge_beam_ordering
+                if r.get("beam_category") == "event_ordering"
+                else judge_beam_nuggets
+            )
+            nugget_score, nugget_detail, nugget_usage = official(
+                r["question"], r.get("rubric"), r["answer"])
+            r["beam_nugget_score"] = nugget_score
+            r["beam_nugget_detail"] = nugget_detail
+            r["beam_nugget_usage"] = nugget_usage
         else:
             score, raw, usage = judge_longmemeval(
                 r.get("question_type", "multi-session"), r["question"],
@@ -302,6 +317,15 @@ def aggregate_beam(records):
         b = {}
         if any("judge_score" in r for r in rs):
             b["judge"] = _mean(r["judge_score"] for r in rs if "judge_score" in r)
+        # BEAM's own metric. Questions carrying no rubric have no nuggets to
+        # average, so they stay out of it rather than scoring zero.
+        nugget = [
+            r["beam_nugget_score"] for r in rs
+            if r.get("beam_nugget_score") is not None
+        ]
+        if nugget:
+            b["nugget"] = _mean(nugget)
+            b["n_nugget"] = len(nugget)
         lex_keys = set()
         for r in rs:
             lex_keys.update(r.get("lexical", {}).keys())

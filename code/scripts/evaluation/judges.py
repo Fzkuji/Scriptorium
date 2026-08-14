@@ -11,7 +11,8 @@
 import json
 import re
 
-from .prompts import (ACCURACY_PROMPT, JUDGE_SYSTEM_LOCOMO,
+from .prompts import (ACCURACY_PROMPT, BEAM_EQUIVALENCE_PROMPT,
+                      BEAM_NUGGET_PROMPT, JUDGE_SYSTEM_LOCOMO,
                       get_anscheck_prompt)
 from .llm_clients import LLMCallError, emit_attempt_event, judge_chat
 
@@ -302,3 +303,116 @@ def judge_longmemeval(question_type, question, gold, answer, abstention=False):
         except ValueError as exc:
             last_error = exc
     raise JudgeCallError(str(last_error), usage_total) from last_error
+
+
+def _parse_nugget_score(text):
+    """The judge returns {"score": 1.0|0.5|0.0, "reason": ...}."""
+    match = re.search(r"\{.*\}", str(text), re.S)
+    if not match:
+        raise ValueError(f"no JSON object in nugget judgement: {text!r}")
+    value = json.loads(match.group(0)).get("score")
+    score = float(value)
+    if score not in (0.0, 0.5, 1.0):
+        raise ValueError(f"nugget score outside the scale: {value!r}")
+    return score
+
+
+def _judge_once(messages, parse, usage_total, attempts=3):
+    last_error = None
+    for _ in range(attempts):
+        try:
+            text, usage = judge_chat(messages)
+        except LLMCallError as exc:
+            _raise_with_failed_usage(usage_total, exc)
+        _accumulate_usage(usage_total, usage)
+        try:
+            return _parse_or_record(parse, text, usage_total), text
+        except ValueError as exc:
+            last_error = exc
+    raise JudgeCallError(str(last_error), usage_total) from last_error
+
+
+def judge_beam_nuggets(question, rubric, answer):
+    """BEAM's own metric: each rubric nugget scored 0/0.5/1, then averaged.
+
+    Returns (score, per-nugget detail, usage). A question with no rubric has
+    nothing to average, so it returns None and is left out of the mean rather
+    than counted as zero.
+    """
+    items = [rubric] if isinstance(rubric, str) else list(rubric or [])
+    items = [str(item).strip() for item in items if str(item).strip()]
+    usage_total = _new_usage_total()
+    if not items:
+        return None, [], usage_total
+    detail = []
+    for item in items:
+        score, raw = _judge_once(
+            [{"role": "user", "content": BEAM_NUGGET_PROMPT.format(
+                question=question, rubric_item=item, llm_response=answer,
+            )}],
+            _parse_nugget_score,
+            usage_total,
+        )
+        detail.append({"nugget": item, "score": score, "raw": raw})
+    return sum(d["score"] for d in detail) / len(detail), detail, usage_total
+
+
+def _response_items(answer):
+    """The events a response lists, in the order it lists them.
+
+    Ordering answers come back as numbered or bulleted lines; anything else is
+    read as one event per non-empty line so a prose answer still aligns.
+    """
+    lines = []
+    for line in str(answer).splitlines():
+        stripped = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", line).strip()
+        stripped = re.sub(r"^\**|\**$", "", stripped).strip()
+        if len(stripped) > 3:
+            lines.append(stripped)
+    return lines
+
+
+def judge_beam_ordering(question, rubric, answer):
+    """Event ordering: Kendall tau-b between the nugget order and the response.
+
+    An LLM equivalence detector aligns each nugget with the response item that
+    denotes the same event; tau-b over the aligned positions scores recall and
+    sequence together, which is what the benchmark reports for this ability.
+    Rescaled from [-1, 1] to [0, 1] so it sits on the same axis as the other
+    nine abilities.
+    """
+    from scipy.stats import kendalltau
+
+    nuggets = [rubric] if isinstance(rubric, str) else list(rubric or [])
+    nuggets = [str(item).strip() for item in nuggets if str(item).strip()]
+    usage_total = _new_usage_total()
+    if not nuggets:
+        return None, [], usage_total
+    items = _response_items(answer)
+    detail, gold_rank, said_rank = [], [], []
+    for index, nugget in enumerate(nuggets):
+        matched = None
+        for position, item in enumerate(items):
+            verdict, _ = _judge_once(
+                [{"role": "user", "content": BEAM_EQUIVALENCE_PROMPT.format(
+                    first_paragraph=nugget, second_paragraph=item,
+                )}],
+                lambda text: bool(re.search(r"\byes\b", str(text), re.I)),
+                usage_total,
+            )
+            if verdict:
+                matched = position
+                break
+        detail.append({"nugget": nugget, "matched_position": matched})
+        if matched is not None:
+            gold_rank.append(index)
+            said_rank.append(matched)
+    # One aligned event carries no order, and none carries nothing at all.
+    if len(gold_rank) < 2:
+        return (0.0 if not gold_rank else 0.5 / len(nuggets)), detail, usage_total
+    tau = kendalltau(gold_rank, said_rank, variant="b").statistic
+    if tau != tau:  # every rank tied, so tau is undefined
+        tau = 0.0
+    # Events the response never mentioned cannot count as ordered correctly.
+    recall = len(gold_rank) / len(nuggets)
+    return max(0.0, tau) * recall, detail, usage_total

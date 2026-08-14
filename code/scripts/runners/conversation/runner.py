@@ -4,12 +4,14 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from memory import build as adapter
 from memory import management as memory
 from memory import retrieval
 
+from memory.workspace_layout import RUNTIME_DIR
 from scripts.runners.common import atomic_json, read_json, tree_sha256, utc_now
 from .config import parse_args
 from .data import check_benchmark, load_sample, sample_inventory
@@ -19,6 +21,18 @@ from memory.runtime.billing import read_spend, spend_delta
 from .metrics import latency_summary, memory_inventory, summarize_usage
 from .query import answer_question
 from .results import build_record, load_completed, write_questions
+
+
+def build_memory_matches(memory_dir: Path, build: dict[str, Any]) -> bool:
+    """Is this the memory that build produced?
+
+    Records written before the content hash existed carry only the whole-
+    workspace one, so they are still checked the way they were written.
+    """
+    recorded = build.get("memory_content_sha256")
+    if recorded:
+        return tree_sha256(memory_dir, skip=(RUNTIME_DIR,)) == recorded
+    return tree_sha256(memory_dir) == build.get("memory_sha256")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -85,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             build.get("status") != "complete"
             or build.get("sample_id") != args.sample_id
             or not memory_dir.is_dir()
-            or tree_sha256(memory_dir) != build.get("memory_sha256")
+            or not build_memory_matches(memory_dir, build)
         ):
             raise RuntimeError("existing build is incomplete or differs")
     else:
@@ -142,7 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     completed = load_completed(questions_path, sample_index)
     write_questions(questions_path, build, completed)
     turn_index = backend.build_turn_index(sample["conversation"])
-    memory_hash = tree_sha256(memory_dir)
+    # The runtime's own directory is scratch, not memory: caches and
+    # cursors there changing does not mean a question rewrote a topic.
+    memory_hash = tree_sha256(memory_dir, skip=(RUNTIME_DIR,))
     query_started = time.monotonic()
     failures: list[dict[str, Any]] = []
     pending = [
@@ -208,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
             "finished_at": utc_now(),
         })
         raise RuntimeError(f"{len(failures)} questions failed")
-    if tree_sha256(memory_dir) != memory_hash:
+    if tree_sha256(memory_dir, skip=(RUNTIME_DIR,)) != memory_hash:
         raise RuntimeError("query phase modified the memory workspace")
 
     performance = {

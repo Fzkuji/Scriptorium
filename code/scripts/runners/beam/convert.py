@@ -154,12 +154,19 @@ def convert_questions(row: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def convert(size: str, conversation_id: str) -> dict[str, Any]:
-    from datasets import Dataset
+    # Read the Arrow stream directly. `datasets.Dataset.from_file` parses the
+    # feature metadata the file was written with, and refuses a `List` type
+    # that a newer writer produced, so a version skew there would cost us the
+    # data. The columns themselves are ordinary Arrow.
+    import pyarrow as pa
+    import pyarrow.ipc as ipc
 
     path = ARROW_DIR / f"beam-{size}.arrow"
     if not path.is_file():
         raise FileNotFoundError(f"BEAM data missing: {path}")
-    dataset = Dataset.from_file(str(path))
+    with pa.memory_map(str(path)) as source:
+        table = ipc.open_stream(source).read_all()
+    dataset = table.to_pylist()
     matches = [
         row for row in dataset
         if str(row["conversation_id"]) == str(conversation_id)
