@@ -63,6 +63,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--core-repair-max-checks", type=int, default=8)
     parser.add_argument("--core-repair-max-trajectories", type=int, default=2)
     parser.add_argument("--core-repair-stagnation-limit", type=int, default=2)
+    parser.add_argument("--generic-repair-max-trajectories", type=int, default=1)
     parser.add_argument(
         "--shell-backend",
         choices=("auto", "posix-bash", "native"),

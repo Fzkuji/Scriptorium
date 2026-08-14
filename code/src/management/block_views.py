@@ -200,10 +200,16 @@ class BlockViewsMixin:
         units = parse_topic_tree(self.stage_dir / "topics")
         ids = {unit.memory_id for unit in units}
         for unit in units:
-            missing_targets = set(unit.relation_targets) - ids
+            missing_targets = sorted(set(unit.relation_targets) - ids)
             if missing_targets:
+                missing_target = missing_targets[0]
                 raise ValueError(
-                    f"dangling block link: {sorted(missing_targets)[0]}"
+                    f"dangling block link: {missing_target}; "
+                    f"source_file=topics/{unit.topic_path}; "
+                    f"source_block={unit.memory_id}; "
+                    f"source_headings={list(unit.headings)!r}; "
+                    f"relation_targets={sorted(set(unit.relation_targets))!r}; "
+                    f"missing_targets={missing_targets!r}"
                 )
             for ref in unit.source_refs:
                 self._validate_source_reference(ref)

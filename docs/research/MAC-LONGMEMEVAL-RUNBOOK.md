@@ -120,6 +120,10 @@ matching manifest.  Completed outputs are portable and do not need rebuilding.
 
 - `/bin/bash` is sufficient for the current POSIX shell backend, but keep
   commands compatible with the Bash version installed on the Mac.
+- Install Homebrew `gnu-sed` and prepend its `libexec/gnubin` directory for
+  LongMemEval workers. macOS BSD `sed -i` is not compatible with the GNU/WSL
+  command contract used by the Writer and transaction tests. Do not change the
+  global shell profile; scope this PATH change to the experiment launcher.
 - Use local APFS storage for atomic rename and file-lock behavior.
 - Verify executable permissions after cloning.
 - Compare the first committed batch's seconds per agent turn and error rate
@@ -127,3 +131,16 @@ matching manifest.  Completed outputs are portable and do not need rebuilding.
 - Start with five or fewer provider lanes; do not increase concurrency solely
   because a second machine is available.
 
+## Mac reliability patch
+
+The Mac continuation may include the local reliability-only patch in
+`code/src/agent_runtime/claude_code.py` that aborts one Claude Agent SDK
+trajectory after 1,800 consecutive seconds without an SDK message. The patch
+does not change prompts, models, tools, batch construction, memory semantics,
+verification, final management, or successful outputs. A timeout follows the
+existing failed-item path, preserving the build checkpoint and diagnostic
+snapshot instead of leaving the worker alive indefinitely.
+
+Record the patched file SHA-256 in the run handoff. Workers that were already
+running when the file changed retain their previously loaded code; only a new
+or restarted worker loads the patch.

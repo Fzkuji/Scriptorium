@@ -600,6 +600,7 @@ def create_or_resume_manifest(
     data_count: int,
     run_meta: dict[str, Any],
     resume: bool,
+    allow_resume_drift: bool = False,
 ) -> dict[str, Any]:
     path = output_dir / "run_manifest.json"
     if path.exists():
@@ -615,9 +616,17 @@ def create_or_resume_manifest(
         }
         mismatches = [key for key, value in expected.items() if old.get(key) != value]
         if mismatches:
-            raise ExistingStateError(
-                f"existing output uses different {', '.join(mismatches)}"
-            )
+            if not (resume and allow_resume_drift):
+                raise ExistingStateError(
+                    f"existing output uses different {', '.join(mismatches)}"
+                )
+            old.setdefault("manifest_migrations", []).append({
+                "migrated_at": utc_now(),
+                "changed_fields": mismatches,
+                "previous": {key: old.get(key) for key in mismatches},
+                "replacement": {key: expected[key] for key in mismatches},
+            })
+            old.update(expected)
         if not resume and any(
             item.get("status") != "complete" for item in _collect_checkpoints(output_dir)
         ):

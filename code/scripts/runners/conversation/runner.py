@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
         core_repair_stagnation_limit=getattr(
             args, "core_repair_stagnation_limit", 2
         ),
+        generic_repair_max_trajectories=getattr(
+            args, "generic_repair_max_trajectories", 1
+        ),
         recent_limit=args.recent_limit,
         max_turns=args.max_turns,
         max_budget_usd=args.max_budget_usd,

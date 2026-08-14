@@ -58,6 +58,11 @@ paper/
 .superpowers/
 
 # 本地凭证：config 用 api_key_file 指向仓库外的文件，切勿提交
-*api-key*.txt
+*api-key*
 *.key
 .memory/
+.runtime-cache/
+
+# Local experiment handoffs and packaged outputs
+exports/
+*.tar.gz

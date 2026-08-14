@@ -3,6 +3,7 @@
 import json
 import hashlib
 import os
+import re
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -264,8 +265,16 @@ def build_memory(
         except Exception as exc:
             failure_audit = list(getattr(exc, "scriptorium_audit", []))
             if progress_path:
+                attempt_suffix = ""
+                if live_audit_path is not None:
+                    match = re.search(
+                        r"-attempt-(\d+)\.jsonl$", str(live_audit_path)
+                    )
+                    if match is not None:
+                        attempt_suffix = f"-attempt-{int(match.group(1)):03d}"
                 failure_path = progress_path.with_name(
-                    f"writer-failure-batch-{batch_index:03d}.json"
+                    f"writer-failure-batch-{batch_index:03d}"
+                    f"{attempt_suffix}.json"
                 )
                 _atomic_json(failure_path, {
                     "batch_index": batch_index,
@@ -297,6 +306,8 @@ def build_memory(
         }
         if agent_record and agent_record.get("core_repair"):
             trajectory_record["core_repair"] = agent_record["core_repair"]
+        if agent_record and agent_record.get("generic_repair"):
+            trajectory_record["generic_repair"] = agent_record["generic_repair"]
         writer_trajectories.append(trajectory_record)
         progress["writer_trajectories"] = writer_trajectories
         for record in audit:

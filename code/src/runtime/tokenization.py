@@ -100,7 +100,14 @@ class TokenCounter:
                 "it is not a provider-reported exact count."
             ),
         }
-        return cls(identity=identity, encoder=encoding.encode, decoder=encoding.decode)
+        # Benchmark text is visible user content. Tokenizer sentinel spellings
+        # such as ``<|endoftext|>`` must therefore be counted as ordinary text,
+        # not interpreted as injected control tokens.
+        identity["disallowed_special"] = []
+        encoder = lambda text: list(  # noqa: E731
+            encoding.encode(text, disallowed_special=())
+        )
+        return cls(identity=identity, encoder=encoder, decoder=encoding.decode)
 
     @classmethod
     def from_identity(cls, identity: Mapping[str, Any]) -> TokenCounter:

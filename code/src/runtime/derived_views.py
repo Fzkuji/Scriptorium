@@ -109,9 +109,19 @@ def rebuild_derived_views(
     }
     backlinks: dict[str, list[str]] = {}
     for source, targets in outbound.items():
-        missing = set(targets) - unit_ids
+        missing = sorted(set(targets) - unit_ids)
         if missing:
-            raise ValueError(f"dangling block link: {sorted(missing)[0]}")
+            source_unit = next(
+                unit for unit in canonical_units if unit.memory_id == source
+            )
+            raise ValueError(
+                f"dangling block link: {missing[0]}; "
+                f"source_file=topics/{source_unit.topic_path}; "
+                f"source_block={source}; "
+                f"source_headings={list(source_unit.headings)!r}; "
+                f"relation_targets={targets!r}; "
+                f"missing_targets={missing!r}"
+            )
         for target in targets:
             backlinks.setdefault(target, []).append(source)
     (memory_dir / "relations.json").write_text(

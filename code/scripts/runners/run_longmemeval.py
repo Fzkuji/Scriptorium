@@ -103,6 +103,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--max-budget-usd", type=float)
     result.add_argument("--build-only", action="store_true")
     result.add_argument("--resume", action="store_true")
+    result.add_argument(
+        "--allow-resume-drift",
+        action="store_true",
+        help="audit and accept config/code fingerprint changes when resuming",
+    )
     order = result.add_mutually_exclusive_group()
     order.add_argument("--round-robin-types", action="store_true")
     order.add_argument("--question-type")
@@ -125,6 +130,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--core-repair-max-checks", type=int, default=8)
     result.add_argument("--core-repair-max-trajectories", type=int, default=2)
     result.add_argument("--core-repair-stagnation-limit", type=int, default=2)
+    result.add_argument("--generic-repair-max-trajectories", type=int, default=1)
     result.add_argument(
         "--shell-backend",
         choices=("auto", "posix-bash", "native"),
@@ -188,6 +194,9 @@ def main() -> int:
         ),
         core_repair_stagnation_limit=getattr(
             args, "core_repair_stagnation_limit", 2
+        ),
+        generic_repair_max_trajectories=getattr(
+            args, "generic_repair_max_trajectories", 1
         ),
         recent_limit=args.recent_limit,
         max_turns=args.max_turns,
@@ -265,6 +274,7 @@ def main() -> int:
         len(data),
         run_meta,
         args.resume,
+        args.allow_resume_drift,
     )
     manifest.setdefault("invocations", []).append({
         "started_at": common.utc_now(),

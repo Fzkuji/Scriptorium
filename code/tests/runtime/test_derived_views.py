@@ -144,8 +144,14 @@ def test_rebuild_views_materializes_relations_and_rejects_dangling_targets(
         "outbound": {"source-block": ["target-block"], "target-block": []},
     }
 
-    with pytest.raises(ValueError, match="dangling block link"):
+    with pytest.raises(ValueError, match="dangling block link") as exc_info:
         rebuild_derived_views(tmp_path, [source])
+    message = str(exc_info.value)
+    assert "dangling block link: target-block" in message
+    assert "source_file=topics/a.md" in message
+    assert "source_block=source-block" in message
+    assert "relation_targets=['target-block']" in message
+    assert "missing_targets=['target-block']" in message
 
 
 def test_merged_block_aliases_do_not_duplicate_timeline_or_recent(tmp_path: Path):

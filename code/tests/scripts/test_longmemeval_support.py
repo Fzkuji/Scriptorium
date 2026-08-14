@@ -190,6 +190,36 @@ def test_incomplete_state_requires_resume(tmp_path):
         support.run_item(0, item, tmp_path, FakeBackend(), run_meta(), resume=False)
 
 
+def test_manifest_resume_drift_requires_explicit_opt_in_and_is_audited(tmp_path):
+    original = run_meta()
+    initial = support.create_or_resume_manifest(
+        tmp_path, FIXTURE, "dataset", 2, original, resume=False
+    )
+    support.atomic_json(tmp_path / "run_manifest.json", initial)
+    changed = {**original, "config": {"generic_repair_max_trajectories": 3}}
+
+    with pytest.raises(support.ExistingStateError, match="different config"):
+        support.create_or_resume_manifest(
+            tmp_path, FIXTURE, "dataset", 2, changed, resume=True
+        )
+
+    migrated = support.create_or_resume_manifest(
+        tmp_path,
+        FIXTURE,
+        "dataset",
+        2,
+        changed,
+        resume=True,
+        allow_resume_drift=True,
+    )
+
+    assert migrated["config"] == changed["config"]
+    audit = migrated["manifest_migrations"][-1]
+    assert audit["changed_fields"] == ["config"]
+    assert audit["previous"]["config"] == original["config"]
+    assert audit["replacement"]["config"] == changed["config"]
+
+
 def test_item_lock_rejects_second_writer_and_releases(tmp_path):
     lock_path = tmp_path / ".locks" / "item.lock"
     first = support._acquire_item_lock(lock_path)

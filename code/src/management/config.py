@@ -9,6 +9,7 @@ class MemoryConfig:
     core_repair_max_checks: int = 8
     core_repair_max_trajectories: int = 2
     core_repair_stagnation_limit: int = 2
+    generic_repair_max_trajectories: int = 1
     writer_shell_examples: bool = False
     recent_limit: int = 50
     max_turns: int = 20
@@ -26,6 +27,8 @@ class MemoryConfig:
             raise ValueError("core_repair_max_trajectories must be positive")
         if self.core_repair_stagnation_limit < 1:
             raise ValueError("core_repair_stagnation_limit must be positive")
+        if self.generic_repair_max_trajectories < 1:
+            raise ValueError("generic_repair_max_trajectories must be positive")
         if self.recent_limit < 0:
             raise ValueError("recent_limit must be non-negative")
         if self.max_turns < 1:

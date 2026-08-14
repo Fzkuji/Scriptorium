@@ -624,3 +624,12 @@ def test_build_caps_calibrated_input_at_explicit_limit(tmp_path: Path, monkeypat
     )
 
     assert batch_message_counts == [1, 1]
+
+
+def test_resolved_tokenizer_counts_special_token_spelling_as_visible_text():
+    from src.runtime.tokenization import TokenCounter
+
+    counter = TokenCounter.resolve(requested_model="deepseek-v4-flash")
+
+    assert counter.count("before <|endoftext|> after") > 0
+    assert counter.identity["disallowed_special"] == []

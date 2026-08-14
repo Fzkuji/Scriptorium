@@ -137,6 +137,16 @@ This capacity instruction applies only to this repair trajectory:
 - If the tool reports stagnation, stop making cosmetic rewrites and make one materially shorter, evidence-preserving revision.
 Once the count is at or below the target and the staged edits still preserve the original work, finish immediately."""
 
+DANGLING_BLOCK_LINK_REPAIR_GUIDANCE = """This is a dangling block-link failure. The missing target ID is `{block_id}`.
+
+The validation error above may also identify `source_file`, `source_block`, `source_headings`, `relation_targets`, and `missing_targets`. Start with that exact source paragraph instead of guessing globally. Then search every editable Core and Topic Markdown file for `#^{block_id}` and inspect the paragraphs and IDs involved. Repair the relationship without inventing an ID:
+
+- If the target paragraph was moved or merged, preserve its existing ID on the correct paragraph and update every relative link to its actual Topic path.
+- If the relationship is no longer valid, remove only that relationship link while preserving the source-grounded prose, citations, and unrelated links.
+- Never attach the missing ID to a different fact merely to satisfy validation.
+- Do not repeat an edit that recreates the same source-to-missing-target edge reported by the previous validation error.
+- Finish only after searching again and confirming that every remaining `#^` relation targets an ID that exists in Core or Topic memory."""
+
 MANAGER_TASK = """Organize the topic files into a coherent structure.
 
 Use the supplied workspace structure and shell. Split or merge existing topic files, headings, and paragraphs when appropriate. Preserve source-grounded facts, evidence footnotes, valid block links, and the complete dated history.

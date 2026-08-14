@@ -1,6 +1,6 @@
 {
   "schema": "scriptorium-longmemeval-build-cohorts-v1",
-  "updated_at": "2026-08-09",
+  "updated_at": "2026-08-10",
   "cohorts": [
     {
       "id": "legacy-runtimeids-index75-104",
@@ -23,6 +23,18 @@
       "preserve_outputs": true,
       "output_globs": [
         "/home/qi2/scriptorium-runs/longmemeval-ms-20-index105-124-worker*-wsl-ext4-r1"
+      ]
+    },
+    {
+      "id": "mac-index175-274-core3k-r1",
+      "indices": {"start": 175, "end": 274, "count": 100},
+      "status": "prepared",
+      "owner": "mac",
+      "use_in_current_aggregate": true,
+      "preserve_outputs": true,
+      "required_git_commit": "73fc64ff6472ddf235c00634af6afb3961651146",
+      "output_globs": [
+        "code/results/formal/longmemeval-ms-100-index175-274-core3k-mac-worker*-r1"
       ]
     }
   ]

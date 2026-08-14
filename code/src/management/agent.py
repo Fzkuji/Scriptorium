@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from .config import MemoryConfig
 from .errors import CoreCapacityError
 from .prompts import (
     CORE_CAPACITY_REPAIR_TASK,
+    DANGLING_BLOCK_LINK_REPAIR_GUIDANCE,
     SYSTEM_PROMPT,
     WRITER_SHELL_EXAMPLES,
 )
@@ -48,6 +50,16 @@ def _core_capacity_error(
         failure.exception if isinstance(failure, CommitFailure) else failure
     )
     return exception if isinstance(exception, CoreCapacityError) else None
+
+
+def _generic_repair_guidance(error: CommitFailure | Exception | str) -> str:
+    message = _failure_message(error)
+    match = re.search(r"dangling block link:\s*([A-Za-z0-9_-]+)", message)
+    if match is None:
+        return ""
+    return "\n\n" + DANGLING_BLOCK_LINK_REPAIR_GUIDANCE.format(
+        block_id=match.group(1)
+    )
 
 
 def render_conversation(
@@ -147,6 +159,21 @@ def _run_agent(
             encoding="utf-8",
         )
         os.replace(temporary, progress_path)
+
+    def record_live_event(event: dict[str, Any]) -> None:
+        """Durably retain repair lifecycle events, including terminal failures."""
+        if live_audit_path is None:
+            return
+        path = Path(live_audit_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            **event,
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
     try:
         if source_sessions:
             workspace.archive_sessions(source_sessions)
@@ -179,6 +206,7 @@ def _run_agent(
             usage_logger(result)
         trajectory_results = [result]
         core_repair_records: list[dict[str, Any]] = []
+        generic_repair_records: list[dict[str, Any]] = []
         # Shell calls commit immediately, while built-in file tools leave edits
         # staged until the trajectory ends. Snapshot the current committed tree
         # now, so shell work from this same turn is not mistaken for a new edit.
@@ -267,41 +295,96 @@ def _run_agent(
                     setattr(exc, "scriptorium_audit", list(audit))
                     raise exc
             else:
-                # Generic validation failures retain the legacy single repair.
-                repair_baseline = _baseline(workspace)
-                try:
-                    repair = agent.run(
-                        prompt=(
-                            "Your edits were rejected and discarded:\n\n"
-                            f"{_failure_message(error)}\n\n"
-                            "The workspace is back to its state before this "
-                            "turn. Redo the work, fixing what the message "
-                            "reports.\n\n"
-                            f"{task}"
+                repair_error: CommitFailure | Exception | str | None = error
+                for repair_number in range(
+                    1, config.generic_repair_max_trajectories + 1
+                ):
+                    repair_baseline = _baseline(workspace)
+                    guidance = _generic_repair_guidance(repair_error)
+                    trigger_message = _failure_message(repair_error)
+                    record_live_event({
+                        "tool": "generic_repair",
+                        "trajectory": repair_number,
+                        "mode": (
+                            "dangling_block_link"
+                            if guidance else "generic_validation"
                         ),
-                        system_prompt=system_prompt,
-                        cwd=workspace.stage_dir,
-                        tools=management_tools(
-                            workspace, audit,
-                            live_audit_path=live_audit_path,
-                        ),
-                        max_turns=config.max_turns,
-                        max_budget_usd=config.max_budget_usd,
-                        progress_fn=record_progress,
+                        "status": "started",
+                        "trigger_error": trigger_message,
+                    })
+                    try:
+                        repair = agent.run(
+                            prompt=(
+                                "Your edits were rejected and discarded:\n\n"
+                                f"{_failure_message(repair_error)}\n\n"
+                                "The workspace is back to its state before this "
+                                "turn. Redo the work, fixing what the message "
+                                "reports."
+                                f"{guidance}\n\n"
+                                f"Repair attempt {repair_number} of "
+                                f"{config.generic_repair_max_trajectories}.\n\n"
+                                f"{task}"
+                            ),
+                            system_prompt=system_prompt,
+                            cwd=workspace.stage_dir,
+                            tools=management_tools(
+                                workspace, audit,
+                                live_audit_path=live_audit_path,
+                            ),
+                            max_turns=config.max_turns,
+                            max_budget_usd=config.max_budget_usd,
+                            progress_fn=record_progress,
+                        )
+                    except Exception as exc:
+                        record_live_event({
+                            "tool": "generic_repair",
+                            "trajectory": repair_number,
+                            "mode": (
+                                "dangling_block_link"
+                                if guidance else "generic_validation"
+                            ),
+                            "status": "agent_error",
+                            "trigger_error": trigger_message,
+                            "error": _failure_message(exc),
+                        })
+                        setattr(exc, "scriptorium_audit", list(audit))
+                        raise
+                    if usage_logger is not None:
+                        usage_logger(repair)
+                    trajectory_results.append(repair)
+                    repair_error = _commit_turn(
+                        workspace, repair_baseline, audit
                     )
-                except Exception as exc:
-                    setattr(exc, "scriptorium_audit", list(audit))
-                    raise
-                if usage_logger is not None:
-                    usage_logger(repair)
-                trajectory_results.append(repair)
-                repair_error = _commit_turn(
-                    workspace, repair_baseline, audit
-                )
+                    generic_repair_records.append({
+                        "trajectory": repair_number,
+                        "mode": (
+                            "dangling_block_link"
+                            if guidance else "generic_validation"
+                        ),
+                        "trigger_error": _failure_message(error),
+                        "status": "ok" if repair_error is None else "rejected",
+                        "error": (
+                            _failure_message(repair_error)
+                            if repair_error is not None else None
+                        ),
+                    })
+                    record_live_event({
+                        "tool": "generic_repair",
+                        **generic_repair_records[-1],
+                    })
+                    audit.append({
+                        "tool": "generic_repair",
+                        **generic_repair_records[-1],
+                    })
+                    if repair_error is None:
+                        break
+                    if _core_capacity_error(repair_error) is not None:
+                        break
                 if repair_error is not None:
                     exc = RuntimeError(
-                        "memory writer repair was rejected: "
-                        + _failure_message(repair_error)
+                        "memory writer repair was rejected after "
+                        f"{config.generic_repair_max_trajectories} "
+                        "trajectories: " + _failure_message(repair_error)
                     )
                     setattr(exc, "scriptorium_audit", list(audit))
                     raise exc
@@ -320,6 +403,8 @@ def _run_agent(
             ),
             **({"core_repair": core_repair_records}
                if core_repair_records else {}),
+            **({"generic_repair": generic_repair_records}
+               if generic_repair_records else {}),
         })
         return audit
     finally:

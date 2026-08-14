@@ -126,6 +126,110 @@ def test_writer_audit_aggregates_successful_repair_trajectory(
     assert final_output == ["repaired"]
 
 
+def test_generic_repair_honors_configured_trajectory_limit(
+    tmp_path: Path, monkeypatch,
+):
+    outcomes = iter([
+        "invalid initial edit",
+        "invalid repair one",
+        "invalid repair two",
+        None,
+    ])
+    monkeypatch.setattr(
+        "src.management.agent._commit_turn",
+        lambda *_args, **_kwargs: next(outcomes),
+    )
+    agent = QueuedAgent([{}, {}, {}, {}])
+
+    audit = _run_agent(
+        tmp_path,
+        agent=agent,
+        task="organize",
+        config=MemoryConfig(generic_repair_max_trajectories=3),
+    )
+
+    assert len(agent.calls) == 4
+    assert "Repair attempt 1 of 3" in agent.calls[1]["prompt"]
+    assert "Repair attempt 3 of 3" in agent.calls[3]["prompt"]
+    assert audit[-1]["generic_repair"] == [
+        {
+            "trajectory": 1,
+            "mode": "generic_validation",
+            "trigger_error": "invalid initial edit",
+            "status": "rejected",
+            "error": "invalid repair one",
+        },
+        {
+            "trajectory": 2,
+            "mode": "generic_validation",
+            "trigger_error": "invalid initial edit",
+            "status": "rejected",
+            "error": "invalid repair two",
+        },
+        {
+            "trajectory": 3,
+            "mode": "generic_validation",
+            "trigger_error": "invalid initial edit",
+            "status": "ok",
+            "error": None,
+        },
+    ]
+
+
+def test_dangling_link_repair_receives_targeted_guidance(
+    tmp_path: Path, monkeypatch,
+):
+    outcomes = iter([
+        CommitFailure(ValueError("dangling block link: deadbeef")),
+        None,
+    ])
+    monkeypatch.setattr(
+        "src.management.agent._commit_turn",
+        lambda *_args, **_kwargs: next(outcomes),
+    )
+    agent = QueuedAgent([{}, {}])
+
+    audit = _run_agent(tmp_path, agent=agent, task="organize")
+
+    repair_prompt = agent.calls[1]["prompt"]
+    assert "missing target ID is `deadbeef`" in repair_prompt
+    assert "search every editable Core and Topic Markdown file" in repair_prompt
+    assert "Start with that exact source paragraph" in repair_prompt
+    assert "Never attach the missing ID to a different fact" in repair_prompt
+    assert audit[-1]["generic_repair"][0]["mode"] == "dangling_block_link"
+
+
+def test_generic_repair_rejects_after_configured_limit(
+    tmp_path: Path, monkeypatch,
+):
+    outcomes = iter(["initial", "repair one", "repair two", "repair three"])
+    monkeypatch.setattr(
+        "src.management.agent._commit_turn",
+        lambda *_args, **_kwargs: next(outcomes),
+    )
+    agent = QueuedAgent([{}, {}, {}, {}])
+
+    with pytest.raises(RuntimeError, match="after 3 trajectories"):
+        _run_agent(
+            tmp_path,
+            agent=agent,
+            task="organize",
+            config=MemoryConfig(generic_repair_max_trajectories=3),
+            live_audit_path=tmp_path / "writer-live.jsonl",
+        )
+
+    assert len(agent.calls) == 4
+    repair_events = [
+        json.loads(line)
+        for line in (tmp_path / "writer-live.jsonl").read_text().splitlines()
+        if '"tool": "generic_repair"' in line
+    ]
+    assert [event["status"] for event in repair_events] == [
+        "started", "rejected", "started", "rejected", "started", "rejected",
+    ]
+    assert repair_events[-1]["error"] == "repair three"
+
+
 def test_core_capacity_repair_is_conditional_and_uses_exact_count_tool(
     tmp_path: Path, monkeypatch,
 ):

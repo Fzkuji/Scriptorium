@@ -29,6 +29,8 @@ class ClaudeCodeConfig:
     api_key: str
     model: str
     cli_path: str | None = None
+    inactivity_timeout_s: float | None = 1_800.0
+    max_buffer_size: int = 20 * 1024 * 1024
 
     def __post_init__(self) -> None:
         if not self.base_url.strip():
@@ -39,6 +41,13 @@ class ClaudeCodeConfig:
             raise ValueError("model is required")
         if self.cli_path is not None and not self.cli_path.strip():
             raise ValueError("cli_path must not be empty")
+        if (
+            self.inactivity_timeout_s is not None
+            and self.inactivity_timeout_s <= 0
+        ):
+            raise ValueError("inactivity_timeout_s must be positive")
+        if self.max_buffer_size < 1:
+            raise ValueError("max_buffer_size must be positive")
 
 
 @dataclass(frozen=True)
@@ -154,6 +163,7 @@ class ClaudeCodeAgent:
                 thinking={"type": "disabled"},
                 max_turns=max_turns,
                 max_budget_usd=max_budget_usd,
+                max_buffer_size=self.config.max_buffer_size,
                 cwd=cwd,
                 cli_path=self.config.cli_path,
                 setting_sources=[],
@@ -178,7 +188,24 @@ class ClaudeCodeAgent:
             final: ResultMessage | None = None
             assistant_messages = 0
             try:
-                async for message in self._query(prompt=prompt, options=options):
+                messages = self._query(prompt=prompt, options=options).__aiter__()
+                while True:
+                    try:
+                        next_message = messages.__anext__()
+                        if self.config.inactivity_timeout_s is None:
+                            message = await next_message
+                        else:
+                            message = await asyncio.wait_for(
+                                next_message,
+                                timeout=self.config.inactivity_timeout_s,
+                            )
+                    except StopAsyncIteration:
+                        break
+                    except TimeoutError as exc:
+                        raise AgentExecutionError(
+                            "Claude Code produced no SDK messages for "
+                            f"{self.config.inactivity_timeout_s:g} seconds"
+                        ) from exc
                     if isinstance(message, AssistantMessage):
                         assistant_messages += 1
                         texts.extend(

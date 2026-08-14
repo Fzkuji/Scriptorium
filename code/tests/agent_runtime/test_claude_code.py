@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -90,6 +91,7 @@ def test_agent_uses_isolated_bare_nonpersistent_claude_code(
     assert options.allowed_tools == ["Read", "Edit", "Write", "Grep", "Glob"]
     assert options.setting_sources == []
     assert options.thinking == {"type": "disabled"}
+    assert options.max_buffer_size == 20 * 1024 * 1024
     assert options.extra_args == {
         "bare": None,
         "no-session-persistence": None,
@@ -161,3 +163,50 @@ def test_agent_preserves_api_status_when_cli_exits_after_error_result(
 
     with pytest.raises(AgentExecutionError, match="API status 529"):
         agent.run(prompt="answer", system_prompt="system", cwd=tmp_path)
+
+
+def test_agent_times_out_when_sdk_message_stream_stalls(tmp_path: Path) -> None:
+    async def fake_query(*, prompt, options):
+        del prompt, options
+        await asyncio.sleep(1)
+        yield AssistantMessage(
+            content=[TextBlock("too late")],
+            model="test-model",
+            usage={"input_tokens": 1, "output_tokens": 1},
+        )
+
+    agent = ClaudeCodeAgent(
+        ClaudeCodeConfig(
+            base_url="https://gateway.example",
+            api_key="secret-token",
+            model="test-model",
+            inactivity_timeout_s=0.01,
+        ),
+        query_fn=fake_query,
+    )
+
+    with pytest.raises(
+        AgentExecutionError,
+        match="no SDK messages for 0.01 seconds",
+    ):
+        agent.run(prompt="answer", system_prompt="system", cwd=tmp_path)
+
+
+def test_agent_rejects_nonpositive_inactivity_timeout() -> None:
+    with pytest.raises(ValueError, match="inactivity_timeout_s must be positive"):
+        ClaudeCodeConfig(
+            base_url="https://gateway.example",
+            api_key="secret-token",
+            model="test-model",
+            inactivity_timeout_s=0,
+        )
+
+
+def test_agent_rejects_nonpositive_max_buffer_size() -> None:
+    with pytest.raises(ValueError, match="max_buffer_size must be positive"):
+        ClaudeCodeConfig(
+            base_url="https://gateway.example",
+            api_key="secret-token",
+            model="test-model",
+            max_buffer_size=0,
+        )
