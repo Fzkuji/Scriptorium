@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LongMemEval-S 错误链归因报告</title>
+<style>
+:root{--ink:#172033;--muted:#667085;--paper:#f3f6fb;--card:#fff;--line:#dde4ef;--navy:#17284b;--blue:#3568ef;--gold:#d89225;--green:#168a64;--red:#b94a48}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.65 Inter,"Segoe UI","PingFang SC",sans-serif}.hero{padding:56px 28px 44px;color:#fff;background:radial-gradient(circle at 80% 20%,#3764b6 0,transparent 30%),linear-gradient(125deg,#111b31,#17284b 65%,#163857)}.wrap{max-width:1180px;margin:auto}.eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#a9c5ff;font-weight:700}h1{font-size:clamp(34px,5vw,56px);line-height:1.08;margin:12px 0 18px;letter-spacing:-.035em}.lede{max-width:920px;color:#d9e5fb;font-size:17px}.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}.chip{border:1px solid #ffffff36;background:#ffffff12;border-radius:999px;padding:6px 12px;font-size:13px}main{padding:24px 28px 72px}nav{position:sticky;top:0;z-index:3;display:flex;gap:8px;flex-wrap:wrap;padding:10px 0;margin-bottom:22px;background:#f3f6fbe8;backdrop-filter:blur(8px)}nav a{text-decoration:none;color:var(--ink);background:#fff;border:1px solid var(--line);padding:7px 11px;border-radius:9px}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px}.card{grid-column:span 12;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:23px;box-shadow:0 8px 24px #22345d0b}.half{grid-column:span 6}.section-gap{margin-top:28px}h2{margin:0 0 7px;font-size:26px;line-height:1.25}h3{margin:0 0 10px;font-size:18px}.sub{margin:0 0 18px;color:var(--muted)}.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:11px}.metric{padding:15px;border-radius:14px;background:#f7f9fd;border:1px solid #e5eaf3}.metric b{display:block;font-size:27px;line-height:1.15}.metric span{display:block;margin-top:4px;color:var(--muted);font-size:12px}.callout{border-left:4px solid var(--blue);background:#f1f5ff;padding:14px 16px;border-radius:0 12px 12px 0}.warn{border-color:var(--gold);background:#fff8e9}.ok{border-color:var(--green);background:#eefaf6}.plain{margin:0;padding-left:20px}.plain li{margin:6px 0}.scroll{overflow:auto}table{width:100%;border-collapse:collapse}th{font-size:11px;text-transform:uppercase;letter-spacing:.055em;color:var(--muted);text-align:left;background:#f8fafd}th,td{padding:11px 10px;border-bottom:1px solid #e7ebf2;vertical-align:top}td small{display:block;color:var(--muted);font-size:12px}.mono,code{font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:#47566f}.tag{display:inline-block;padding:3px 8px;border-radius:999px;background:#eaf0ff;color:#315ac5;font-size:11px;font-weight:700}.tag.s{background:#fff0e8;color:#a14d20}.tag.j{background:#eef8f3;color:#17745a}.tag.b{background:#fff5dd;color:#8b5a00}.tag.r{background:#efeefe;color:#5a43ad}.footer{margin-top:26px;color:var(--muted);font-size:12px}@media(max-width:820px){.half{grid-column:span 12}.metrics{grid-template-columns:1fr 1fr}}@media(max-width:520px){.metrics{grid-template-columns:1fr}}@media print{nav{display:none}.hero{padding:28px;background:var(--navy)!important}main{padding:18px}.card{break-inside:avoid;box-shadow:none}}
+</style>
+</head>
+<body>
+<header class="hero"><div class="wrap">
+<div class="eyebrow">NativeMem · Diagnostic Archive</div>
+<h1>LongMemEval-S<br>错误链完整归因</h1>
+<p class="lede">基于最终合并的 500 道正式结果、逐题问答轨迹、构建检查点和 Judge 结果整理。index96 与 index292 均保留同协议复跑及历史证据；index292 的正确复跑答案已纳入最终结果。</p>
+<div class="chips"><span class="chip">正式题目 500</span><span class="chip">正确 450</span><span class="chip">错误 50</span><span class="chip">最终错误已复核 50/50</span><span class="chip">更新 2026-08-15</span></div>
+</div></header>
+<main><div class="wrap">
+<nav><a href="#summary">汇总</a><a href="#definitions">定义</a><a href="#types">题型</a><a href="#b-analysis">B 类分析</a><a href="#s-analysis">S 类细分</a><a href="#j-analysis">J 类分析</a><a href="#index96">index96</a><a href="#implications">结论</a><a href="#evidence">证据</a></nav>
+
+<section id="summary" class="card">
+<h2>全量复核结果</h2>
+<p class="sub">归因以最终实际行为链为准：构建 → 检索 → 检索后作答 → Judge。index96 的正式复跑已从历史 R 类转为当前 S 类；index292 原错误链属于 S，但正确复跑已替换正式答案，因此不再计入最终错误。</p>
+<div class="metrics"><div class="metric"><b>2</b><span>B 构建/结构</span></div><div class="metric"><b>0</b><span>R 检索遗漏</span></div><div class="metric"><b>33</b><span>S 检索后作答</span></div><div class="metric"><b>15</b><span>J Judge/数据边界</span></div><div class="metric"><b>0</b><span>明确 W</span></div></div>
+<div class="scroll"><table><thead><tr><th>主因</th><th>数量</th><th>占 50 道错误</th><th>占全部 500 道</th><th>定义与含义</th></tr></thead><tbody>
+<tr><td><span class="tag b">B</span> 构建/结构</td><td>2</td><td>4.0%</td><td>0.4%</td><td>事实进入了 Source，但结构化 latest-state 没有稳定更新；不是完全未写入。Writer 没有发起对应更新，更像低频的 LLM 语义识别/决策遗漏，并非修改被验证器、repair 或写入机制阻止。</td></tr>
+<tr><td><span class="tag r">R</span> 检索</td><td>0</td><td>0.0%</td><td>0.0%</td><td>复核及固定-index实验后，没有剩余错误能够明确归因于“目标事实存在但关键 evidence 未取回”。96 当前归为 S；292 的原失败链属于 S，但正确复跑已纳入最终结果。</td></tr>
+<tr><td><span class="tag s">S</span> 检索后作答</td><td>33</td><td>66.0%</td><td>6.6%</td><td>关键证据已取回，但最终筛选、聚合、计算、动作语义、时间换算、更新迁移或拒答判断错误。离线复核后，111、186、299 从原 J/边界集合改回 S。</td></tr>
+<tr><td><span class="tag j">J</span> Judge/数据边界</td><td>15</td><td>30.0%</td><td>3.0%</td><td>其中明确 Judge 假阴性 8 项、数据或 gold 边界 6 项、待确认边界 1 项；不再把这三种情况笼统解释为同一种 Judge 错误。</td></tr>
+<tr><td><strong>合计</strong></td><td><strong>50</strong></td><td><strong>100%</strong></td><td><strong>10.0%</strong></td><td>2 + 0 + 33 + 15 = 50。</td></tr>
+</tbody></table></div>
+<div class="callout ok"><strong>最终分数：</strong>正式正确率仍为 450/500（90.0%）。若仅用于诊断、排除 15 道 Judge/数据边界项，则系统链路错误为 35/500，对应诊断有效正确率 465/500（93.0%）。这不是新的 benchmark 官方分数。</div>
+<div class="scroll"><table><thead><tr><th>J/边界子类</th><th>数量</th><th>Index</th><th>离线核实结论</th></tr></thead><tbody>
+<tr><td>明确 Judge 假阴性</td><td>8</td><td class="mono">78,86,113,128,155,175,288,440</td><td>答案包含正确数值、中间步骤、偏好响应或正确拒答，按官方 prompt 应可判对。</td></tr>
+<tr><td>数据/gold 边界</td><td>6</td><td class="mono">79,122,221,242,263,358</td><td>问题中的日期、事件绑定、计数口径或 gold 与原会话存在冲突或不足以唯一确定。</td></tr>
+<tr><td>待确认边界</td><td>1</td><td class="mono">134</td><td>个性化方向正确，但“recent”满足不充分；三次独立 Judge 票为 0/1/1。</td></tr>
+</tbody></table></div>
+<p class="note">诊断性复判共执行 18×3=54 次同协议 GPT-4o-mini Judge；除 134 外，其余 17 项三轮均为 0/0/0。复判结果没有写入 canonical Judge，也没有用于更改正式 450/500 分数；它说明重复 Judge 不能替代对答案、gold 与原会话的事实核对。</p>
+</section>
+
+<section id="definitions" class="grid section-gap">
+<article class="card half"><h2>归因定义</h2><ul class="plain">
+<li><strong>W：</strong>目标事实没有进入任何可用记忆组件。本轮无明确确认项。</li>
+<li><strong>B：</strong>事实存在于 Source，但没有正确进入最新状态或结构视图。</li>
+<li><strong>R：</strong>记忆中存在事实，本次 evidence 却没有召回。</li>
+<li><strong>S：</strong>证据已经召回，最终回答仍在筛选、组合、运算或决策上失败。</li>
+<li><strong>J：</strong>回答与事实实质一致，但 Judge 或数据标注边界导致误判/不可唯一判断。</li>
+</ul></article>
+<article class="card half"><h2>为什么 R 与 S 必须分开</h2><p>两类都可能表现为“答案错”，但修复位置不同：R 要改召回覆盖、查询规划或排序；S 要改候选枚举、证据聚合、时间/数值运算和回答前验证。index96 的复跑正好展示了这种区别：旧运行没取回关键商店记录，属于 R；复跑取回后仍选错，正式归因为 S。</p></article>
+</section>
+
+<section id="types" class="card section-gap">
+<h2>按官方题型统计错误</h2>
+<div class="scroll"><table><thead><tr><th>题型</th><th>错误数</th><th>B</th><th>R</th><th>S</th><th>J</th></tr></thead><tbody>
+<tr><td><strong>multi-session</strong></td><td>23</td><td>—</td><td>—</td><td class="mono">70,75,83,85,89,94,96,111,115,165,186,201,210,230,232</td><td class="mono">78,79,86,113,122,128,175,221</td></tr>
+<tr><td><strong>preference</strong></td><td>7</td><td>—</td><td>—</td><td class="mono">135,136,145,146,148</td><td class="mono">134,155</td></tr>
+<tr><td><strong>temporal-reasoning</strong></td><td>12</td><td>—</td><td>—</td><td class="mono">255,269,280,293,299,321,322,336</td><td class="mono">242,263,288,358</td></tr>
+<tr><td><strong>knowledge-update</strong></td><td>8</td><td class="mono">410,413</td><td>—</td><td class="mono">369,383,415,437,443</td><td class="mono">440</td></tr>
+<tr><td><strong>合计</strong></td><td><strong>50</strong></td><td><strong>2</strong></td><td><strong>0</strong></td><td><strong>33</strong></td><td><strong>15</strong></td></tr>
+</tbody></table></div>
+</section>
+
+<section id="b-analysis" class="card section-gap">
+<h2>B 类 2 道：结构化状态为什么没有更新</h2>
+<p class="sub">两项都不是整个 sample 构建失败：Source 已保存新事实，9/9 batch 完成且 build complete；失败发生在 Writer 对 latest-state 的语义识别与更新决策。</p>
+<div class="scroll"><table><thead><tr><th>子类</th><th>Index</th><th>新事实</th><th>结构化记忆状态</th><th>链路判断</th></tr></thead><tbody>
+<tr><td>时间/日程状态更新遗漏</td><td class="mono">410</td><td>最新健身时间是 6:00 pm。</td><td>Source 中存在 6:00 pm，但 core、timeline 和对应 topic 仍保留旧值 7:00 pm。</td><td>Writer 没有发起针对该 latest-state 的更新；没有更新命令被验证器拒绝、repair 耗尽或写入失败的证据。</td></tr>
+<tr><td>累计数值状态更新遗漏</td><td class="mono">413</td><td>最新观鸟计数是 32 种。</td><td>Source 中存在 32，但 birding topic、recent events 和 timeline 仍保留旧计数 27。</td><td>Writer 没有识别出“新计数覆盖旧计数”的状态迁移，因此结构视图未同步。</td></tr>
+</tbody></table></div>
+<div class="callout warn"><strong>原因：</strong>这更像低频的 LLM 语义识别/决策遗漏，而不是修改被阻止。两个例子分别覆盖时间值和累计数值，说明风险集中在“新事实已经落入 Source，但 Writer 没有把它识别成需要刷新结构化 latest-state 的更新事件”。</div>
+<div class="callout ok"><strong>结论：</strong>B 仅占 2/500。当前证据不支持重做整体记忆构建逻辑；更合适的低成本改进是对明确的时间、数量和状态更正信号增加 update-candidate 检查，并用固定 index 410、413 做回归验证。</div>
+</section>
+
+<section class="grid section-gap">
+<article class="card half"><h2>B 类两项的原始链路</h2><ul class="plain">
+<li><strong>index410：</strong>最新的 6:00 pm 已存在于 Source，但 core、timeline 和对应 topic 仍保留旧的 7:00 pm。</li>
+<li><strong>index413：</strong>最新计数 32 已明确存在于 Source，但 birding topic、recent events 和 timeline 仍保存旧计数 27。</li>
+<li><strong>Writer 行为：</strong>两项均为完整 9/9、<code>build.status=complete</code>；相关 Writer 轨迹中没有针对这两个 latest-state 变化发起更新，也没有发现更新命令被校验拒绝、repair 耗尽或写入失败。</li>
+<li><strong>结论：</strong>Writer 没有发起更新，更像低频的 LLM 语义识别/决策遗漏，并非修改被阻止。它们是结构化状态更新遗漏，不是整个 sample 构建失败。</li>
+</ul></article>
+<article class="card half"><h2>index292：S 类错误经复跑修复</h2><ul class="plain">
+<li><strong>原运行复核：</strong>原运行共 6 个检索步骤、4 个 evidence 块。evidence 已同时出现 American Airlines 和日期 <code>2023-02-14</code>，也出现当天预订的 JetBlue/Delta，因此关键时间锚点并未缺失。</li>
+<li><strong>原始错误：</strong>问题询问当天“乘坐过”的航司；回答器却把“当天预订的后续航班”当成“当天已经乘坐”，选择 JetBlue/Delta，忽略同日证据中用户明确提及的 American Airlines 既往航班。</li>
+<li><strong>固定-index复跑：</strong>同一构建记忆、同一模型和六组件协议下，复跑使用 13 个检索步骤、6 个 evidence 块，embedding 正常执行，最终回答 American Airlines；GPT-4o-mini Judge 判为正确。</li>
+<li><strong>最终处理：</strong>复跑答案已纳入 500 项正式合并结果，旧答案和旧 Judge 留在 history，因此 292 不再计入最终 50 道错误。</li>
+<li><strong>结论：</strong>原错误是候选选择与动作语义消歧的随机波动（<em>booked</em> 与 <em>flew</em>），不是稳定的召回失败。其历史失败链按 S 解释，但当前明确 R 仍为 0。</li>
+</ul></article>
+</section>
+
+<section id="s-analysis" class="card section-gap">
+<h2>S 类 33 道：检索后为什么仍会答错</h2>
+<div class="scroll"><table><thead><tr><th>子类</th><th>数量</th><th>典型 index</th><th>行为原因</th><th>优先改进</th></tr></thead><tbody>
+<tr><td>候选枚举、聚合与数值语义</td><td>13</td><td class="mono">70,83,85,89,96,111,115,165,186,201,210,321,322</td><td>证据中出现多个实体、多笔记录或“总门槛/尚需数量”差异，模型过早锁定候选、过度纳入范围，或没有完成正确求和与差值计算。</td><td>回答前生成候选表；对金额、次数、门槛和最值题强制逐项聚合、范围过滤并复核。</td></tr>
+<tr><td>偏好归纳</td><td>5</td><td class="mono">135,136,145,146,148</td><td>把单次行为当长期偏好，或没有比较正反证据、近期变化和稳定性。</td><td>偏好题要求“支持证据 + 反证 + 时间衰减”三步判断。</td></tr>
+<tr><td>时间、动作语义与窗口</td><td>8</td><td class="mono">255,269,280,293,299,321,322,336</td><td>已取回日期或相对时间，但窗口边界、参照日期、先后关系、动作状态或候选事件选择出错。292 的同类历史错误已由正确复跑修复，不计入当前错误数。</td><td>将 time view 作为计算输入；答案前执行显式时间标准化、动作状态区分与区间校验。</td></tr>
+<tr><td>证据充分性与拒答</td><td>3</td><td class="mono">75,94,230</td><td>证据不足时仍给确定答案，或忽略限定词。</td><td>增加充分性检查；缺少决定性证据时输出受控不确定性。</td></tr>
+<tr><td>新旧状态迁移</td><td>4</td><td class="mono">369,383,415,437</td><td>新事实已召回，但旧状态仍主导最终回答，或更新关系没有在作答时正确应用。</td><td>对 update/correction 信号做冲突消解，并优先使用最新有效状态。</td></tr>
+<tr><td><strong>合计</strong></td><td><strong>33</strong></td><td colspan="3">S 的主要矛盾不是“记忆没建好”，而是检索后的范围控制、证据组织、数值语义和后验验证不足。</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="j-analysis" class="card section-gap">
+<h2>J/数据边界 15 道：Judge 错、数据边界还是仍待确认</h2>
+<p class="sub">这一组不再笼统称为“Judge 假阴性”。离线核对当前 canonical 答案、gold 和原会话后，分成三类；正式 benchmark 分数仍保持 GPT-4o-mini Judge 的 450/500。</p>
+<div class="scroll"><table><thead><tr><th>子类</th><th>数量</th><th>Index</th><th>定义</th><th>结论</th></tr></thead><tbody>
+<tr><td>明确 Judge 假阴性</td><td>8</td><td class="mono">78,86,113,128,155,175,288,440</td><td>回答包含正确数值、完整中间步骤、符合偏好 rubric 的建议，或正确识别不可回答，但 Judge 仍输出 no。</td><td>不应归因于 Writer 或 Retriever；主要是 Judge 对简短答案、中间步骤、附加解释或个性化表达处理过严。</td></tr>
+<tr><td>数据/gold 边界</td><td>6</td><td class="mono">79,122,221,242,263,358</td><td>题目日期、事件绑定、计数口径或 gold 与原会话冲突，无法从事实来源稳定推出唯一 gold。</td><td>应作为 benchmark 数据边界单列，不能用来推断系统记忆链失败。</td></tr>
+<tr><td>待确认边界</td><td>1</td><td class="mono">134</td><td>答案正确利用医疗影像 AI 偏好，但“recent publications/conferences”的近期性满足不充分。</td><td>可解释为 Judge 偏严，也可解释为回答未充分满足限定词；三次独立 Judge 票为 0/1/1。</td></tr>
+</tbody></table></div>
+
+<h3>6 道数据/gold 边界的具体问题</h3>
+<div class="scroll"><table><thead><tr><th>Index</th><th>题目与 gold</th><th>原会话事实</th><th>边界问题</th><th>归因结论</th></tr></thead><tbody>
+<tr><td class="mono">79</td><td>问“看医生前一天几点睡觉”；gold 是 2 AM。</td><td>医生预约发生在 2023-05-18；2 AM 睡觉对应的是另一周的 2023-05-24，两个事件相隔约一周。</td><td>gold 把不同周的“星期三晚上”和“星期四预约”错误关联。我们的回答指出日期不相邻并拒绝强行关联。</td><td>时间标注/事件配对错误，不应算 Retriever 或 Answerer 失败。</td></tr>
+<tr><td class="mono">122</td><td>问购买或下载了多少张 album/EP；gold 是 3。</td><td>明确下载 Billie Eilish album 1 张、购买 Midnight Sky EP 1 张；第三项只说 Tame Impala 黑胶在演出后获得签名，没有明确说该黑胶是本次购买或下载。</td><td>gold 将“拥有并拿去签名”按“购买”计入，但原文没有这个动作。按严格动作语义答案可以是 2，按宽松持有口径才是 3。</td><td>计数口径与动作语义不明确，无法稳定判定唯一数值。</td></tr>
+<tr><td class="mono">221</td><td>问在 1 月和 3 月读完的两本小说页数之和；gold 是 856。</td><td>原会话确实出现 440 页和 416 页两本小说，合计 856；但对应消息日期都在 2023 年5月，workspace 中没有支持“1月和3月完成”的记录。</td><td>gold 的数值来自两本书页数相加，但题目的月份限定与原会话冲突。回答器选择尊重月份限定并拒答。</td><td>数值可推出、时间条件不可推出，属于题目限定词与标注事实不一致。</td></tr>
+<tr><td class="mono">242</td><td>问“在制作朋友生日蛋糕时参加烘焙课”距今多少天；gold 接受 21/22 天。</td><td>烘焙课是 2022-03-20 左右；朋友生日蛋糕是独立事件，发生在 2022-04-10；提问日期是 2022-04-15。</td><td>题目把两个独立事件合并成一个事件。按烘焙课计算约 26 天，按生日蛋糕计算约 5 天，都不是 gold 的 21/22 天。</td><td>事件绑定和 gold 时间计算同时不一致，不能据此判断 time view 或时间推理失败。</td></tr>
+<tr><td class="mono">263</td><td>问从流感康复到第10次户外慢跑经过多少周；gold 是 15 周。</td><td>康复日期为 2023-01-19，第10次慢跑为 2023-04-10；实际相差 81 天，即约 11.6 周。</td><td>我们的回答给出 81 天、11周4天，与原始日期计算一致；gold 15 周缺乏日期支持，也超过官方允许的 off-by-one 范围。</td><td>gold 算术/日期标注错误，不是系统时间计算错误。</td></tr>
+<tr><td class="mono">358</td><td>问 Rachel 和 Alex 谁先成为父母；gold 是 Alex。</td><td>Alex 的记录明确说在 2023年1月收养女婴；Rachel 的记录只说双胞胎已经在成长，没有在答案标注消息中提供可比较的出生日期。两条答案消息本身都记录于 2023-03-17。</td><td>要判断“谁先”必须知道 Rachel 成为母亲的日期，但标注证据没有提供。仅按消息顺序、当前年龄描述或额外推断会得到不同答案。</td><td>缺少决定性时间事实，gold 的唯一排序无法由标注证据稳定推出。</td></tr>
+</tbody></table></div>
+<div class="callout warn"><strong>共同特征：</strong>这6项的主要问题不是“系统没有找到 gold”，而是 gold 本身依赖了错误日期、未明确的动作假设、互相冲突的限定词，或缺失的比较基准。它们适合用于暴露 benchmark 标注风险，不适合直接计入 Writer、Retriever 或作答器的真实失败数。</div>
+
+<h3>6 道数据/gold 边界的答案对照</h3>
+<div class="scroll"><table><thead><tr><th>Index</th><th>Question</th><th>Gold answer</th><th>我们的回答</th><th>差异与判断</th></tr></thead><tbody>
+<tr><td class="mono">79</td><td>What time did I go to bed on the day before I had a doctor's appointment?</td><td><strong>2 AM.</strong></td><td>记录中无法确定预约前一晚的睡觉时间。医生预约是 2023-05-18；唯一的 2 AM 睡觉记录对应另一周的 2023-05-24，因此拒绝把两者关联。</td><td>我们的回答遵守实际日期；gold 忽略了两个事件相隔约一周。</td></tr>
+<tr><td class="mono">122</td><td>How many music albums or EPs have I purchased or downloaded?</td><td><strong>3.</strong></td><td><strong>2.</strong>购买 Midnight Sky EP 1 张，下载 Happier Than Ever album 1 张。</td><td>第三张 Tame Impala 黑胶只明确“在演出后拿到签名”，没有明确购买或下载。差异来自是否把持有/签名默认算作购买。</td></tr>
+<tr><td class="mono">221</td><td>What was the page count of the two novels I finished in January and March?</td><td><strong>856.</strong></td><td>记录不足以回答。存在 440 页和 416 页两本小说，但没有它们在1月和3月读完的记录；相关消息实际出现在5月。</td><td>gold 使用 440+416 得到856，却没有满足题目的月份限定；我们的回答优先遵守时间条件。</td></tr>
+<tr><td class="mono">242</td><td>How many days ago did I attend a baking class at a local culinary school when I made my friend's birthday cake?</td><td><strong>21 days</strong>；含首尾可接受22天。</td><td><strong>26 days.</strong>烘焙课约在 2022-03-20；生日蛋糕是 2022-04-10 的另一个事件。</td><td>题目错误合并两个事件；从提问日 2022-04-15 算，烘焙课约26天前，生日蛋糕约5天前，均不是21/22天。</td></tr>
+<tr><td class="mono">263</td><td>How many weeks had passed since I recovered from the flu when I went on my 10th jog outdoors?</td><td><strong>15 weeks.</strong></td><td><strong>About 11.6 weeks</strong>：从 2023-01-19 到 2023-04-10 共81天，即11周4天。</td><td>我们的计算与原始日期一致；gold 15周没有日期支持，且不是允许的 off-by-one。</td></tr>
+<tr><td class="mono">358</td><td>Who became a parent first, Rachel or Alex?</td><td><strong>Alex.</strong></td><td><strong>Rachel.</strong>回答声称 Rachel 的双胞胎出生于 2022-02-12，而 Alex 于 2023年1月收养女婴。</td><td>标注答案消息只明确 Alex 的收养时间；Rachel 仅被描述为已有正在成长的双胞胎，没有可比较的成为父母日期。我们的具体出生日期也缺少答案标注证据，因此双方都不能由标注事实稳定推出。</td></tr>
+</tbody></table></div>
+
+<h3>8 道明确假阴性的逐项对照</h3>
+<div class="scroll"><table><thead><tr><th>Index</th><th>Question</th><th>Gold answer</th><th>我们的回答</th><th>差异与判定</th></tr></thead><tbody>
+<tr><td class="mono">78</td><td>How many different doctors did I visit?</td><td>Three: a primary care physician, an ENT specialist, and a dermatologist.</td><td><strong>3</strong></td><td>数量完全一致；仅未展开三类医生。属于简短等价答案被误判。</td></tr>
+<tr><td class="mono">86</td><td>How many weddings have I attended in this year?</td><td>Three weddings: Rachel and Mike, Emily and Sarah, and Jen and Tom.</td><td><strong>3</strong></td><td>数量完全一致；仅未列出新人姓名。属于简短等价答案被误判。</td></tr>
+<tr><td class="mono">113</td><td>How many kitchen items did I replace or fix?</td><td>Five: faucet, mat, toaster, coffee maker, and shelves.</td><td><strong>5</strong></td><td>数量完全一致；仅未逐项列出物品。</td></tr>
+<tr><td class="mono">128</td><td>How many fish are there in my 30-gallon tank?</td><td>Information is insufficient; no 30-gallon tank was mentioned.</td><td>The history does not contain a 30-gallon tank; only 10- and 20-gallon tanks are documented, so no fish count exists.</td><td>拒答结论与 gold 完全一致，并提供了支持理由。</td></tr>
+<tr><td class="mono">155</td><td>I'm planning my meal prep next week, any suggestions for new recipes?</td><td>Healthy meal prep using quinoa, roasted vegetables and varied protein sources; may build on known healthy preferences.</td><td>Recommended lentil bolognese, quinoa with roasted vegetables, chicken, salmon, turkey, tofu, shrimp, chickpeas and other healthy additions.</td><td>明确利用核心个人偏好；未逐字覆盖 rubric 示例，但 preference prompt 不要求覆盖全部要点。</td></tr>
+<tr><td class="mono">175</td><td>How many plants did I initially plant for tomatoes and cucumbers?</td><td><strong>8</strong></td><td>Initially planted <strong>5 tomato plants and 3 cucumber plants</strong>.</td><td>完整提供 5+3 的中间步骤。官方 prompt 明确规定包含得到正确答案的全部中间步骤也应判对。</td></tr>
+<tr><td class="mono">288</td><td>I received a piece of jewelry last Saturday from whom?</td><td><strong>My aunt.</strong></td><td><strong>From their aunt</strong>, with an explanation that the item came from the great-grandmother.</td><td>核心实体完全一致；附加家族来源不改变答案。</td></tr>
+<tr><td class="mono">440</td><td>How many autographed football have I added to my collection in the first three months?</td><td>Information is insufficient; only autographed baseballs were mentioned.</td><td>There is no record of autographed footballs; the collection is of baseballs. It additionally notes 15 autographed baseballs.</td><td>已正确识别不可回答；附加 baseball 数字可能干扰 Judge，但 abstention prompt 允许提供其他相关信息。</td></tr>
+</tbody></table></div>
+
+<h3>明确假阴性的三种表现</h3>
+<div class="scroll"><table><thead><tr><th>表现</th><th>Index</th><th>问题机制</th><th>建议</th></tr></thead><tbody>
+<tr><td>简短等价答案或中间步骤</td><td class="mono">78,86,113,175,288</td><td>答案语义正确，但没有复述 gold 的全部解释，或只给出可直接求得正确结果的算式组成。</td><td>诊断时做规范化数值/实体比较；如需提高官方 Judge 稳定性，回答层可显式写出最终求和和关键枚举。</td></tr>
+<tr><td>正确拒答附带解释</td><td class="mono">128,440</td><td>回答正确指出问题不可回答，但附带其他鱼缸或 baseball 信息；Judge 可能被附加实体和数字干扰。</td><td>拒答题先输出单独、明确的不可回答结论，再用一句受控说明补充原因。</td></tr>
+<tr><td>Preference rubric 过严</td><td class="mono">155</td><td>回答利用了核心偏好，但表达没有逐项贴合 gold 中的示例。</td><td>保持个性化内容，同时在答案开头显式回扣最关键的两到三个偏好锚点。</td></tr>
+</tbody></table></div>
+<div class="callout warn"><strong>复判观察：</strong>18 个候选项用相同 GPT-4o-mini Judge 独立复判三轮，共 54 次调用。只有 134 得到 0/1/1；上述 8 个明确假阴性以及其余项目均为 0/0/0。复判没有写入 canonical Judge，说明重复调用同一 Judge 不能替代事实审计。</div>
+<div class="callout ok"><strong>结论：</strong>正式 90.00% 必须按既定 Judge 口径保留；系统改进归因则应排除明确假阴性和数据边界。若未来考虑重评，应先由人工确认目标 index，再决定是否采用不同 Judge、规则化校验或人工裁决，不能无目的重复调用。</div>
+</section>
+
+<section id="index96" class="card section-gap">
+<h2>index96：为什么从 R 改为 S</h2>
+<div class="grid">
+<div class="card half"><h3>历史正式运行：R</h3><ul class="plain"><li>进行了较宽泛的 BM25 检索，候选被其他商店记录锚定。</li><li>一次 embedding 工具调用记录为 <span class="mono">executed=false</span>。</li><li>实际 evidence 未包含决定性的 Thrive Market 消费记录，因此旧链路是检索遗漏。</li></ul></div>
+<div class="card half"><h3>同协议复跑：S</h3><ul class="plain"><li>执行 12 个检索步骤，形成 6 个 evidence 块，embedding 正常执行。</li><li>evidence 已出现至少两笔 Thrive Market 的 150 美元记录，也出现 Walmart 120 美元等候选。</li><li>最终回答仍选择 Walmart，漏掉对 Thrive Market 多笔记录的聚合，所以是候选聚合/后到证据吸收失败。</li></ul></div>
+</div>
+<div class="callout warn"><strong>正式处理：</strong>最终合并结果已采用复跑答案；旧答案与旧 Judge 保存在 history 中；复跑答案经 GPT-4o-mini 重新评分仍为 0。因此总正确数没有变化，但根因从历史 R 更新为当前 S。</div>
+</section>
+
+<section id="implications" class="card section-gap">
+<h2>对系统修改的含义</h2>
+<div class="callout ok"><strong>核心判断：</strong>当前真正需要驱动系统优化的是 B+S 共 35 项，而不是全部 50 道正式错题。其中 S 为 33 项，占明确系统链路失败的 94.3%；因此下一阶段的主课题应是检索后作答，而不是重构整体记忆或围绕 Judge/benchmark 边界调参。</div>
+<div class="scroll"><table><thead><tr><th>类别</th><th>数量</th><th>是否作为系统优化对象</th><th>处理原则</th></tr></thead><tbody>
+<tr><td>B 构建/结构</td><td>2</td><td>是，但优先级低于 S</td><td>对时间值、累计数值和显式更正增加轻量 update-candidate 检查；不据此重做全部构建逻辑。</td></tr>
+<tr><td>R 明确检索遗漏</td><td>0</td><td>当前无已确认对象</td><td>不表示 Retriever 永远无需优化，只表示当前错误集中没有可靠证据将其判为最早失败点。</td></tr>
+<tr><td>S 检索后作答</td><td>33</td><td><strong>主要优化对象</strong></td><td>重新逐题分析候选枚举、范围控制、数值语义、时间/动作消歧、偏好归纳、拒答和更新迁移。</td></tr>
+<tr><td>明确 Judge 假阴性</td><td>8</td><td>否</td><td>作为 Judge 可靠性证据单列，不用于修改 Writer、Retriever 或记忆结构。</td></tr>
+<tr><td>数据/gold 边界</td><td>6</td><td>否</td><td>作为 benchmark 标注风险单列，不把与 gold 的差异直接解释为系统失败。</td></tr>
+<tr><td>待确认边界</td><td>1</td><td>暂不驱动修改</td><td>index134 保持边界状态，除非后续人工确定其应归 S。</td></tr>
+</tbody></table></div>
+<ol class="plain">
+<li><strong>记忆构建不是当前主要瓶颈。</strong>明确 W 为 0；B 仅 2 道，说明绝大多数目标事实确实进入了可用记忆。</li>
+<li><strong>当前没有明确的纯检索遗漏。</strong>96 在复跑与逐 evidence 复核后改判为 S；292 的原失败链同样属于 S，但已由正确复跑修复并移出最终错误集合。这不表示检索无需优化，而是当前 50 道错误没有证据把 Retriever 确认为最早失败点。</li>
+<li><strong>最高优先级是检索后的结构化推理。</strong>最终 33 道 S 中，候选聚合、范围控制、数值语义、时间运算、偏好归纳与更新迁移占主体；292 是已修复但仍有诊断价值的同类案例。</li>
+<li><strong>无需为了 S 类重建全部记忆。</strong>可先在问答层加入候选枚举、数值/时间校验、冲突消解和证据充分性检查，再做固定 index 回归。</li>
+<li><strong>Judge 分数应与系统错误分开报告。</strong>剩余 15 道 J/数据边界项包含 8 道明确假阴性、6 道数据/gold 边界和 1 道待确认项，不能直接解释为 Writer 或 Retriever 失败。</li>
+</ol>
+<div class="callout warn"><strong>S 类需要重新分析：</strong>当前 33 项及其五个子类是阶段性归因，不应直接转化为代码修改清单。下一轮应逐题确认最早失败点、实际 evidence、候选集合、计算/时间步骤和最终决策，再决定哪些问题可由统一机制修复，哪些只是单次模型波动。</div>
+</section>
+
+<section id="evidence" class="card section-gap">
+<h2>事实来源与可追溯性</h2>
+<p>原始运行文件始终是事实来源，本 HTML 仅作集中索引和归因说明。报告不改写题目、gold、记忆或失败轨迹。</p>
+<ul class="plain small mono">
+<li>code/results/formal/longmemeval-s-500-merged-staging-20260813/answers.json</li>
+<li>code/results/formal/longmemeval-s-500-merged-staging-20260813/judge.json</li>
+<li>code/results/formal/longmemeval-s-500-merged-staging-20260813/merge-report.json</li>
+<li>code/results/formal/longmemeval-s-500-merged-staging-20260813/build-inventory.json</li>
+<li>code/results/formal/longmemeval-s-500-merged-staging-20260813/history/0096-pre-rerun-answer.json</li>
+<li>code/results/formal/longmemeval-s-500-merged-staging-20260813/history/0096-pre-rerun-judge.json</li>
+<li>/home/qi2/scriptorium-runs/longmemeval-qa-rerun-index96-r1/items/</li>
+<li>/home/qi2/scriptorium-runs/longmemeval-qa-rerun-index292-r1/items/</li>
+</ul>
+<p class="note">构建库存核验：500 个唯一 index 均有 checkpoint 且 build complete；497 项具备六个标准组件。180、348、461 缺少 core.md，但其余五组件存在，已作为结构完整性观察项保留，不据此推断其问答错误根因。</p>
+</section>
+</div></main>
+</body></html>
