@@ -44,8 +44,15 @@ fi
 # missing or duplicated directory fails here rather than mid-experiment.
 "$VENV_DIR/bin/python" -m pytest -q "$PROJECT_ROOT/code/tests/test_portable_layout.py"
 
+# OpenCode Go support is an optional, separately pinned Node.js runtime. It
+# cannot be represented in Python requirements.txt.
+if [[ "${INSTALL_OPENCODE_BRIDGE:-0}" == "1" ]]; then
+  bash "$PROJECT_ROOT/code/scripts/infrastructure/install_opencode_bridge.sh"
+fi
+
 if [[ ! -e "$PROJECT_ROOT/.venv" ]]; then
   ln -s "$VENV_DIR" "$PROJECT_ROOT/.venv"
 fi
 
 echo "Environment ready: $VENV_DIR"
+echo "OpenCode Go users: see docs/experiments/infrastructure/opencode_deepseek_bridge.md"

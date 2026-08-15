@@ -131,6 +131,12 @@ credentials, models, endpoints and budgets through explicit CLI or config
 parameters, and a config names a key **file** outside the repository rather
 than a key.
 
+OpenCode Go / DeepSeek agent runs also require a separately pinned Node.js
+protocol bridge; it is not installable from Python `requirements.txt`. See
+[`docs/experiments/infrastructure/opencode_deepseek_bridge.md`](docs/experiments/infrastructure/opencode_deepseek_bridge.md),
+or install it together with the Python environment using
+`INSTALL_OPENCODE_BRIDGE=1 ./setup.sh`.
+
 Writer, Manager, verification and query trajectories run through the Claude
 Agent SDK. Each uses an isolated temporary Claude configuration, does not read
 your `~/.claude` settings or subscription session, and does not persist an SDK

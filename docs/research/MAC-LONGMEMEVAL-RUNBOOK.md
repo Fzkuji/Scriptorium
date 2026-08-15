@@ -13,6 +13,11 @@ and output-storage class in the run manifest. It does not manage `launchctl`,
 choose an output directory, or change prompts, Writer, repair, checkpoint, or
 evaluation semantics.
 
+When the provider is OpenCode Go / DeepSeek, complete the pinned bridge setup
+in [`../experiments/infrastructure/opencode_deepseek_bridge.md`](../experiments/infrastructure/opencode_deepseek_bridge.md)
+on the Mac before the smoke run. The same bridge commit and model identifier
+must be used on WSL and macOS; Python requirements alone do not install it.
+
 ## What is and is not stored in Git
 
 The private repository contains source code, tests, configuration examples,
