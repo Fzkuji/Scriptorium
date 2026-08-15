@@ -1,9 +1,9 @@
 # LongMemEval reliability update (August 2026)
 
-This note summarizes the reusable implementation changes developed while
-running the macOS LongMemEval-S cohort. It is intentionally separate from the
-generated memories, answers, judge outputs, and machine-local launch state,
-which are not stored in Git.
+This note summarizes reusable implementation changes developed during the
+formal LongMemEval-S runs on macOS and WSL. It is intentionally separate from
+generated memories, answers, judge outputs, secrets, and machine-local launch
+state, which are not stored in Git.
 
 ## Scope
 
@@ -11,18 +11,19 @@ The update improves failure containment, checkpoint safety, auditability, and
 cross-machine handoff. It does not change the LongMemEval questions, gold
 answers, retrieval semantics, answer prompt, or judge protocol.
 
-The detailed incident chronology remains in
-`docs/research/LONGMEMEVAL-EXPERIMENT-FINDINGS.md`. Operational setup and
-handoff instructions remain in `docs/research/MAC-LONGMEMEVAL-RUNBOOK.md`.
+The detailed WSL incident chronology remains in
+`docs/research/LONGMEMEVAL-WSL-EXPERIMENT-FINDINGS.md`. Operational setup and
+handoff instructions remain in `docs/research/MAC-LONGMEMEVAL-RUNBOOK.md` and
+`docs/research/LONGMEMEVAL-WSL-RUNBOOK.md`.
 
 ## Runtime reliability changes
 
 ### Bounded generic validation repair
 
-Memory-writer validation failures may now enter a bounded generic repair loop.
-The limit is configured with `generic_repair_max_trajectories` and is exposed
-by both the LongMemEval runner and the conversation runner. Every repair sees
-the preceding validation error, and each attempt is retained in the writer
+Memory-writer validation failures may enter a bounded generic repair loop. The
+limit is configured with `generic_repair_max_trajectories` and is exposed by
+both the LongMemEval runner and the conversation runner. Every repair sees the
+preceding validation error, and each attempt is retained in the writer
 trajectory audit. Exhaustion remains a hard failure; invalid staged memory is
 never committed.
 
@@ -33,7 +34,7 @@ earlier evidence.
 
 ### SDK inactivity and buffering
 
-The Claude Agent SDK adapter now supports:
+The Claude Agent SDK adapter supports:
 
 - a configurable inactivity timeout, defaulting to 1,800 seconds without an
   SDK message; and
@@ -48,9 +49,12 @@ success.
 LongMemEval construction recognizes an item-local
 `.stop-after-current-batch` sentinel. The active writer batch is allowed to
 commit or roll back atomically, after which the item records a recoverable
-paused state. Operators should remove the exact `launchctl` label after the
+paused state.
+
+On macOS, operators should remove the exact `launchctl` label after the
 terminal checkpoint is visible; a registered service can otherwise be
-rescheduled by macOS.
+rescheduled. WSL launch and resume use the same checkpoint and pause semantics
+without depending on `launchctl`.
 
 ### Audited resume drift
 
@@ -62,9 +66,10 @@ replacement values, and timestamp. This option is not an automatic fallback.
 ### Deterministic token handling and derived views
 
 Token counting treats tokenizer sentinel spellings that occur as visible
-benchmark text as ordinary text rather than control tokens. Derived memory
-views and block views received consistency fixes exercised by regression
-tests. These changes preserve the source text sent to the writer.
+benchmark text as ordinary text rather than control tokens. Derived memory and
+block views report richer dangling-link context and include consistency fixes
+covered by regression tests. These changes preserve the source text sent to
+the writer.
 
 ## Reproducibility tooling
 
@@ -73,10 +78,9 @@ deterministic inventory from atomically built checkpoints. The inventory is
 the boundary for downstream answer generation: incomplete, failed, paused, or
 duplicate items must not enter production QA.
 
-The cohort manifest records the macOS index allocation and expected source
-snapshot. Machine-local worker configurations and launchctl wrappers are not
-part of this update because they contain host-specific paths and operational
-queue choices.
+Cohort manifests record index allocation and the expected source snapshot.
+Machine-local worker configurations, queue assignments, launch wrappers, and
+provider credentials are not part of this update.
 
 ## Verification coverage
 
@@ -90,7 +94,7 @@ Regression tests cover:
 - derived-view consistency; and
 - strict versus explicitly audited resume drift.
 
-The focused verification command is:
+The focused macOS verification command is:
 
 ```bash
 cd code
@@ -107,6 +111,11 @@ The GNU sed path is required on macOS because several shell-transaction tests
 exercise GNU `sed -i` semantics. The focused suite passed 106/106 tests with
 that path enabled on 2026-08-14.
 
+The shared implementation, runner, retrieval, management, runtime, and test
+files in the WSL working tree were subsequently compared by content hash with
+the private repository integration and found identical. Machine-local
+experiment state was intentionally excluded from that comparison.
+
 ## Repository boundary
 
 The following remain local and must not be committed:
@@ -114,8 +123,9 @@ The following remain local and must not be committed:
 - `code/results/` and generated memory workspaces;
 - `exports/`, answer files, judge outputs, and packaged handoff archives;
 - API keys and provider credential files;
-- launchctl stdout/stderr, labels, sentinels, and live checkpoints; and
-- machine-specific worker configurations or queue assignments.
+- stdout/stderr, service labels, sentinels, live checkpoints, and monitor state;
+- machine-specific worker configurations or queue assignments; and
+- editor workspace state, caches, and generated previews.
 
 The repository-level `.gitignore` excludes result roots, exports, packaged
 archives, runtime caches, and common API-key filenames. Before publishing a
