@@ -8,6 +8,7 @@ from .schemas import (
     TOOL_DEFINITIONS,
     normalize_memory_components,
 )
+from .config import SEARCH_TOOL_SETS
 
 
 def memory_files(
@@ -107,15 +108,22 @@ def tools_for(
     condition: str,
     *,
     components: tuple[str, ...] | str | None = None,
+    search_tools: str = "split",
 ) -> list[dict[str, Any]]:
     if condition != "native" and condition not in CONDITION_VIEWS:
         raise ValueError(f"unknown Scriptorium condition: {condition}")
     selected = normalize_memory_components(components)
+    if search_tools not in SEARCH_TOOL_SETS:
+        raise ValueError(f"unknown search tool set: {search_tools}")
     if selected is not None and condition != "native":
         raise ValueError(
             "explicit memory components require condition='native'"
         )
     searchable = selected is None or bool({"topics", "sources"} & set(selected))
+    enabled_search_tools = SEARCH_TOOL_SETS[search_tools]
+    all_search_tools = {
+        name for names in SEARCH_TOOL_SETS.values() for name in names
+    }
     return [
         tool
         for tool in TOOL_DEFINITIONS
@@ -126,6 +134,10 @@ def tools_for(
         and not (
             (condition == "timeline_source" or not searchable)
             and tool["function"]["name"]
-            in {"bm25_search", "embedding_search"}
+            in all_search_tools
+        )
+        and (
+            tool["function"]["name"] not in all_search_tools
+            or tool["function"]["name"] in enabled_search_tools
         )
     ]

@@ -36,6 +36,101 @@ def main() -> int:
     parser.add_argument(
         "--verify-sources", action=argparse.BooleanOptionalAction, default=True
     )
+    parser.add_argument(
+        "--search-tools", choices=("split", "fused"), default="split"
+    )
+    parser.add_argument(
+        "--evidence-ledger", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument("--evidence-ledger-max-entries", type=int, default=24)
+    parser.add_argument(
+        "--reasoning-ledger", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--retrieval-plan", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--pipeline", action=argparse.BooleanOptionalAction, default=False,
+        help="Use the deterministic P0 retrieval pipeline (default: disabled).",
+    )
+    parser.add_argument(
+        "--pipeline-version", choices=("p0-v2", "p0-v3", "p0b", "p0b-r1", "m3"), default="p0-v2",
+    )
+    parser.add_argument(
+        "--pipeline-evidence-packet",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Present unchanged Pipeline candidates as a deterministic P1 packet.",
+    )
+    parser.add_argument(
+        "--pipeline-evidence-gate",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Add the deterministic P2 sufficiency gate to the P1 packet.",
+    )
+    parser.add_argument(
+        "--pipeline-supplement",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Allow one bounded deterministic P3 supplement on a code-detected gap.",
+    )
+    parser.add_argument(
+        "--reflective-retrieval",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Use H-Lite-U general first recall followed by adaptive "
+            "evidence-sufficiency reflection and ordinary retrieval tools."
+        ),
+    )
+    parser.add_argument(
+        "--adaptive-workspace",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Use A0-R mutable workspace while preserving free agent retrieval.",
+    )
+    parser.add_argument(
+        "--claim-evidence-state",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Use A0-C mutable answer-level claim/evidence state while preserving "
+            "the original agent-controlled retrieval tools and view selection."
+        ),
+    )
+    parser.add_argument(
+        "--claim-evidence-loop",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Use the C4 event-driven claim/evidence loop while A0 retains "
+            "retrieval and stop control."
+        ),
+    )
+    parser.add_argument(
+        "--claim-evidence-loop-initial-batch-size",
+        type=int,
+        default=2,
+        help="Novel evidence batches required for the first organizer checkpoint.",
+    )
+    parser.add_argument(
+        "--claim-evidence-loop-initial-organizer-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Enable the first evidence-scale organizer checkpoint. Disable for "
+            "the C5-A final-only organizer ablation."
+        ),
+    )
+    parser.add_argument(
+        "--claim-evidence-loop-event-guidance-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Enable C5-B semantic-event guidance and one nonbinding reminder "
+            "after three pending novel evidence batches."
+        ),
+    )
     parser.add_argument("--workers", type=int, default=10)
     parser.add_argument(
         "--condition",
@@ -78,7 +173,30 @@ def main() -> int:
         max_turns=args.max_turns,
         max_budget_usd=args.max_budget_usd,
         verify_sources=args.verify_sources,
+        search_tools=args.search_tools,
         memory_components=args.memory_components,
+        evidence_ledger_enabled=args.evidence_ledger,
+        evidence_ledger_max_entries=args.evidence_ledger_max_entries,
+        reasoning_ledger_enabled=args.reasoning_ledger,
+        retrieval_plan_enabled=args.retrieval_plan,
+        pipeline_enabled=args.pipeline,
+        pipeline_version=args.pipeline_version,
+        pipeline_evidence_packet_enabled=args.pipeline_evidence_packet,
+        pipeline_evidence_gate_enabled=args.pipeline_evidence_gate,
+        pipeline_supplement_enabled=args.pipeline_supplement,
+        reflective_retrieval_enabled=args.reflective_retrieval,
+        adaptive_workspace_enabled=args.adaptive_workspace,
+        claim_evidence_state_enabled=args.claim_evidence_state,
+        claim_evidence_loop_enabled=args.claim_evidence_loop,
+        claim_evidence_loop_initial_batch_size=(
+            args.claim_evidence_loop_initial_batch_size
+        ),
+        claim_evidence_loop_initial_organizer_enabled=(
+            args.claim_evidence_loop_initial_organizer_enabled
+        ),
+        claim_evidence_loop_event_guidance_enabled=(
+            args.claim_evidence_loop_event_guidance_enabled
+        ),
     )
     if query_config.memory_components is not None and args.condition != "native":
         parser.error("--memory-components requires --condition native")

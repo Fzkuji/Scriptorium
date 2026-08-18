@@ -18,6 +18,10 @@ from .bm25 import (
 )
 
 
+_SHARED_ENCODERS: dict[str, Any] = {}
+_SHARED_ENCODERS_LOCK = threading.RLock()
+
+
 class MemoryEmbeddingIndex:
     """Rebuild an in-memory embedding index from Topic and Source files."""
 
@@ -27,12 +31,14 @@ class MemoryEmbeddingIndex:
         *,
         encoder: Any | None = None,
         files: list[Path] | tuple[Path, ...] | None = None,
+        model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
     ):
         self.memory_dir = Path(memory_dir).resolve()
         self.topics_dir = self.memory_dir / "topics"
         self.sources_dir = self.memory_dir / "sources"
         self._visible_files = None if files is None else tuple(files)
         self._encoder = encoder
+        self.model_name = str(model_name)
         self._events_cache: list[MemoryEvent] | None = None
         self._document_vectors: np.ndarray | None = None
         self._lock = threading.RLock()
@@ -40,13 +46,13 @@ class MemoryEmbeddingIndex:
     @property
     def encoder(self) -> Any:
         if self._encoder is None:
-            with self._lock:
+            with _SHARED_ENCODERS_LOCK:
                 if self._encoder is None:
                     from sentence_transformers import SentenceTransformer
-
-                    self._encoder = SentenceTransformer(
-                        "sentence-transformers/all-MiniLM-L6-v2"
-                    )
+                    self._encoder = _SHARED_ENCODERS.get(self.model_name)
+                    if self._encoder is None:
+                        self._encoder = SentenceTransformer(self.model_name)
+                        _SHARED_ENCODERS[self.model_name] = self._encoder
         return self._encoder
 
     def _events(self) -> list[MemoryEvent]:
@@ -80,6 +86,7 @@ class MemoryEmbeddingIndex:
         top_k: int = 10,
         date_from: str | None = None,
         date_to: str | None = None,
+        _hard_cap: int = 10,
     ) -> list[dict[str, Any]]:
         query = str(query).strip()
         events = self._events()
@@ -134,7 +141,46 @@ class MemoryEmbeddingIndex:
                 -row["similarity"], row["path"], row["line"], row["event"]
             )
         )
-        return results[: max(1, min(int(top_k), 10))]
+        return results[: max(1, min(int(top_k), _hard_cap))]
+
+    def search_broad(
+        self,
+        query: str,
+        *,
+        top_k: int = 30,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Pipeline-only broad recall; normal tool search remains capped at 10."""
+        return self.search(
+            query,
+            top_k=top_k,
+            date_from=date_from,
+            date_to=date_to,
+            _hard_cap=50,
+        )
+
+    def vectors_for_rows(self, rows: list[dict[str, Any]]) -> np.ndarray:
+        """Return cached document vectors for pipeline candidates in row order."""
+        events = self._events()
+        if self._document_vectors is None:
+            # Populate the same cache used by ``search`` without duplicating the
+            # embedding recipe. A non-empty sentinel query is sufficient.
+            self.search("memory", top_k=1)
+        assert self._document_vectors is not None
+        by_key = {
+            (event.event_id, event.path, event.line): self._document_vectors[index]
+            for index, event in enumerate(events)
+        }
+        dimension = int(self._document_vectors.shape[1])
+        return np.asarray([
+            by_key.get(
+                (str(row.get("event_id") or row.get("event") or ""),
+                 str(row.get("path", "")), int(row.get("line", 0))),
+                np.zeros(dimension, dtype=float),
+            )
+            for row in rows
+        ], dtype=float)
 
 
 def render_search_results(results: list[dict[str, Any]]) -> str:

@@ -102,6 +102,10 @@ def answer_one(
         raise ValueError(f"invalid source checkpoint for item {index}")
     memory_dir = Path(str(checkpoint["paths"]["memory_dir"])).resolve()
     if not lme.memory_is_valid(memory_dir):
+        portable_memory = checkpoint_path.parent / "memory"
+        if portable_memory.is_dir():
+            memory_dir = portable_memory.resolve()
+    if not lme.memory_is_valid(memory_dir):
         raise ValueError(f"invalid source memory for item {index}")
     conversation = lme.to_conversation(item, index)
     turn_index = backend.build_turn_index(conversation)
@@ -132,6 +136,7 @@ def answer_one(
         "source_checkpoint": str(checkpoint_path),
         "model": model,
         "condition": condition,
+        "search_tools": query_config.search_tools,
         "memory_components": (
             list(query_config.memory_components)
             if query_config.memory_components is not None

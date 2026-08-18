@@ -12,13 +12,15 @@ from src import retrieval
 from src.agent_runtime import AgentResult
 from src.retrieval import tools as retrieval_tools
 from src.retrieval.embedding import MemoryEmbeddingIndex
+from src.retrieval.claim_evidence_loop import ClaimEvidenceOrganizer
 
 
 class ScriptedQueryAgent:
-    def __init__(self, tool_calls, answer, *, turns=3):
+    def __init__(self, tool_calls, answer, *, turns=3, structured_output=None):
         self.tool_calls = tool_calls
         self.answer = answer
         self.turns = turns
+        self.structured_output = structured_output
         self.calls = []
         self.tool_results = []
 
@@ -31,7 +33,7 @@ class ScriptedQueryAgent:
             )
         return AgentResult(
             text=f"<answer>{self.answer}</answer>",
-            structured_output=None,
+            structured_output=self.structured_output,
             num_turns=self.turns,
             input_tokens=100,
             output_tokens=20,
@@ -91,6 +93,521 @@ def test_query_agent_uses_framework_tools_and_reports_usage(tmp_path):
     assert len(memories) == 1
     assert memories[0]["text"].endswith("Shanghai.")
     assert logged[0][1] == "memory_qa"
+
+
+def test_reflective_retrieval_records_general_recall_and_sufficiency(
+    tmp_path, monkeypatch
+):
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    (memory_dir / "core.md").write_text("The user prefers tea.\n", encoding="utf-8")
+    recall_row = {
+        "event_id": "tea:1",
+        "path": "core.md",
+        "line": 1,
+        "date": "",
+        "content": "The user prefers tea.",
+    }
+    monkeypatch.setattr(
+        "src.retrieval.agent.build_general_first_recall",
+        lambda *args, **kwargs: (
+            "<general_first_recall>tea</general_first_recall>",
+            [recall_row],
+            {
+                "enabled": True,
+                "version": "h-lite-u-20260817",
+                "query_transform": "none_raw_question",
+                "routing": "none_all_lanes",
+                "lane_counts": {"lexical": 1, "semantic": 1, "timeline": 0, "relations": 0},
+                "candidate_count": 1,
+                "candidates": [],
+            },
+        ),
+    )
+    reflection = {
+        "supported_facts": ["The user prefers tea."],
+        "conflicts": [],
+        "missing_information": [],
+        "can_answer": True,
+        "follow_up_queries": [],
+    }
+    agent = ScriptedQueryAgent([], "tea", turns=2, structured_output={
+        **reflection, "answer": "tea",
+    })
+    backend, _logged = scripted_backend(agent)
+
+    memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "What does the user prefer?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(reflective_retrieval_enabled=True),
+    )
+
+    assert answer == "tea"
+    assert "retrieved_evidence" in agent.calls[0]["prompt"]
+    assert "Do not classify benchmark question types" in agent.calls[0]["system_prompt"]
+    assert any(row["type"] == "general_first_recall" for row in trace)
+    assert any(row["type"] == "retrieval_reflection" for row in trace)
+    assert trace[-1]["reflective_retrieval"]["reflection_count"] == 1
+    assert memories[-1]["text"] == "The user prefers tea."
+
+
+def test_reflective_retrieval_is_independent_from_pipeline_and_ledgers():
+    with pytest.raises(ValueError, match="cannot be combined with pipeline"):
+        retrieval.QueryConfig(
+            pipeline_enabled=True,
+            reflective_retrieval_enabled=True,
+        )
+    with pytest.raises(ValueError, match="independent experiment"):
+        retrieval.QueryConfig(
+            evidence_ledger_enabled=True,
+            reflective_retrieval_enabled=True,
+        )
+
+
+def test_a0r_adaptive_workspace_is_mutable_and_does_not_gate_retrieval(tmp_path):
+    memory_dir = tmp_path / "memory"
+    topic_dir = memory_dir / "topics"
+    topic_dir.mkdir(parents=True)
+    (topic_dir / "projects.md").write_text(
+        "The user leads project A.\n", encoding="utf-8"
+    )
+    first = {
+        "current_interpretation": "Find projects the user leads.",
+        "candidate_answers": [],
+        "rejected_candidates": [],
+        "open_questions": ["Which named project is led?"],
+        "revision_reason": None,
+    }
+    second = {
+        "current_interpretation": "Project A is supported.",
+        "candidate_answers": [{
+            "candidate_id": "A",
+            "value": "project A",
+            "status": "supported",
+            "evidence": ["topics/projects.md:1"],
+        }],
+        "rejected_candidates": [],
+        "open_questions": [],
+        "revision_reason": "Retrieved direct leadership evidence.",
+    }
+    agent = ScriptedQueryAgent([
+        ("update_adaptive_workspace", first),
+        ("bm25_search", {"query": "leads project", "top_k": 3}),
+        ("update_adaptive_workspace", second),
+    ], "1", turns=4)
+    backend, _logged = scripted_backend(agent)
+
+    _memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "How many projects does the user lead?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(adaptive_workspace_enabled=True),
+    )
+
+    assert answer == "1"
+    assert agent.tool_results[1]["is_error"] is False
+    metrics = trace[-1]["adaptive_workspace"]
+    assert metrics["update_count"] == 2
+    assert metrics["revisions"] == 1
+    assert metrics["final_state"]["candidate_answers"][0]["value"] == "project A"
+
+
+def test_a0r_adaptive_workspace_is_independent_from_pipeline():
+    with pytest.raises(ValueError, match="independent A0 extension"):
+        retrieval.QueryConfig(
+            pipeline_enabled=True,
+            adaptive_workspace_enabled=True,
+        )
+
+
+def test_a0c_claim_evidence_state_is_revisable_and_audited(tmp_path):
+    memory_dir = tmp_path / "memory"
+    topic_dir = memory_dir / "topics"
+    topic_dir.mkdir(parents=True)
+    (topic_dir / "projects.md").write_text(
+        "The user leads project A.\n", encoding="utf-8"
+    )
+    candidate = {
+        "candidate_id": "A",
+        "claim": "The user leads project A.",
+        "status": "uncertain",
+        "evidence_refs": ["topics/projects.md:1"],
+        "counterevidence_refs": [],
+        "relations": [],
+        "reason": "The retrieved summary needs source confirmation.",
+        "answer_impact": "Would change the count from 0 to 1.",
+        "resolvable": True,
+        "next_check": "Verify the source behind topics/projects.md:1.",
+    }
+    first = {
+        "question_target": "Count projects the user leads.",
+        "candidates": [candidate],
+        "remaining_gaps": ["Confirm project A leadership."],
+        "ready_to_answer": False,
+        "revision_reason": None,
+    }
+    supported = dict(candidate)
+    supported.update({
+        "status": "supported",
+        "reason": "Direct leadership evidence is visible.",
+        "resolvable": False,
+        "next_check": None,
+    })
+    second = {
+        "question_target": "Count projects the user leads.",
+        "candidates": [supported],
+        "remaining_gaps": [],
+        "ready_to_answer": True,
+        "revision_reason": "Direct evidence resolved candidate A.",
+    }
+    agent = ScriptedQueryAgent([
+        ("bm25_search", {"query": "leads project", "top_k": 3}),
+        ("update_claim_evidence_state", first),
+        ("update_claim_evidence_state", second),
+    ], "1", turns=4)
+    backend, _logged = scripted_backend(agent)
+
+    _memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "How many projects does the user lead?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(claim_evidence_state_enabled=True),
+    )
+
+    assert answer == "1"
+    metrics = trace[-1]["claim_evidence_state"]
+    assert metrics["update_count"] == 2
+    assert metrics["revisions"] == 1
+    assert metrics["mechanism_active"] is True
+    assert metrics["final_ready"] is True
+    assert metrics["final_state"]["candidates"][0]["status"] == "supported"
+    assert "you decide which memory views" in agent.calls[0]["system_prompt"]
+
+
+def test_a0c_claim_evidence_state_is_independent_from_other_experiments():
+    with pytest.raises(ValueError, match="independent A0 extension"):
+        retrieval.QueryConfig(
+            pipeline_enabled=True,
+            claim_evidence_state_enabled=True,
+        )
+    with pytest.raises(ValueError, match="independent A0 extension"):
+        retrieval.QueryConfig(
+            adaptive_workspace_enabled=True,
+            claim_evidence_state_enabled=True,
+        )
+
+
+def test_c4_eager_organizes_each_novel_batch_and_reinjects_latest_state(tmp_path):
+    memory_dir = tmp_path / "memory"
+    (memory_dir / "topics").mkdir(parents=True)
+    (memory_dir / "topics/storage.md").write_text(
+        "The user needs more storage and values centralized backups.\n",
+        encoding="utf-8",
+    )
+    patch = {
+        "question_target": "Recommend whether to buy storage now.",
+        "upsert_candidates": [{
+            "candidate_id": "buy-now",
+            "claim": "Buying now fits the user's current storage need.",
+            "status": "supported",
+            "evidence_refs": ["topics/storage.md:1"],
+            "counterevidence_refs": [],
+            "relations": [],
+            "reason": "Current need and backup preference support the option.",
+            "answer_impact": "Supports recommending a purchase now.",
+            "verification_priority": "low",
+        }],
+        "remove_candidate_ids": [],
+        "remaining_gaps": [],
+        "ready_to_answer": True,
+        "revision_reason": "New direct preference evidence.",
+    }
+
+    class C4Agent(ScriptedQueryAgent):
+        def run(self, **kwargs):
+            if kwargs.get("output_schema") is not None:
+                self.calls.append(kwargs)
+                return AgentResult(
+                    text="", structured_output=patch, num_turns=1,
+                    input_tokens=30, output_tokens=10,
+                    cache_creation_input_tokens=0, cache_read_input_tokens=0,
+                    anthropic_equivalent_cost_usd=0.002,
+                    duration_ms=10, duration_api_ms=8, stop_reason="end_turn",
+                    session_id="organizer",
+                )
+            if not kwargs.get("tools"):
+                self.calls.append(kwargs)
+                return AgentResult(
+                    text="<answer>Buy now.</answer>", structured_output=None,
+                    num_turns=1, input_tokens=20, output_tokens=5,
+                    cache_creation_input_tokens=0, cache_read_input_tokens=0,
+                    anthropic_equivalent_cost_usd=0.001,
+                    duration_ms=10, duration_api_ms=8, stop_reason="end_turn",
+                    session_id="final",
+                )
+            return super().run(**kwargs)
+
+    agent = C4Agent([
+        ("bash", {"command": "rg -n 'storage|backup' topics"}),
+        ("bash", {"command": "rg -n 'storage|backup' topics"}),
+        ("bash", {"command": "wc -c topics/storage.md"}),
+        ("report_retrieval_event", {
+            "event": "evidence_conflict",
+            "reason": "The new evidence changes which candidate is supported.",
+        }),
+    ], "Buy now.", turns=3)
+    backend, logged = scripted_backend(agent)
+
+    _memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "Should the user buy storage now?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(
+            claim_evidence_loop_enabled=True,
+            claim_evidence_loop_initial_batch_size=1,
+        ),
+    )
+
+    assert answer == "Buy now."
+    metrics = trace[-1]["claim_evidence_loop"]
+    assert metrics["organizer_calls"] == 3
+    assert metrics["state_versions"] == 3
+    assert metrics["mechanism_active"] is True
+    assert metrics["final_state"]["candidates"][0]["candidate_id"] == "buy-now"
+    tool_rows = [row for row in trace if row["type"] == "bash"]
+    assert [row["organizer_triggered"] for row in tool_rows] == [
+        True, False, False,
+    ]
+    event_rows = [
+        row for row in trace if row["type"] == "report_retrieval_event"
+    ]
+    assert len(event_rows) == 1
+    assert event_rows[0]["organizer_triggered"] is True
+    assert all("current_claim_evidence_state" in result["content"][0]["text"]
+               for result in agent.tool_results)
+    assert [phase for _result, phase in logged] == [
+        "memory_qa_c4_organizer", "memory_qa_c4_organizer",
+        "memory_qa", "memory_qa_c4_organizer", "memory_qa_c4_final",
+    ]
+
+
+def test_c4_eager_is_independent_from_a0c_and_pipeline():
+    with pytest.raises(ValueError, match="independent A0 extension"):
+        retrieval.QueryConfig(
+            claim_evidence_loop_enabled=True,
+            claim_evidence_state_enabled=True,
+        )
+    with pytest.raises(ValueError, match="independent A0 extension"):
+        retrieval.QueryConfig(
+            claim_evidence_loop_enabled=True,
+            pipeline_enabled=True,
+        )
+
+
+def test_c4_event_loop_uses_initial_scale_once_then_waits_for_events(tmp_path):
+    organizer = ClaimEvidenceOrganizer(
+        runtime=SimpleNamespace(), question="q", question_date="",
+        memory_dir=tmp_path, initial_batch_size=2,
+    )
+    assert organizer.queue("first", tool_name="bash") is False
+    assert organizer.queue("first", tool_name="bash") is False
+    assert organizer.queue("second", tool_name="bm25_search") is True
+    organizer.pending_batches.clear()
+    organizer.organizer_calls = 2
+    assert organizer.queue("third", tool_name="read_memory_file") is False
+    assert organizer.queue("fourth", tool_name="bash") is False
+    metrics = organizer.metrics()
+    assert metrics["mode"] == "c4-event-driven"
+    assert metrics["initial_batch_size"] == 2
+    assert metrics["pending_unorganized_batches"] == 2
+
+
+def test_c5a_queues_all_evidence_without_initial_organizer(tmp_path):
+    organizer = ClaimEvidenceOrganizer(
+        runtime=SimpleNamespace(), question="q", question_date="",
+        memory_dir=tmp_path, initial_batch_size=2,
+        initial_organizer_enabled=False,
+    )
+    assert organizer.queue("first", tool_name="bash") is False
+    assert organizer.queue("second", tool_name="bm25_search") is False
+    assert organizer.queue("third", tool_name="read_memory_file") is False
+    metrics = organizer.metrics()
+    assert metrics["mode"] == "c5a-final-only"
+    assert metrics["initial_organizer_enabled"] is False
+    assert metrics["organizer_calls"] == 0
+    assert metrics["pending_unorganized_batches"] == 3
+
+
+def test_c5b_emits_one_nonbinding_reminder_per_evidence_cycle(tmp_path):
+    organizer = ClaimEvidenceOrganizer(
+        runtime=SimpleNamespace(), question="q", question_date="",
+        memory_dir=tmp_path, initial_organizer_enabled=False,
+        event_guidance_enabled=True,
+    )
+    organizer.queue("first", tool_name="bash")
+    organizer.queue("second", tool_name="bm25_search")
+    assert organizer.take_event_reminder() is False
+    organizer.queue("third", tool_name="read_memory_file")
+    assert organizer.take_event_reminder() is True
+    assert organizer.take_event_reminder() is False
+    metrics = organizer.metrics()
+    assert metrics["event_guidance_enabled"] is True
+    assert metrics["event_reminders"] == 1
+
+
+def test_c4_event_config_rejects_invalid_initial_batch_size():
+    with pytest.raises(ValueError, match="initial batch size must be positive"):
+        retrieval.QueryConfig(claim_evidence_loop_initial_batch_size=0)
+
+
+def test_query_agent_can_enable_programmatic_evidence_ledger(tmp_path):
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    (memory_dir / "core.md").write_text(
+        "The user prefers tea.\n", encoding="utf-8"
+    )
+    (memory_dir / "topics").mkdir()
+    (memory_dir / "topics" / "drinks.md").write_text(
+        "On 2023-05-01 the user bought tea. D1:1\n", encoding="utf-8"
+    )
+    agent = ScriptedQueryAgent(
+        [("read_memory_file", {"path": "topics/drinks.md"})], "tea", turns=2
+    )
+    backend, _logged = scripted_backend(agent)
+
+    _memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "What drink?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(evidence_ledger_enabled=True),
+    )
+
+    assert answer == "tea"
+    assert "<evidence_ledger" not in agent.calls[0]["prompt"]
+    assert "<evidence_ledger_delta>" in agent.tool_results[0]["content"][0]["text"]
+    metrics = trace[-1]["evidence_ledger"]
+    assert metrics["enabled"] is True
+    assert metrics["entries"] == 1
+    assert metrics["initial_records"] == 1
+
+
+def test_query_agent_can_use_grounded_reasoning_workspace(tmp_path):
+    memory_dir = tmp_path / "memory"
+    topic_dir = memory_dir / "topics"
+    topic_dir.mkdir(parents=True)
+    topic_path = topic_dir / "roles.md"
+    topic_path.write_text(
+        "The user is a Senior Engineer. D1:1\n", encoding="utf-8"
+    )
+    event = retrieval_tools.MemoryBM25Index(
+        memory_dir, persist=False
+    ).events[0]
+    payload = {
+        "reasoning_mode": "relation_check",
+        "requirements": [{
+            "claim": "manager role must be supported",
+            "status": "missing",
+            "evidence_ids": [],
+        }],
+        "candidates": [{
+            "candidate_id": "senior_engineer",
+            "value": "Senior Engineer",
+            "predicate": "recorded role",
+            "event_time": None,
+            "time_precision": "none",
+            "evidence_ids": [event.event_id],
+            "compatible": False,
+            "exclusion_reason": "different role",
+        }],
+        "conflicts": [],
+        "resolution": {
+            "policy": "none",
+            "selected_candidate_ids": [],
+            "rejected_candidate_ids": [],
+            "justification_evidence_ids": [],
+        },
+        "sufficiency": "insufficient",
+    }
+    agent = ScriptedQueryAgent(
+        [
+            ("bm25_search", {"query": "Senior Engineer"}),
+            ("update_reasoning_ledger", payload),
+        ],
+        "Insufficient information.",
+        turns=3,
+    )
+    backend, _logged = scripted_backend(agent)
+
+    _memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "How many engineers as manager?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(
+            evidence_ledger_enabled=True,
+            reasoning_ledger_enabled=True,
+        ),
+    )
+
+    assert answer == "Insufficient information."
+    assert "Before answering, call update_reasoning_ledger" in (
+        agent.calls[0]["system_prompt"]
+    )
+    assert trace[-1]["reasoning_ledger"]["updates"] == 1
+    assert trace[-1]["reasoning_ledger"]["state"]["sufficiency"] == "insufficient"
+
+
+def test_query_agent_can_plan_before_retrieval(tmp_path):
+    memory_dir = tmp_path / "memory"
+    topic_dir = memory_dir / "topics"
+    topic_dir.mkdir(parents=True)
+    (topic_dir / "drinks.md").write_text(
+        "On 2023-05-01 the user bought tea. D1:1\n", encoding="utf-8"
+    )
+    plan = {
+        "answer_shape": "direct_fact",
+        "target_predicate": "drink the user bought",
+        "entities": ["user", "drink"],
+        "time_scope": None,
+        "inclusion_rules": ["completed purchases"],
+        "exclusion_rules": ["planned purchases"],
+        "required_evidence": ["drink and purchase relation"],
+        "search_queries": ["bought drink"],
+        "source_check": "verify a merged relation if encountered",
+        "stop_rule": "stop after the purchase relation is supported",
+        "revision_reason": None,
+    }
+    agent = ScriptedQueryAgent(
+        [
+            ("set_retrieval_plan", plan),
+            ("read_memory_file", {"path": "topics/drinks.md"}),
+        ],
+        "tea",
+        turns=3,
+    )
+    backend, _logged = scripted_backend(agent)
+
+    _memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "What drink?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(
+            evidence_ledger_enabled=True,
+            retrieval_plan_enabled=True,
+        ),
+    )
+
+    assert answer == "tea"
+    assert "set_retrieval_plan" in agent.calls[0]["system_prompt"]
+    assert trace[-1]["retrieval_plan"]["updates"] == 1
+    assert trace[-1]["retrieval_calls"] == 1
 
 
 def test_create_runtime_uses_explicit_agent_without_mutating_environment(
@@ -175,6 +692,51 @@ def test_reanswer_dispatch_uses_retrieval_agent(monkeypatch, tmp_path):
 
     assert result == expected
     assert seen == [(backend, item, memory_dir, turn_index)]
+
+
+def test_answer_one_uses_portable_sibling_memory_without_rewriting_checkpoint(
+    monkeypatch, tmp_path
+):
+    checkpoint_dir = tmp_path / "portable" / "item"
+    memory_dir = checkpoint_dir / "memory"
+    memory_dir.mkdir(parents=True)
+    checkpoint_path = checkpoint_dir / "checkpoint.json"
+    checkpoint_path.write_text(
+        __import__("json").dumps({
+            "status": "built",
+            "dataset_index": 0,
+            "question_id": "q0",
+            "build": {"status": "complete"},
+            "paths": {"memory_dir": "/missing/original/memory"},
+        }),
+        encoding="utf-8",
+    )
+    source = {"dataset_index": 0, "checkpoint": str(checkpoint_path), "answer": ""}
+    dataset = [{
+        "question_id": "q0", "question": "where?", "question_type": "test",
+        "answer": "gold",
+    }]
+    backend = SimpleNamespace(build_turn_index=lambda _conversation: {})
+    monkeypatch.setattr(MOD.lme, "memory_is_valid", lambda path: path == memory_dir)
+    monkeypatch.setattr(MOD.lme, "to_conversation", lambda _item, _index: {})
+    monkeypatch.setattr(
+        "scripts.runners.longmemeval.execution.collect_answer",
+        lambda *_args, **_kwargs: ([{"text": "evidence", "date": ""}], 1, "answer", []),
+    )
+
+    record = MOD.answer_one(
+        backend,
+        dataset,
+        source,
+        tmp_path / "output",
+        model="model",
+        query_config=retrieval.QueryConfig(),
+    )
+
+    assert record["answer"] == "answer"
+    assert __import__("json").loads(checkpoint_path.read_text())["paths"][
+        "memory_dir"
+    ] == "/missing/original/memory"
 
 
 def test_query_agent_receives_core_recent_and_framework_limits(tmp_path):
@@ -600,6 +1162,227 @@ def test_scriptorium_query_config_rejects_invalid_values():
     ).memory_components == ("topics", "core")
     with pytest.raises(ValueError, match="unknown memory components"):
         retrieval.QueryConfig(memory_components="topics,unknown")
+    with pytest.raises(ValueError, match="evidence_ledger_max_entries"):
+        retrieval.QueryConfig(evidence_ledger_max_entries=0)
+    with pytest.raises(ValueError, match="cannot be combined"):
+        retrieval.QueryConfig(
+            pipeline_enabled=True,
+            evidence_ledger_enabled=True,
+        )
+    with pytest.raises(ValueError, match="requires pipeline"):
+        retrieval.QueryConfig(pipeline_evidence_packet_enabled=True)
+    with pytest.raises(ValueError, match="p0b or m3"):
+        retrieval.QueryConfig(
+            pipeline_enabled=True,
+            pipeline_version="p0b-r1",
+            pipeline_evidence_packet_enabled=True,
+        )
+    assert retrieval.QueryConfig(
+        pipeline_enabled=True,
+        pipeline_version="m3",
+        pipeline_evidence_packet_enabled=True,
+    ).pipeline_version == "m3"
+    with pytest.raises(ValueError, match="requires the P1 evidence packet"):
+        retrieval.QueryConfig(
+            pipeline_enabled=True,
+            pipeline_version="p0b",
+            pipeline_evidence_gate_enabled=True,
+        )
+    with pytest.raises(ValueError, match="P3 supplement requires"):
+        retrieval.QueryConfig(
+            pipeline_enabled=True,
+            pipeline_version="p0b",
+            pipeline_supplement_enabled=True,
+        )
+    with pytest.raises(ValueError, match="branch directly from P1"):
+        retrieval.QueryConfig(
+            pipeline_enabled=True,
+            pipeline_version="p0b",
+            pipeline_evidence_packet_enabled=True,
+            pipeline_evidence_gate_enabled=True,
+            pipeline_supplement_enabled=True,
+        )
+
+
+def test_p0_pipeline_answers_without_agent_retrieval_tools(tmp_path, monkeypatch):
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    agent = ScriptedQueryAgent([], "tea", turns=1)
+    backend, _logged = scripted_backend(agent)
+
+    def fake_pipeline(*_args, **_kwargs):
+        rows = [{
+            "event_id": "ev1",
+            "path": "topics/drinks.md",
+            "line": 2,
+            "date": "2025-01-01",
+            "content": "The user prefers tea.",
+            "refs": ["D1:1"],
+        }]
+        return "<pipeline_context>tea</pipeline_context>", rows, {
+            "enabled": True,
+            "version": "p0-v2",
+            "candidate_count": 1,
+        }
+
+    monkeypatch.setattr("src.retrieval.agent.build_pipeline_context", fake_pipeline)
+    memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "What drink?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(pipeline_enabled=True),
+    )
+
+    assert answer == "tea"
+    assert agent.calls[0]["tools"] == []
+    assert "<pipeline_context>tea</pipeline_context>" in agent.calls[0]["prompt"]
+    assert "No retrieval tools are available" in agent.calls[0]["prompt"]
+    assert agent.calls[0]["max_turns"] == 3
+    assert memories == [{"text": "The user prefers tea.", "date": "2025-01-01"}]
+    assert trace[-1]["tool_calls"] == 0
+    assert trace[-1]["pipeline"]["version"] == "p0-v2"
+
+
+def test_p1_packet_uses_same_pipeline_rows_without_tools(tmp_path, monkeypatch):
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    agent = ScriptedQueryAgent([], "tea", turns=1)
+    backend, _logged = scripted_backend(agent)
+
+    def fake_pipeline(*_args, **_kwargs):
+        rows = [{
+            "event_id": "ev1", "path": "topics/drinks.md", "line": 2,
+            "date": "2025-01-01", "content": "The user prefers tea.",
+            "refs": ["D1:1"], "pipeline_rank": 1,
+        }]
+        return "<pipeline_context>tea</pipeline_context>", rows, {
+            "enabled": True, "version": "p0b", "candidate_count": 1,
+            "question_contract": {
+                "answer_shape": "direct_fact",
+                "coverage_axis": "best_supported_fact",
+            },
+        }
+
+    monkeypatch.setattr("src.retrieval.agent.build_pipeline_context", fake_pipeline)
+    memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "What drink?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(
+            pipeline_enabled=True,
+            pipeline_version="p0b",
+            pipeline_evidence_packet_enabled=True,
+        ),
+    )
+
+    assert answer == "tea"
+    assert agent.calls[0]["tools"] == []
+    assert "<evidence_packet" in agent.calls[0]["prompt"]
+    assert "The user prefers tea." in agent.calls[0]["prompt"]
+    assert memories == [{"text": "The user prefers tea.", "date": "2025-01-01"}]
+    assert trace[-1]["pipeline"]["evidence_packet"]["candidate_count"] == 1
+
+
+def test_p2_gate_preserves_pipeline_rows_and_adds_no_calls(tmp_path, monkeypatch):
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    agent = ScriptedQueryAgent([], "tea", turns=1)
+    backend, _logged = scripted_backend(agent)
+
+    def fake_pipeline(*_args, **_kwargs):
+        rows = [{
+            "event_id": "ev1", "path": "topics/drinks.md", "line": 2,
+            "date": "2025-01-01", "content": "The user prefers tea.",
+            "refs": ["D1:1"], "pipeline_rank": 1,
+        }]
+        return "<pipeline_context>tea</pipeline_context>", rows, {
+            "enabled": True, "version": "p0b", "candidate_count": 1,
+            "question_contract": {
+                "answer_shape": "direct_fact",
+                "coverage_axis": "best_supported_fact",
+                "temporal": {},
+            },
+        }
+
+    monkeypatch.setattr("src.retrieval.agent.build_pipeline_context", fake_pipeline)
+    memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "What drink?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(
+            pipeline_enabled=True,
+            pipeline_version="p0b",
+            pipeline_evidence_packet_enabled=True,
+            pipeline_evidence_gate_enabled=True,
+        ),
+    )
+
+    assert answer == "tea"
+    assert agent.calls[0]["tools"] == []
+    assert "<evidence_packet" in agent.calls[0]["prompt"]
+    assert "<evidence_gate" in agent.calls[0]["prompt"]
+    assert memories == [{"text": "The user prefers tea.", "date": "2025-01-01"}]
+    gate = trace[-1]["pipeline"]["evidence_gate"]
+    assert gate["independent_llm_calls"] == 0
+    assert gate["supplemental_retrievals"] == 0
+
+
+def test_p3_runs_at_most_one_supplement_for_detected_gap(tmp_path, monkeypatch):
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    agent = ScriptedQueryAgent([], "2", turns=1)
+    backend, _logged = scripted_backend(agent)
+    calls = []
+
+    def fake_pipeline(*_args, **_kwargs):
+        rows = [{
+            "event_id": "ev1", "path": "topics/events.md", "line": 2,
+            "date": "2025-01-01", "content": "The user attended one event.",
+            "refs": ["D1:1"], "pipeline_rank": 1,
+        }]
+        return "old", rows, {
+            "enabled": True, "version": "p0b", "candidate_count": 1,
+            "question_contract": {
+                "answer_shape": "count", "coverage_axis": "distinct_events",
+                "temporal": {},
+            },
+        }
+
+    def fake_supplement(*_args, **_kwargs):
+        calls.append(1)
+        return [{
+            "event_id": "ev2", "path": "topics/events.md", "line": 4,
+            "date": "2025-01-02", "content": "The user attended another event.",
+            "refs": ["D2:1"], "pipeline_rank": 2, "supplemental": True,
+        }], {
+            "triggered": True, "lookup_count": 1, "max_new": 4,
+            "added_count": 1, "added_event_ids": ["ev2"],
+        }
+
+    monkeypatch.setattr("src.retrieval.agent.build_pipeline_context", fake_pipeline)
+    monkeypatch.setattr("src.retrieval.agent.supplement_pipeline_rows", fake_supplement)
+    memories, _steps, answer, trace = retrieval.collect_answer(
+        backend,
+        {"question": "How many events did the user attend?"},
+        memory_dir,
+        {},
+        config=retrieval.QueryConfig(
+            pipeline_enabled=True,
+            pipeline_version="p0b",
+            pipeline_evidence_packet_enabled=True,
+            pipeline_supplement_enabled=True,
+        ),
+    )
+
+    assert answer == "2"
+    assert len(calls) == 1
+    assert len(memories) == 2
+    assert "The user attended another event." in agent.calls[0]["prompt"]
+    assert trace[-1]["pipeline"]["supplement"]["lookup_count"] == 1
+    assert trace[-1]["tool_calls"] == 0
 
 
 def test_load_completed_results_validates_item_identity(tmp_path):

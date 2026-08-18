@@ -1,0 +1,14 @@
+{
+  "analysis": "../../../docs/research/artifacts/json/longmemeval-s-p0b-p1-validation10.json",
+  "data": "../../benchmarks/longmemeval/data/longmemeval_s_cleaned.json",
+  "output_dir": "../../results/formal/longmemeval-s-p0b-validation10-r1",
+  "gateway_base_url": "https://opencode.ai/zen/go",
+  "model": "deepseek-v4-flash",
+  "api_key_file": "../../../provider-api-key.txt#entry=1",
+  "max_turns": 3,
+  "verify_sources": true,
+  "pipeline": true,
+  "pipeline_version": "p0b",
+  "workers": 1,
+  "condition": "native"
+}

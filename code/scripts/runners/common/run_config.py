@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +66,13 @@ def _resolve_secret_files(
             raise ConfigError(
                 f"set either {target} or {file_key}, not both"
             )
-        secret_path = Path(str(location)).expanduser()
+        raw_location = str(location)
+        entry = None
+        match = re.fullmatch(r"(.+)#entry=([1-9][0-9]*)", raw_location)
+        if match:
+            raw_location = match.group(1)
+            entry = int(match.group(2))
+        secret_path = Path(raw_location).expanduser()
         if not secret_path.is_absolute():
             secret_path = base / secret_path
         if not secret_path.is_file():
@@ -73,6 +80,13 @@ def _resolve_secret_files(
         secret = secret_path.read_text(encoding="utf-8").strip()
         if not secret:
             raise ConfigError(f"{file_key} is empty: {secret_path}")
+        if entry is not None:
+            entries = [line.split()[0] for line in secret.splitlines() if line.strip()]
+            if entry > len(entries):
+                raise ConfigError(
+                    f"{file_key} entry {entry} does not exist: {secret_path}"
+                )
+            secret = entries[entry - 1]
         resolved[target] = secret
     return resolved
 

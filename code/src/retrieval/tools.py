@@ -7,6 +7,7 @@ from .bm25 import MemoryBM25Index
 from .bm25 import render_search_results as render_bm25_results
 from .embedding import MemoryEmbeddingIndex
 from .embedding import render_search_results as render_embedding_results
+from .fusion import fused_search
 
 from .shell import normalize_workspace_command, validate_read_only_command
 from .views import read_memory_file
@@ -91,11 +92,32 @@ def execute_tool_call(
             offset=args.get("offset", 1),
             limit=args.get("limit"),
         ), True, None
-    if name in {"bm25_search", "embedding_search"}:
+    if name in {"bm25_search", "embedding_search", "memory_search"}:
         query = str(args.get("query", "")).strip()
         if not query:
             raise ValueError("search query is empty")
         top_k = max(1, min(int(args.get("top_k", 10)), 10))
+        if name == "memory_search":
+            results = fused_search(
+                _search_index(
+                    runtime, "bm25", memory_dir=memory_dir,
+                    files=files, indexes=indexes,
+                ),
+                _search_index(
+                    runtime, "embedding", memory_dir=memory_dir,
+                    files=files, indexes=indexes,
+                ),
+                query,
+                top_k=top_k,
+                path_prefix=args.get("path_prefix") or None,
+                date_from=args.get("date_from") or None,
+                date_to=args.get("date_to") or None,
+            )
+            rendered = render_bm25_results(results)
+            return (
+                "No memory matches."
+                if rendered == "No BM25 matches." else rendered
+            ), True, None
         if name == "bm25_search":
             index = _search_index(
                 runtime,
