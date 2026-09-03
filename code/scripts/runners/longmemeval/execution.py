@@ -89,7 +89,12 @@ def answer_one(
 ) -> dict[str, Any]:
     index = int(source["dataset_index"])
     item = dataset[index]
-    checkpoint_path = (CODE_ROOT / str(source["checkpoint"])).resolve()
+    checkpoint_raw = Path(str(source["checkpoint"]))
+    checkpoint_path = (CODE_ROOT / checkpoint_raw).resolve()
+    if not checkpoint_path.is_file():
+        checkpoint_path = (
+            Path("/Users/fzkuji/Scriptorium/code") / checkpoint_raw
+        ).resolve()
     checkpoint = read_json(checkpoint_path)
     if (
         (
@@ -101,6 +106,8 @@ def answer_one(
     ):
         raise ValueError(f"invalid source checkpoint for item {index}")
     memory_dir = Path(str(checkpoint["paths"]["memory_dir"])).resolve()
+    if not lme.memory_is_valid(memory_dir):
+        memory_dir = checkpoint_path.parent / "memory"
     if not lme.memory_is_valid(memory_dir):
         raise ValueError(f"invalid source memory for item {index}")
     conversation = lme.to_conversation(item, index)

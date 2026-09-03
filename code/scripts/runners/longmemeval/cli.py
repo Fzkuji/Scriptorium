@@ -37,6 +37,7 @@ def main() -> int:
         "--verify-sources", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument("--workers", type=int, default=10)
+    parser.add_argument("--max-new-items", type=int)
     parser.add_argument(
         "--condition",
         choices=("native", *retrieval.CONDITION_VIEWS),
@@ -51,6 +52,8 @@ def main() -> int:
         parser.error("--workers must be positive")
     if args.max_turns < 1:
         parser.error("--max-turns must be positive")
+    if args.max_new_items is not None and args.max_new_items < 1:
+        parser.error("--max-new-items must be positive")
     if args.max_budget_usd is not None and args.max_budget_usd <= 0:
         parser.error("--max-budget-usd must be positive")
 
@@ -78,6 +81,8 @@ def main() -> int:
         for source in sources
         if int(source["dataset_index"]) not in completed
     ]
+    if args.max_new_items is not None:
+        pending = pending[: args.max_new_items]
     print(
         f"resumed={len(completed)} pending={len(pending)} workers={args.workers}",
         flush=True,
@@ -115,6 +120,12 @@ def main() -> int:
             f"interrupted; saved={len(completed)}/{len(sources)}", flush=True
         )
         return 130
+    if args.max_new_items is not None:
+        print(
+            f"batch complete; saved={len(completed)}/{len(sources)}",
+            flush=True,
+        )
+        return 0
     if len(completed) != len(sources):
         raise RuntimeError(
             f"only completed {len(completed)}/{len(sources)} items"

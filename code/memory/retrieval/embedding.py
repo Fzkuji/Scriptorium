@@ -18,6 +18,24 @@ from .bm25 import (
 )
 
 
+_SHARED_ENCODER: Any | None = None
+_SHARED_ENCODER_LOCK = threading.RLock()
+
+
+def _shared_encoder() -> Any:
+    """Load the immutable embedding model once per worker process."""
+    global _SHARED_ENCODER
+    if _SHARED_ENCODER is None:
+        with _SHARED_ENCODER_LOCK:
+            if _SHARED_ENCODER is None:
+                from sentence_transformers import SentenceTransformer
+
+                _SHARED_ENCODER = SentenceTransformer(
+                    "sentence-transformers/all-MiniLM-L6-v2"
+                )
+    return _SHARED_ENCODER
+
+
 class MemoryEmbeddingIndex:
     """Rebuild an in-memory embedding index from Topic and Source files."""
 
@@ -42,11 +60,7 @@ class MemoryEmbeddingIndex:
         if self._encoder is None:
             with self._lock:
                 if self._encoder is None:
-                    from sentence_transformers import SentenceTransformer
-
-                    self._encoder = SentenceTransformer(
-                        "sentence-transformers/all-MiniLM-L6-v2"
-                    )
+                    self._encoder = _shared_encoder()
         return self._encoder
 
     def _events(self) -> list[MemoryEvent]:

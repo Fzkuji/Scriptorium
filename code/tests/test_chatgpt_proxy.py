@@ -1,7 +1,9 @@
 import json
 
-import src.chatgpt_proxy as proxy
-from src.chatgpt_proxy import parse_responses_stream
+import pytest
+
+import memory.chatgpt_proxy as proxy
+from memory.chatgpt_proxy import parse_responses_stream
 
 
 class FakeResponse:
@@ -50,6 +52,44 @@ def test_rejects_empty_completed_response():
         {"type": "response.completed", "response": {"usage": {}}},
     ]))
     assert "error" in result and "empty output" in result["error"]
+
+
+def test_accepts_empty_completed_response_after_tool_result():
+    result = parse_responses_stream(FakeResponse([
+        {"type": "response.completed", "response": {
+            "id": "resp-empty",
+            "model": "gpt-5.6-luna",
+            "reasoning": {"effort": "none"},
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 4,
+                "total_tokens": 14,
+                "output_tokens_details": {"reasoning_tokens": 0},
+            },
+        }},
+    ]), allow_empty_output=True)
+
+    assert "error" not in result
+    assert result["text"] is None
+    assert result["tool_calls"] is None
+    assert result["empty_output"] is True
+    assert result["actual_model"] == "gpt-5.6-luna"
+    assert result["usage"]["completion_tokens"] == 4
+
+
+def test_detects_only_anthropic_tool_result_blocks():
+    assert proxy._has_anthropic_tool_result([
+        {"role": "assistant", "content": [{
+            "type": "tool_use", "id": "tool-1", "name": "Read",
+            "input": {"file_path": "topics/a.md"},
+        }]},
+        {"role": "user", "content": [{
+            "type": "tool_result", "tool_use_id": "tool-1", "content": "ok",
+        }]},
+    ])
+    assert not proxy._has_anthropic_tool_result([
+        {"role": "user", "content": "start"},
+    ])
 
 
 def test_preserves_two_interleaved_function_calls():
@@ -247,6 +287,34 @@ def test_transport_timeout_is_not_retried(monkeypatch):
 
     assert calls == 1
     assert "ReadTimeout" in result["error"]
+
+
+def test_busy_upstream_is_rejected_without_hidden_queue(monkeypatch):
+    class BusySlot:
+        def acquire(self, timeout):
+            assert timeout == proxy.QUEUE_TIMEOUT_S
+            return False
+
+        def release(self):
+            raise AssertionError("unacquired slot must not be released")
+
+    monkeypatch.setattr(proxy, "_UPSTREAM_SLOTS", BusySlot())
+
+    result = proxy.call_responses_api([
+        {"role": "user", "content": "Return OK."},
+    ])
+
+    assert result["proxy_busy"] is True
+    assert "was not queued" in result["error"]
+
+
+def test_stream_absolute_deadline_stops_keepalive_stream(monkeypatch):
+    response = completed_response()
+    monkeypatch.setattr(response, "iter_lines", lambda: iter([b": keepalive"]))
+    monkeypatch.setattr(proxy.time, "monotonic", lambda: 20.0)
+
+    with pytest.raises(proxy.requests.ReadTimeout, match="absolute deadline"):
+        proxy.parse_responses_stream(response, deadline=10.0)
 
 
 def test_explicit_retryable_http_status_retries_once(monkeypatch):

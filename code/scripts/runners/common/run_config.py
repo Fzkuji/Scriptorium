@@ -65,12 +65,31 @@ def _resolve_secret_files(
             raise ConfigError(
                 f"set either {target} or {file_key}, not both"
             )
-        secret_path = Path(str(location)).expanduser()
+        raw_location = str(location)
+        entry = 1
+        if "#entry=" in raw_location:
+            raw_location, raw_entry = raw_location.rsplit("#entry=", 1)
+            try:
+                entry = int(raw_entry)
+            except ValueError as exc:
+                raise ConfigError(f"{file_key} has invalid entry: {location}") from exc
+            if entry < 1:
+                raise ConfigError(f"{file_key} entry must be positive: {location}")
+        secret_path = Path(raw_location).expanduser()
         if not secret_path.is_absolute():
             secret_path = base / secret_path
         if not secret_path.is_file():
             raise ConfigError(f"{file_key} does not point at a file: {secret_path}")
-        secret = secret_path.read_text(encoding="utf-8").strip()
+        entries = [
+            line.strip()
+            for line in secret_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if entry > len(entries):
+            raise ConfigError(
+                f"{file_key} entry {entry} is unavailable: {secret_path}"
+            )
+        secret = entries[entry - 1]
         if not secret:
             raise ConfigError(f"{file_key} is empty: {secret_path}")
         resolved[target] = secret
